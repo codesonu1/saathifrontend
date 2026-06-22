@@ -1,0 +1,79 @@
+{
+  "expo": {
+    "name": "Saathi",
+    "slug": "frontend",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "Saathi",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "This app needs access to location to show your current position on the map and find nearby rides.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to track your position for ride sharing."
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyC_ywfottDW64fr4FVtnvyfRZTbbFreD28"
+      }
+    },
+    "android": {
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyC_ywfottDW64fr4FVtnvyfRZTbbFreD28"
+        }
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.prameshk7.frontend",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 100,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow $(PRODUCT_NAME) to use your location to show your position on the map and find nearby rides."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "API_URL": "http://10.0.2.2:9000/api/v1",
+      "WEBSOCKET_URL": "http://10.0.2.2:9000",
+      "PUBLIC_ASSET_URL": "http://10.0.2.2:9000",
+      "DEFAULT_BASE_URL": "http://localhost:3000",
+      "GOOGLE_MAPS_API_KEY": "AIzaSyC_ywfottDW64fr4FVtnvyfRZTbbFreD28",
+      "SUPPORT_PHONE": "+977980010100",
+      "SUPPORT_EMAIL": "support@saathiapp.com",
+      "FACEBOOK_URL": "https://www.facebook.com/saathiapp",
+      "INSTAGRAM_URL": "https://www.instagram.com/saathiapp",
+      "TWITTER_URL": "https://twitter.com/saathiapp",
+      "WEBSITE_URL": "https://www.saathiapp.com"
+    }
+  }
+}
