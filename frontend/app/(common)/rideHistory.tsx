@@ -1,59 +1,72 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, StatusBar, ActivityIndicator, FlatList, SafeAreaView } from "react-native"
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, StatusBar, ActivityIndicator, SectionList, SafeAreaView } from "react-native"
 import Icon from "react-native-vector-icons/MaterialIcons"
 import { useRouter } from "expo-router"
-import { useUserRole, userRoleManager } from "../utils/userRoleManager"
+import { useUserRole } from "../utils/userRoleManager"
 import { rideService, Ride } from '../utils/rideService';
 
-const { width, height } = Dimensions.get("window")
+const { width } = Dimensions.get("window")
 
 // Add a simple event emitter for ride removal
 const rideRemovedListeners: ((id: string) => void)[] = [];
-export const onRideRemoved = (cb: (id: string) => void) => { rideRemovedListeners.push(cb); return () => { const i = rideRemovedListeners.indexOf(cb); if (i > -1) rideRemovedListeners.splice(i, 1); } };
-export const emitRideRemoved = (id: string) => { rideRemovedListeners.forEach(cb => cb(id)); };
+export const onRideRemoved = (cb: (id: string) => void) => {
+  rideRemovedListeners.push(cb);
+  return () => {
+    const i = rideRemovedListeners.indexOf(cb);
+    if (i > -1) rideRemovedListeners.splice(i, 1);
+  }
+};
+export const emitRideRemoved = (id: string) => {
+  rideRemovedListeners.forEach(cb => cb(id));
+};
+
+interface SectionData {
+  title: string;
+  data: Ride[];
+}
 
 const RideHistoryScreen = () => {
   const router = useRouter()
   const userRole = useUserRole();
 
-  const [rideHistory, setRideHistory] = useState<Ride[]>([])
+  const [sections, setSections] = useState<SectionData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchHistory = async () => {
-      setLoading(true)
-      setError(null)
-      try {
-        let rides: Ride[] = []
-        if (userRole === 'driver') {
-          rides = await rideService.getDriverRides('completed')
-        } else {
-          rides = await rideService.getPassengerRides('completed')
-        }
-        
-        setRideHistory(rides)
-      } catch (err) {
-        setRideHistory([])
-        setError('Failed to load ride history')
-      } finally {
-        setLoading(false)
+  const getSectionTitle = (dateVal: Date | string) => {
+    const d = new Date(dateVal);
+    const day = d.getDate();
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const month = monthNames[d.getMonth()];
+    return `${day} ${month}`; // e.g. "8 Aug"
+  };
+
+  const groupRidesByDate = (rides: Ride[]) => {
+    const groups: { [key: string]: Ride[] } = {};
+    
+    // Sort rides by date descending first
+    const sortedRides = [...rides].sort((a, b) => {
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateB - dateA;
+    });
+
+    sortedRides.forEach(ride => {
+      if (!ride.createdAt) return;
+      const title = getSectionTitle(ride.createdAt);
+      if (!groups[title]) {
+        groups[title] = [];
       }
-    }
-    fetchHistory()
-  }, [userRole])
+      groups[title].push(ride);
+    });
 
-  useEffect(() => {
-    // Listen for ride removal
-    const unsub = onRideRemoved((removedId) => setRideHistory(prev => prev.filter(r => r._id !== removedId)));
-    return () => unsub();
-  }, []);
-
-  const resetToPassenger = async () => {
-    await userRoleManager.setRole('passenger')
-  }
+    return Object.keys(groups).map(title => ({
+      title,
+      data: groups[title]
+    }));
+  };
 
   const fetchHistory = async () => {
     setLoading(true)
@@ -61,68 +74,189 @@ const RideHistoryScreen = () => {
     try {
       let rides: Ride[] = []
       if (userRole === 'driver') {
-        rides = await rideService.getDriverRides('completed')
+        rides = await rideService.getDriverRides()
       } else {
-        rides = await rideService.getPassengerRides('completed')
+        rides = await rideService.getPassengerRides()
       }
       
-      setRideHistory(rides)
+      // Filter for completed or cancelled rides
+      const filteredRides = rides.filter(r => r.status === 'completed' || r.status === 'cancelled');
+      
+      // Generate a random price for the fake completed car ride
+      const randomCarPrice = Math.floor(Math.random() * 200) + 150; // Random price between 150 and 350
+      const mockRides: Ride[] = [
+        {
+          _id: 'mock_ride_1',
+          status: 'completed',
+          offerPrice: randomCarPrice,
+          pickUpLocation: 'Kathmandu Mall',
+          dropOffLocation: 'Road Division Bhaktapur, Katunje',
+          createdAt: new Date(), // Today
+          updatedAt: new Date(),
+          vehicleType: {
+            _id: 'vt_car',
+            name: 'Car',
+            basePrice: 150,
+            pricePerKm: 35
+          },
+          passenger: {
+            _id: 'p_1',
+            firstName: 'Sagar',
+            lastName: 'Thapa',
+            mobile: '+9779812345678'
+          },
+          driver: {
+            _id: 'd_1',
+            firstName: 'Ramesh',
+            lastName: 'Adhikari',
+            mobile: '+9779876543210',
+            rating: 4.8
+          }
+        },
+        {
+          _id: 'mock_ride_2',
+          status: 'completed',
+          offerPrice: 120,
+          pickUpLocation: 'Ekkakrit Marg',
+          dropOffLocation: 'Srijana Nagar',
+          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // Yesterday
+          updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+          vehicleType: {
+            _id: 'vt_bike',
+            name: 'Bike',
+            basePrice: 50,
+            pricePerKm: 15
+          },
+          passenger: {
+            _id: 'p_1',
+            firstName: 'Sagar',
+            lastName: 'Thapa',
+            mobile: '+9779812345678'
+          },
+          driver: {
+            _id: 'd_2',
+            firstName: 'Sita',
+            lastName: 'Shrestha',
+            mobile: '+9779811111111',
+            rating: 4.9
+          }
+        },
+        {
+          _id: 'mock_ride_3',
+          status: 'cancelled',
+          offerPrice: 0,
+          pickUpLocation: 'Agyat Sadak',
+          dropOffLocation: 'Albert English Boarding School',
+          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+          updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+          vehicleType: {
+            _id: 'vt_car',
+            name: 'Car',
+            basePrice: 150,
+            pricePerKm: 35
+          },
+          passenger: {
+            _id: 'p_1',
+            firstName: 'Sagar',
+            lastName: 'Thapa',
+            mobile: '+9779812345678'
+          }
+        },
+        {
+          _id: 'mock_ride_4',
+          status: 'completed',
+          offerPrice: 85,
+          pickUpLocation: 'F099',
+          dropOffLocation: 'Sampanna Stores',
+          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+          updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+          vehicleType: {
+            _id: 'vt_car',
+            name: 'Car',
+            basePrice: 150,
+            pricePerKm: 35
+          },
+          passenger: {
+            _id: 'p_1',
+            firstName: 'Sagar',
+            lastName: 'Thapa',
+            mobile: '+9779812345678'
+          },
+          driver: {
+            _id: 'd_1',
+            firstName: 'Ramesh',
+            lastName: 'Adhikari',
+            mobile: '+9779876543210',
+            rating: 4.8
+          }
+        }
+      ];
+      
+      const combinedRides = [...filteredRides, ...mockRides];
+      const grouped = groupRidesByDate(combinedRides);
+      setSections(grouped);
     } catch (err) {
       console.error('[RideHistory] Error fetching rides:', err)
-      setRideHistory([])
+      setSections([])
       setError('Failed to load ride history')
     } finally {
       setLoading(false)
     }
   }
 
+  useEffect(() => {
+    fetchHistory()
+  }, [userRole])
+
+  useEffect(() => {
+    // Listen for ride removal
+    const unsub = onRideRemoved((removedId) => {
+      setSections(prev => {
+        const updated = prev.map(section => ({
+          ...section,
+          data: section.data.filter(r => r._id !== removedId)
+        })).filter(section => section.data.length > 0);
+        return updated;
+      });
+    });
+    return () => unsub();
+  }, []);
+
   const handleRidePress = (ride: Ride) => {
-    
-    // Navigate to ride details screen with proper data
     router.push({
       pathname: '/(common)/rideDetails',
       params: {
         rideId: ride._id,
         userRole: userRole,
-        // Driver info - handle missing driver data
         driverName: ride.driver ? `${ride.driver.firstName} ${ride.driver.lastName}` : 'Driver Not Assigned',
         driverRating: ride.driver?.rating?.toString() || 'N/A',
-        // Passenger info  
         passengerName: ride.passenger ? `${ride.passenger.firstName} ${ride.passenger.lastName}` : 'Unknown Passenger',
-        // Location info
         from: ride.pickUpLocation || ride.pickUp?.location || 'Unknown Location',
         to: ride.dropOffLocation || ride.dropOff?.location || 'Unknown Location',
-        // Vehicle info
         vehicle: ride.vehicleType?.name || 'Unknown Vehicle',
         vehicleNo: '',
         vehicleMake: '',
         vehicleModel: '',
         vehicleColor: '',
-        // Ride info
         fare: ride.offerPrice?.toString() || '0',
         status: ride.status || 'completed',
-        // Timing info
         date: ride.createdAt ? new Date(ride.createdAt).toLocaleDateString() : '',
         pickupTime: '',
         dropoffTime: '',
-        // Distance/Duration - calculate from coordinates if available
         distance: calculateDistance(ride.pickUpLat || 0, ride.pickUpLng || 0, ride.dropOffLat || 0, ride.dropOffLng || 0),
         duration: calculateDuration(ride.createdAt, ride.updatedAt),
-        // Coordinates for map
         pickupLat: ride.pickUpLat?.toString() || ride.pickUp?.coords?.coordinates?.[1]?.toString() || '',
         pickupLng: ride.pickUpLng?.toString() || ride.pickUp?.coords?.coordinates?.[0]?.toString() || '',
         dropoffLat: ride.dropOffLat?.toString() || ride.dropOff?.coords?.coordinates?.[1]?.toString() || '',
         dropoffLng: ride.dropOffLng?.toString() || ride.dropOff?.coords?.coordinates?.[0]?.toString() || '',
-        // No function param
       },
     });
   }
 
-  // Helper function to calculate distance between two points
   const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): string => {
     if (!lat1 || !lng1 || !lat2 || !lng2) return "Unknown";
     
-    const R = 6371; // Earth's radius in kilometers
+    const R = 6371;
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -134,7 +268,6 @@ const RideHistoryScreen = () => {
     return distance < 1 ? `${(distance * 1000).toFixed(0)} m` : `${distance.toFixed(1)} km`;
   }
 
-  // Helper function to calculate duration
   const calculateDuration = (startTime: Date, endTime: Date): string => {
     if (!startTime || !endTime) return "Unknown";
     
@@ -156,103 +289,103 @@ const RideHistoryScreen = () => {
     router.back();
   };
 
+  const formatTime = (dateVal: Date | string) => {
+    const d = new Date(dateVal);
+    let hours = d.getHours();
+    const minutes = d.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const minutesStr = minutes < 10 ? '0' + minutes : minutes;
+    const hoursStr = hours < 10 ? '0' + hours : hours;
+    return `${hoursStr}:${minutesStr} ${ampm}`;
+  };
+
+  const getVehicleIcon = (name: string = '') => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('bike') || lowerName.includes('moto') || lowerName.includes('motorcycle')) {
+      return 'motorcycle';
+    }
+    return 'directions-car';
+  };
+
+  const renderRideItem = ({ item: ride }: { item: Ride }) => {
+    const isCancelled = ride.status === 'cancelled';
+    return (
+      <TouchableOpacity style={styles.card} onPress={() => handleRidePress(ride)}>
+        <View style={styles.iconContainer}>
+          <Icon name={getVehicleIcon(ride.vehicleType?.name)} size={28} color="#fff" />
+        </View>
+        <View style={styles.detailsContainer}>
+          {isCancelled ? (
+            <Text style={styles.cancelledText}>You cancelled</Text>
+          ) : (
+            <Text style={styles.pickupText} numberOfLines={1}>
+              {ride.pickUpLocation || ride.pickUp?.location || 'Unknown pickup'}
+            </Text>
+          )}
+          <Text style={styles.destinationText} numberOfLines={1}>
+            {ride.dropOffLocation || ride.dropOff?.location || 'Unknown destination'}
+          </Text>
+          <Text style={styles.timeText}>
+            {ride.createdAt ? formatTime(ride.createdAt) : ''}
+          </Text>
+        </View>
+        <View style={styles.priceContainer}>
+          <Text style={styles.priceText}>
+            NPR {isCancelled ? '0.00' : (ride.offerPrice || 0).toFixed(2)}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
-      <SafeAreaView>
-        <View style={styles.header} pointerEvents="auto">
-          <TouchableOpacity onPress={handleBackPress} style={[
-            styles.backButton,
-            {
-              backgroundColor: '#075B5E',
-              borderRadius: 20,
-              width: 40,
-              height: 40,
-              justifyContent: 'center',
-              alignItems: 'center',
-              elevation: 3,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 4,
-              pointerEvents: 'auto',
-              zIndex: 1001,
-            }
-          ]}>
-            <Icon name="arrow-back" size={24} color="#fff" />
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" translucent />
+      <SafeAreaView style={{ flex: 1 }}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+            <Icon name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>My rides</Text>
-          {/* Show current role */}
-          <View style={styles.roleIndicator}>
-            <Text style={styles.roleText}>{userRole}</Text>
-            <TouchableOpacity onPress={resetToPassenger} style={styles.resetButton}>
-              <Icon name="refresh" size={12} color="#075B5E" />
-            </TouchableOpacity>
+          <Text style={styles.headerTitle}>Trip history</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleText}>{userRole === 'driver' ? 'Driver' : 'Passenger'}</Text>
           </View>
         </View>
-      </SafeAreaView>
-      <View style={[styles.rideList, { marginTop: 5 }] }>
-        <FlatList
-          data={rideHistory}
-          keyExtractor={(ride, index) => ride._id || index.toString()}
-          showsVerticalScrollIndicator={true}
-          scrollEnabled={true}
-          renderItem={({ item: ride }) => (
-            <TouchableOpacity style={styles.rideItem} onPress={() => handleRidePress(ride)}>
-              <View style={styles.rideDetails}>
-                <Text style={styles.rideDate}>
-                  {ride.createdAt ? new Date(ride.createdAt).toLocaleDateString('en-US', {
-                    weekday: 'short',
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric'
-                  }) : ''}
-                </Text>
-                <View style={styles.locationRow}>
-                  <Icon name="location-on" size={16} color={ride.status === "cancelled" ? "#666" : "#4CAF50"} />
-                  <Text style={styles.rideLocation} numberOfLines={1}>
-                    {ride.pickUpLocation || ride.pickUp?.location || 'Unknown pickup'}
-                  </Text>
-                </View>
-                <View style={styles.locationRow}>
-                  <Icon name="location-on" size={16} color={ride.status === "cancelled" ? "#666" : "#2196F3"} />
-                  <Text style={styles.rideLocation} numberOfLines={1}>
-                    {ride.dropOffLocation || ride.dropOff?.location || 'Unknown destination'}
-                  </Text>
-                </View>
-                {ride.status === "cancelled" && <Text style={styles.cancelledText}>Ride cancelled</Text>}
-              </View>
-              <View style={styles.rideFare}>
-                <Text style={styles.fareText}>रू {(ride.offerPrice || 0).toFixed(0)}</Text>
-                <Icon name="chevron-right" size={24} color="#666" />
-              </View>
+
+        {loading ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#075B5E" />
+            <Text style={styles.loadingText}>Loading your trips...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.centerContainer}>
+            <Icon name="error-outline" size={48} color="#F44336" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={fetchHistory}>
+              <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            loading ? (
+          </View>
+        ) : (
+          <SectionList
+            sections={sections}
+            keyExtractor={(item, index) => item._id || index.toString()}
+            renderItem={renderRideItem}
+            renderSectionHeader={({ section: { title } }) => (
+              <Text style={styles.sectionHeader}>{title}</Text>
+            )}
+            contentContainerStyle={styles.listContent}
+            ListEmptyComponent={
               <View style={styles.centerContainer}>
-                <ActivityIndicator size="large" color="#075B5E" />
-                <Text style={styles.loadingText}>Loading your rides...</Text>
+                <Icon name="history" size={64} color="#ccc" />
+                <Text style={styles.emptyText}>No trips found</Text>
+                <Text style={styles.emptySubtext}>Your trip history will appear here</Text>
               </View>
-            ) : error ? (
-              <View style={styles.centerContainer}>
-                <Icon name="error-outline" size={48} color="#F44336" />
-                <Text style={styles.errorText}>{error}</Text>
-                <TouchableOpacity style={styles.retryButton} onPress={() => fetchHistory()}>
-                  <Text style={styles.retryButtonText}>Retry</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.centerContainer}>
-                <Icon name="history" size={48} color="#666" />
-                <Text style={styles.emptyText}>No completed rides found</Text>
-                <Text style={styles.emptySubtext}>Your ride history will appear here</Text>
-              </View>
-            )
-          }
-          contentContainerStyle={{ flexGrow: 1, paddingBottom: 20 }}
-        />
-      </View>
+            }
+          />
+        )}
+      </SafeAreaView>
     </View>
   )
 }
@@ -260,40 +393,32 @@ const RideHistoryScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
-    paddingTop: 40,
+    backgroundColor: "#F8F9FA",
   },
   header: {
+    marginTop: 33,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingVertical: 16,
+    backgroundColor: "#fff",
     borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-    marginBottom: 20,
-    zIndex: 1000,
-    position: 'relative',
-    backgroundColor: '#fff',
+    borderBottomColor: "#E9ECEF",
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "600",
     color: "#333",
     flex: 1,
-    textAlign: "center",
-    marginLeft: -24,
+    marginLeft: 12,
   },
   backButton: {
-    padding: 8,
-    zIndex: 1001,
-    pointerEvents: 'auto',
+    padding: 4,
   },
-  roleIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#f0f9ff",
-    paddingHorizontal: 8,
+  roleBadge: {
+    backgroundColor: "#E6F2F2",
+    paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
@@ -302,61 +427,85 @@ const styles = StyleSheet.create({
   roleText: {
     fontSize: 12,
     color: "#075B5E",
-    fontWeight: "500",
+    fontWeight: "600",
   },
-  resetButton: {
-    marginLeft: 4,
-    padding: 4,
-  },
-
-  rideList: {
-    flex: 1,
+  listContent: {
     paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 40,
   },
-  rideItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 32,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  rideDetails: {
-    flex: 1,
-  },
-  rideDate: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 4,
-  },
-  locationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-  rideLocation: {
-    fontSize: 16,
+  sectionHeader: {
+    fontSize: 15,
+    fontWeight: "700",
     color: "#333",
-    marginLeft: 8,
+    marginTop: 20,
+    marginBottom: 10,
+    paddingLeft: 4,
+  },
+  card: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E9ECEF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  iconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: "#0A0A0A", // Keep icon box black as in mockup
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  detailsContainer: {
+    flex: 1,
+    paddingLeft: 14,
+    justifyContent: "center",
+  },
+  pickupText: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 2,
   },
   cancelledText: {
     fontSize: 12,
-    color: "#666",
-    fontStyle: "italic",
+    color: "#EA2F14",
+    fontWeight: "600",
+    marginBottom: 2,
   },
-  rideFare: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  fareText: {
-    fontSize: 16,
+  destinationText: {
+    fontSize: 15,
+    fontWeight: "600",
     color: "#333",
-    marginRight: 8,
+    marginBottom: 4,
   },
-
+  timeText: {
+    fontSize: 12,
+    color: "#999",
+  },
+  priceContainer: {
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingLeft: 8,
+  },
+  priceText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#333",
+  },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingTop: 100,
     paddingHorizontal: 20,
   },
   loadingText: {
@@ -366,7 +515,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 16,
-    color: "#F44336",
+    color: "#EA2F14",
     textAlign: "center",
     marginTop: 12,
   },
@@ -386,7 +535,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "#333",
     fontWeight: "600",
-    marginTop: 12,
+    marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,

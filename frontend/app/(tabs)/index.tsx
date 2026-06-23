@@ -1049,7 +1049,7 @@ const PassengerHomeScreen = () => {
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
                 <Text style={styles.buttonText}>
-                  {pickupCoords && destinationCoords ? 'Find offers' : 'Find a driver'}
+                  Find a driver
                 </Text>
               )}
             </View>

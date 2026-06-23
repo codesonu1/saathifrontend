@@ -17,9 +17,10 @@ type SidePanelProps = {
   role: "driver" | "passenger"
   rideInProgress: boolean
   onChangeRole: (role: "driver" | "passenger") => void
+  activeItem?: string
 }
 
-const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInProgress, onChangeRole }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInProgress, onChangeRole, activeItem = "home" }) => {
   const slideAnim = useRef(new Animated.Value(-width * 0.75)).current
   const router = useRouter()
 
@@ -111,12 +112,19 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
         </View>
 
         <View style={styles.menuItems}>
-          {menuItems.map((item) => (
-            <TouchableOpacity key={item.id} style={styles.menuItem} onPress={item.action}>
-              <Icon name={item.icon} size={24} color="#333" />
-              <Text style={styles.menuText}>{item.name}</Text>
-            </TouchableOpacity>
-          ))}
+          {menuItems.map((item) => {
+            const isActive = item.id === activeItem;
+            return (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.menuItem, isActive && styles.activeMenuItem]}
+                onPress={item.action}
+              >
+                <Icon name={item.icon} size={24} color={isActive ? "#075B5E" : "#333"} />
+                <Text style={[styles.menuText, isActive && styles.activeMenuText]}>{item.name}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <View style={styles.bottomButtons}>
@@ -177,6 +185,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: "transparent",
+  },
+  activeMenuItem: {
+    backgroundColor: "#e6f2f2",
+    borderLeftColor: "#075B5E",
+  },
+  activeMenuText: {
+    color: "#075B5E",
+    fontWeight: "600",
   },
   bottomButtons: {
     position: "absolute",

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   StatusBar,
   Dimensions,
   BackHandler,
+  Animated,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -24,10 +25,30 @@ import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get('window');
 
+const AnimatedOfferCard = ({ children }: { children: React.ReactNode }) => {
+  const slideAnim = useRef(new Animated.Value(-width)).current;
+ 
+  useEffect(() => {
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      useNativeDriver: true,
+      tension: 25,
+      friction: 7,
+    }).start();
+  }, [slideAnim]);
+ 
+  return (
+    <Animated.View style={{ transform: [{ translateX: slideAnim }] }}>
+      {children}
+    </Animated.View>
+  );
+};
+
 const RideOffersScreen = () => {
   const params = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
+  const timeoutsRef = useRef<any[]>([]);
   
   const rideId = params.rideId as string;
   const from = params.from as string;
@@ -112,10 +133,16 @@ const RideOffersScreen = () => {
       // Cleanup WebSocket connection
       webSocketService.disconnect('ride');
       webSocketService.disconnect('passenger');
+      // Clean up simulated timers
+      timeoutsRef.current.forEach(t => clearTimeout(t));
     };
       }, [rideId]);
 
   const loadOffers = async () => {
+    // Clear any previous timeouts
+    timeoutsRef.current.forEach(t => clearTimeout(t));
+    timeoutsRef.current = [];
+
     try {
       setLoading(true);
       console.log('RideOffers: Loading offers for rideId:', rideId);
@@ -124,31 +151,93 @@ const RideOffersScreen = () => {
       try {
         if (webSocketService.isSocketConnected()) {
           console.log('RideOffers: Using WebSocket for offers...');
-          // WebSocket method would be implemented here
-          // For now, fall back to REST API
         }
       } catch (wsError) {
         console.log('RideOffers: WebSocket failed, using REST API...');
       }
       
       // Use REST API to get offers
-      const offers = await rideService.getRideOffersForPassenger(rideId);
-      console.log('RideOffers: Received offers:', offers);
+      let fetchedOffers = await rideService.getRideOffersForPassenger(rideId);
+      console.log('RideOffers: Received offers:', fetchedOffers);
       
-      // Check if any offers were removed (driver went offline)
-      if (offers.length > 0 && previousOffersCount > offers.length) {
-        console.log('RideOffers: Some drivers went offline, offers reduced from', previousOffersCount, 'to', offers.length);
-        showToast('Some drivers went offline. Offers updated.', 'info');
+      // Fallback to mock offers if none found (for local UI testing/preview)
+      if (fetchedOffers.length === 0) {
+        // Start with no offers and show loading indicator
+        setOffers([]);
+        
+        // Add Ramesh's offer after 2.5 seconds
+        const t1 = setTimeout(() => {
+          const rameshOffer: RideOffer = {
+            _id: 'mock_offer_1',
+            ride: rideId,
+            driver: {
+              _id: 'mock_driver_1',
+              firstName: 'Ramesh',
+              lastName: 'Adhikari',
+              mobile: '+9779812345678',
+              rating: 4.8,
+              vehicleDetails: {
+                vehicleModel: 'Bajaj Pulsar 150 (Red)',
+                vehicleRegNum: 'Ba 95 Pa 1234',
+              }
+            },
+            offeredPrice: parseFloat(fare) || 120,
+            message: 'I am nearby and can pick you up in 3 minutes!',
+            status: 'pending',
+            createdAt: new Date(),
+          };
+          setOffers(prev => {
+            if (prev.some(o => o._id === rameshOffer._id)) return prev;
+            return [...prev, rameshOffer];
+          });
+          setLoading(false); // Stop loading indicator when the first card arrives
+          showToast('New ride offer received!', 'info');
+        }, 2500);
+        timeoutsRef.current.push(t1);
+
+        // Add Sita's offer after 5.5 seconds (3 seconds after Ramesh)
+        const t2 = setTimeout(() => {
+          const sitaOffer: RideOffer = {
+            _id: 'mock_offer_2',
+            ride: rideId,
+            driver: {
+              _id: 'mock_driver_2',
+              firstName: 'Sita',
+              lastName: 'Shrestha',
+              mobile: '+9779876543210',
+              rating: 4.9,
+              vehicleDetails: {
+                vehicleModel: 'Suzuki Gixxer 155 (Black)',
+                vehicleRegNum: 'Ba 82 Pa 5678',
+              }
+            },
+            offeredPrice: (parseFloat(fare) || 120) + 20,
+            message: 'Can pick you up immediately.',
+            status: 'pending',
+            createdAt: new Date(),
+          };
+          setOffers(prev => {
+            if (prev.some(o => o._id === sitaOffer._id)) return prev;
+            return [...prev, sitaOffer];
+          });
+          showToast('New ride offer received!', 'info');
+        }, 5500);
+        timeoutsRef.current.push(t2);
+      } else {
+        // If we have actual backend offers, display them immediately and stop loading
+        // Check if any offers were removed (driver went offline)
+        if (previousOffersCount > fetchedOffers.length) {
+          showToast('Some drivers went offline. Offers updated.', 'info');
+        }
+        setPreviousOffersCount(fetchedOffers.length);
+        setOffers(fetchedOffers);
+        setLoading(false);
       }
-      
-      setPreviousOffersCount(offers.length);
-      setOffers(offers);
       
     } catch (error) {
       console.error('RideOffers: Error loading offers:', error);
       showToast('Failed to load ride offers', 'error');
       setOffers([]);
-    } finally {
       setLoading(false);
     }
   };
@@ -349,6 +438,34 @@ const RideOffersScreen = () => {
         console.log('RideOffers: New offer received:', data);
         if (data && data.rideId) {
           setNewOffer(data);
+          // Add the new offer directly to the offers list so it shows instantly
+          setOffers(prev => {
+            const exists = prev.some(offer => offer._id === data._id);
+            if (exists) return prev;
+            
+            // Format the WebSocket data to match the RideOffer interface structure
+            const formattedOffer: RideOffer = {
+              _id: data._id,
+              ride: data.rideId,
+              driver: {
+                _id: data.driver?._id || data.driverId || '',
+                firstName: data.driver?.firstName || '',
+                lastName: data.driver?.lastName || '',
+                mobile: data.driver?.mobile || '',
+                rating: data.driverProfile?.rating || data.driver?.rating || 0,
+                photo: data.driver?.photo || undefined,
+                vehicleDetails: {
+                  vehicleModel: data.driverProfile?.vehicleModel || data.driver?.vehicleDetails?.vehicleModel || '',
+                  vehicleRegNum: data.driverProfile?.vehicleRegNum || data.driver?.vehicleDetails?.vehicleRegNum || '',
+                }
+              },
+              offeredPrice: data.offerAmount || data.offeredPrice || 0,
+              message: data.message || '',
+              status: (data.status?.toLowerCase() as any) || 'pending',
+              createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
+            };
+            return [...prev, formattedOffer];
+          });
           showToast('New ride offer received!', 'info');
         }
       };
@@ -462,65 +579,67 @@ const RideOffersScreen = () => {
   const filteredOffers = offers.filter(o => ['submitted', 'pending', 'accepted'].includes(String(o.status)));
 
   const renderOffer = ({ item }: { item: RideOffer }) => (
-    <View style={styles.offerCard}>
-      <View style={styles.offerHeader}>
-        <View style={styles.driverInfo}>
-          <ProfileImage 
-            photoUrl={item.driver.photo}
-            size={50}
-            fallbackIconColor="#075B5E"
-          />
-          <View style={styles.driverDetails}>
-            <Text style={styles.driverName}>
-              {item.driver.firstName} {item.driver.lastName}
-            </Text>
-            <View style={styles.ratingContainer}>
-              <MaterialIcons name="star" size={16} color="#FFD700" />
-              <Text style={styles.rating}>{item.driver.rating.toFixed(1)}</Text>
+    <AnimatedOfferCard>
+      <View style={styles.offerCard}>
+        <View style={styles.offerHeader}>
+          <View style={styles.driverInfo}>
+            <ProfileImage 
+              photoUrl={item.driver.photo}
+              size={50}
+              fallbackIconColor="#075B5E"
+            />
+            <View style={styles.driverDetails}>
+              <Text style={styles.driverName}>
+                {item.driver.firstName} {item.driver.lastName}
+              </Text>
+              <View style={styles.ratingContainer}>
+                <MaterialIcons name="star" size={16} color="#FFD700" />
+                <Text style={styles.rating}>{item.driver.rating.toFixed(1)}</Text>
+              </View>
+              <Text style={styles.vehicleInfo}>
+                {item.driver.vehicleDetails.vehicleModel} • {item.driver.vehicleDetails.vehicleRegNum}
+              </Text>
             </View>
-            <Text style={styles.vehicleInfo}>
-              {item.driver.vehicleDetails.vehicleModel} • {item.driver.vehicleDetails.vehicleRegNum}
+          </View>
+          <View style={styles.priceContainer}>
+            <Text style={styles.priceLabel}>Driver&apos;s Offer</Text>
+            <Text style={styles.price}>रू {item.offeredPrice.toFixed(0)}</Text>
+            <Text style={styles.priceDifference}>
+                            {item.offeredPrice > parseFloat(fare) ? '+' : ''}रू {(item.offeredPrice - parseFloat(fare)).toFixed(0)}
             </Text>
           </View>
         </View>
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceLabel}>Driver&apos;s Offer</Text>
-          <Text style={styles.price}>रू {item.offeredPrice.toFixed(0)}</Text>
-          <Text style={styles.priceDifference}>
-                          {item.offeredPrice > parseFloat(fare) ? '+' : ''}रू {(item.offeredPrice - parseFloat(fare)).toFixed(0)}
-          </Text>
+
+        {item.message && (
+          <View style={styles.messageContainer}>
+            <MaterialIcons name="chat" size={16} color="#666" />
+            <Text style={styles.message}>{item.message}</Text>
+          </View>
+        )}
+
+
+
+        <View style={styles.offerActions}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.rejectButton]}
+            onPress={() => handleRejectOffer(item._id)}
+            disabled={processing}
+          >
+            <MaterialIcons name="close" size={18} color="#EA2F14" />
+            <Text style={styles.rejectButtonText}>Reject</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.actionButton, styles.acceptButton]}
+            onPress={() => handleAcceptOffer(item._id)}
+            disabled={processing}
+          >
+            <MaterialIcons name="check" size={18} color="#fff" />
+            <Text style={styles.acceptButtonText}>Accept</Text>
+          </TouchableOpacity>
         </View>
       </View>
-
-      {item.message && (
-        <View style={styles.messageContainer}>
-          <MaterialIcons name="chat" size={16} color="#666" />
-          <Text style={styles.message}>{item.message}</Text>
-        </View>
-      )}
-
-
-
-      <View style={styles.offerActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.rejectButton]}
-          onPress={() => handleRejectOffer(item._id)}
-          disabled={processing}
-        >
-          <MaterialIcons name="close" size={18} color="#EA2F14" />
-          <Text style={styles.rejectButtonText}>Reject</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity
-          style={[styles.actionButton, styles.acceptButton]}
-          onPress={() => handleAcceptOffer(item._id)}
-          disabled={processing}
-        >
-          <MaterialIcons name="check" size={18} color="#fff" />
-          <Text style={styles.acceptButtonText}>Accept</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+    </AnimatedOfferCard>
   );
 
   const renderEmptyState = () => (

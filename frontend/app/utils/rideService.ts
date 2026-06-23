@@ -237,8 +237,8 @@ class RideService {
       }
       console.log('RideService: Ride creation failed with status:', response.data.statusCode);
       return null;
-    } catch (error) {
-      console.error('Error creating ride:', error);
+    } catch (error: any) {
+      console.error('Error creating ride:', error.response?.data || error);
       throw error;
     }
   }
