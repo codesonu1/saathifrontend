@@ -13,7 +13,7 @@ import { useRouter } from 'expo-router';
 import websocketService from '../utils/websocketService';
 import apiClient from '../utils/apiClient';
 import Toast from '../../components/ui/Toast';
-import { userRoleManager } from '../utils/userRoleManager';
+import { userRoleManager, useUserRole } from '../utils/userRoleManager';
 import * as Haptics from 'expo-haptics';
 
 interface NotificationItem {
@@ -28,52 +28,106 @@ interface NotificationItem {
   createdAt?: Date;
 }
 
+const PASSENGER_MOCK_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: 'mock_p1',
+    type: 'ride_completed',
+    title: 'Ride Completed',
+    message: 'Your trip from Kathmandu Mall to Road Division Bhaktapur has been completed successfully. Fare: रू 350.',
+    time: '10 mins ago',
+    icon: 'check-circle',
+    iconColor: '#4CAF50',
+    unread: true,
+  },
+  {
+    id: 'mock_p2',
+    type: 'promo',
+    title: 'Special Promo Offer',
+    message: 'Get 20% off on your next 3 rides! Use code SAATHI20 at checkout.',
+    time: '2 hours ago',
+    icon: 'local-offer',
+    iconColor: '#FF9800',
+    unread: true,
+  },
+  {
+    id: 'mock_p3',
+    type: 'support',
+    title: 'Support Update',
+    message: 'Our support team has resolved your ticket regarding the payment query.',
+    time: '1 day ago',
+    icon: 'support-agent',
+    iconColor: '#2196F3',
+    unread: false,
+  },
+  {
+    id: 'mock_p4',
+    type: 'account',
+    title: 'Account Verified',
+    message: 'Welcome to Saathi! Your profile registration is complete.',
+    time: '2 days ago',
+    icon: 'verified-user',
+    iconColor: '#075B5E',
+    unread: false,
+  }
+];
+
+const DRIVER_MOCK_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: 'mock_d1',
+    type: 'earning',
+    title: 'Ride Earnings',
+    message: 'You have earned रू 350 from your last trip from Kathmandu Mall to Road Division Bhaktapur.',
+    time: '10 mins ago',
+    icon: 'account-balance-wallet',
+    iconColor: '#4CAF50',
+    unread: true,
+  },
+  {
+    id: 'mock_d2',
+    type: 'demand',
+    title: 'High Demand Area',
+    message: 'Thamel is currently experiencing high demand. Go online to find more rides!',
+    time: '1 hour ago',
+    icon: 'trending-up',
+    iconColor: '#FF9800',
+    unread: true,
+  },
+  {
+    id: 'mock_d3',
+    type: 'kyc',
+    title: 'KYC Verified',
+    message: 'Congratulations! Your driver documents have been successfully verified.',
+    time: '2 days ago',
+    icon: 'verified-user',
+    iconColor: '#075B5E',
+    unread: false,
+  },
+  {
+    id: 'mock_d4',
+    type: 'safety',
+    title: 'Driver Safety Tip',
+    message: 'Always confirm the passenger\'s name and destination before initiating a trip.',
+    time: '3 days ago',
+    icon: 'security',
+    iconColor: '#2196F3',
+    unread: false,
+  }
+];
+
 const Notifications = () => {
   const router = useRouter();
+  const userRole = useUserRole();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([
-    {
-      id: 'mock_1',
-      type: 'ride_completed',
-      title: 'Ride Completed',
-      message: 'Your trip from Kathmandu to Lalitpur has been completed successfully. Fare: रू 150.',
-      time: '10 mins ago',
-      icon: 'check-circle',
-      iconColor: '#4CAF50',
-      unread: true,
-    },
-    {
-      id: 'mock_2',
-      type: 'promo',
-      title: 'Special Promo Offer',
-      message: 'Get 20% off on your next 3 rides! Use code SAATHI20 at checkout.',
-      time: '2 hours ago',
-      icon: 'local-offer',
-      iconColor: '#FF9800',
-      unread: true,
-    },
-    {
-      id: 'mock_3',
-      type: 'support',
-      title: 'Support Update',
-      message: 'Our support team has resolved your ticket regarding the payment query.',
-      time: '1 day ago',
-      icon: 'support-agent',
-      iconColor: '#2196F3',
-      unread: false,
-    },
-    {
-      id: 'mock_4',
-      type: 'account',
-      title: 'Account Verified',
-      message: 'Welcome to Saathi! Your profile registration is complete.',
-      time: '2 days ago',
-      icon: 'verified-user',
-      iconColor: '#075B5E',
-      unread: false,
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  useEffect(() => {
+    if (userRole === 'driver') {
+      setNotifications(DRIVER_MOCK_NOTIFICATIONS);
+    } else {
+      setNotifications(PASSENGER_MOCK_NOTIFICATIONS);
     }
-  ]);
+  }, [userRole]);
   
   const [toast, setToast] = useState<{
     visible: boolean;
@@ -175,7 +229,9 @@ const Notifications = () => {
               id: 'live_' + Date.now(),
               type: 'ride_completed',
               title: 'Ride Completed',
-              message: data.message || `Your trip has been completed successfully.`,
+              message: userRole === 'driver'
+                ? (data.message || `You completed the ride successfully. Earned रू ${rideData?.acceptedOffer?.offerAmount || 150}.`)
+                : (data.message || `Your trip has been completed successfully.`),
               time: 'Just now',
               icon: 'check-circle',
               iconColor: '#4CAF50',

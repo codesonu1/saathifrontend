@@ -201,7 +201,6 @@ const DriverHomeScreen = () => {
   const handleDriverPress = () => router.push('/registerVehicle');
   const handleAccountPress = () => router.push('/accountRestoration');
   const handlePassengerMode = () => router.push('/(tabs)');
-  const handleDriverSection = () => router.push('/driverSection');
 
   if (loading) return (
     <SafeAreaView style={styles.container}>
@@ -216,7 +215,7 @@ const DriverHomeScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} scrollEnabled={!sidePanelVisible}>
           <View style={styles.header}>
             <TouchableOpacity style={styles.hamburgerButton} onPress={openSidePanel}>
               <View style={styles.hamburgerLine} />
@@ -256,15 +255,6 @@ const DriverHomeScreen = () => {
                 Total Loss: रू {profitLossData.loss > 0 ? Math.round(profitLossData.loss) : 0}
               </Text>
             </View>
-
-            {/* Driver Section Button */}
-            <TouchableOpacity style={styles.driverSectionButton} onPress={handleDriverSection}>
-              <View style={styles.driverSectionContent}>
-                <MaterialIcons name="directions-car" size={24} color="#fff" />
-                <Text style={styles.driverSectionText}>Driver Section</Text>
-              </View>
-              <MaterialIcons name="arrow-forward-ios" size={20} color="#fff" />
-            </TouchableOpacity>
           </View>
 
           <SidePanel
@@ -516,33 +506,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
     marginBottom: 8,
-  },
-  driverSectionButton: {
-    backgroundColor: '#075B5E',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  driverSectionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  driverSectionText: {
-    fontSize: 18,
-    color: '#fff',
-    fontWeight: '600',
-    marginLeft: 12,
   },
   loadingContainer: {
     flex: 1,

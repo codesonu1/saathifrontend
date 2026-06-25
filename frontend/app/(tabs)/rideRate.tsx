@@ -35,7 +35,7 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 }
 
 const RideRatingScreen = () => {
-  const { driverName, from, to, fare, vehicle, rideId } = useLocalSearchParams()
+  const { driverName, from, to, fare, vehicle, rideId, userRole, passengerName } = useLocalSearchParams()
   const router = useRouter()
   const [rating, setRating] = useState(0)
   const [feedback, setFeedback] = useState("")
@@ -106,13 +106,15 @@ const RideRatingScreen = () => {
     
     setSubmitting(true)
     try {
-      console.log('[RideRating] Submitting driver rating:', { rideId, rating, feedback });
+      console.log('[RideRating] Submitting rating:', { rideId, rating, feedback, userRole });
       
-      // Use REST API for rating (as per backend endpoint)
-      const success = await rideService.rateDriver(rideId as string, rating);
+      // Use REST API for rating (conditionally based on userRole)
+      const success = userRole === 'driver'
+        ? await rideService.ratePassenger(rideId as string, rating)
+        : await rideService.rateDriver(rideId as string, rating);
       
       if (success) {
-        console.log('[RideRating] Driver rating submitted successfully');
+        console.log('[RideRating] Rating submitted successfully');
         // Show success animation
         setShowConfetti(true)
         Animated.sequence([
@@ -128,15 +130,19 @@ const RideRatingScreen = () => {
           }),
         ]).start(() => {
           setTimeout(() => {
-            router.push('/(tabs)')
+            if (userRole === 'driver') {
+              router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } })
+            } else {
+              router.push('/(tabs)')
+            }
           }, 1000)
         })
       } else {
-        console.error('[RideRating] Failed to submit driver rating');
+        console.error('[RideRating] Failed to submit rating');
         alert('Failed to submit rating. Please try again.')
       }
     } catch (err: any) {
-      console.error('[RideRating] Error submitting driver rating:', err);
+      console.error('[RideRating] Error submitting rating:', err);
       
       // Provide more specific error messages
       let errorMessage = 'Error submitting rating. Please try again.';
@@ -204,7 +210,7 @@ const RideRatingScreen = () => {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color="#075B5E" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Rate Your Ride</Text>
+        <Text style={styles.headerTitle}>{userRole === 'driver' ? 'Rate Passenger' : 'Rate Your Ride'}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -228,20 +234,26 @@ const RideRatingScreen = () => {
               <View style={styles.iconContainer}>
                 <Icon name="person" size={18} color="#075B5E" />
               </View>
-              <Text style={styles.tripLabel}>Driver:</Text>
+              <Text style={styles.tripLabel}>{userRole === 'driver' ? 'Passenger:' : 'Driver:'}</Text>
               <Text style={styles.tripValue}>
-                {driverName || (tripDetails?.driver?.firstName && tripDetails?.driver?.lastName 
-                  ? `${tripDetails.driver.firstName} ${tripDetails.driver.lastName}`
-                  : tripDetails?.driver?.firstName || 'Driver')}
+                {userRole === 'driver'
+                  ? (passengerName || (tripDetails?.passenger?.firstName && tripDetails?.passenger?.lastName 
+                    ? `${tripDetails.passenger.firstName} ${tripDetails.passenger.lastName}`
+                    : tripDetails?.passenger?.firstName || 'Passenger'))
+                  : (driverName || (tripDetails?.driver?.firstName && tripDetails?.driver?.lastName 
+                    ? `${tripDetails.driver.firstName} ${tripDetails.driver.lastName}`
+                    : tripDetails?.driver?.firstName || 'Driver'))}
               </Text>
             </View>
-            <View style={styles.tripRow}>
-              <View style={styles.iconContainer}>
-                <Icon name="directions-car" size={18} color="#075B5E" />
+            {userRole !== 'driver' && (
+              <View style={styles.tripRow}>
+                <View style={styles.iconContainer}>
+                  <Icon name="directions-car" size={18} color="#075B5E" />
+                </View>
+                <Text style={styles.tripLabel}>Vehicle:</Text>
+                <Text style={styles.tripValue}>{vehicle || tripDetails?.vehicle || 'Vehicle'}</Text>
               </View>
-              <Text style={styles.tripLabel}>Vehicle:</Text>
-              <Text style={styles.tripValue}>{vehicle || tripDetails?.vehicle || 'Vehicle'}</Text>
-            </View>
+            )}
             <View style={styles.tripRow}>
               <View style={styles.iconContainer}>
                 <Icon name="payment" size={18} color="#075B5E" />
@@ -273,7 +285,9 @@ const RideRatingScreen = () => {
 
         {/* Rating Section */}
         <View style={styles.ratingCard}>
-          <Text style={styles.ratingTitle}>How was your ride?</Text>
+          <Text style={styles.ratingTitle}>
+            {userRole === 'driver' ? 'How was the passenger?' : 'How was your ride?'}
+          </Text>
           <Text style={styles.ratingSubtitle}>{getRatingText()}</Text>
 
           <View style={styles.starContainer}>
@@ -290,7 +304,7 @@ const RideRatingScreen = () => {
           <Text style={styles.feedbackTitle}>Share your feedback (Optional)</Text>
           <TextInput
             style={styles.feedbackInput}
-            placeholder="Tell us about your ride experience..."
+            placeholder={userRole === 'driver' ? "Tell us about the passenger..." : "Tell us about your ride experience..."}
             placeholderTextColor="#999"
             value={feedback}
             onChangeText={setFeedback}
@@ -311,8 +325,17 @@ const RideRatingScreen = () => {
         </TouchableOpacity>
 
         {/* Skip Button */}
-        <TouchableOpacity style={styles.skipButton} onPress={() => router.push("/(tabs)")}>
-                <Text style={styles.skipButtonText}>Skip</Text>
+        <TouchableOpacity 
+          style={styles.skipButton} 
+          onPress={() => {
+            if (userRole === 'driver') {
+              router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } })
+            } else {
+              router.push("/(tabs)")
+            }
+          }}
+        >
+          <Text style={styles.skipButtonText}>Skip</Text>
         </TouchableOpacity>
       </View>
           </ScrollView>

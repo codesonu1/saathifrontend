@@ -9,7 +9,7 @@ import { userRoleManager } from '../utils/userRoleManager';
 import webSocketService from '../utils/websocketService';
 import { logoutAndResetNavigation } from '../(auth)/login';
 
-const { width } = Dimensions.get("window")
+const { width, height: screenHeight } = Dimensions.get("window")
 
 type SidePanelProps = {
   visible: boolean
@@ -47,8 +47,8 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
     onClose()
   }
 
-  const navigateToRegisterVehicle = () => {
-    router.push("/registerVehicle")
+  const navigateToDriverSection = () => {
+    router.push("/driverSection")
     onClose()
   }
 
@@ -84,10 +84,10 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
     role === "driver"
       ? [
           { id: "home", name: "Home", icon: "home", action: onClose },
+          { id: "map", name: "Map", icon: "map", action: navigateToDriverSection },
           { id: "profile", name: "Profile", icon: "person-4", action: navigateToProfile },
           { id: "history", name: "Ride History", icon: "directions-car", action: navigateToRideHistory },
           { id: "support", name: "Support", icon: "contact-support", action: navigateToSupport },
-          { id: "register", name: "Register Vehicle", icon: "directions-car", action: navigateToRegisterVehicle },
           { id: "notifications", name: "Notifications", icon: "notifications", action: navigateToNotifications },
         ]
       : [
@@ -147,7 +147,11 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
 
 const styles = StyleSheet.create({
   modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: screenHeight,
     flexDirection: "row",
     justifyContent: "flex-start",
     zIndex: 10000,
@@ -160,7 +164,7 @@ const styles = StyleSheet.create({
   sidePanel: {
     width: width * 0.75,
     backgroundColor: "#fff",
-    height: "100%",
+    height: screenHeight,
     paddingTop: 50,
   },
   sidePanelHeader: {
@@ -184,7 +188,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 13,
     borderLeftWidth: 4,
     borderLeftColor: "transparent",
   },
@@ -198,7 +202,7 @@ const styles = StyleSheet.create({
   },
   bottomButtons: {
     position: "absolute",
-    bottom: 40,
+    bottom: 30,
     left: 0,
     right: 0,
     paddingHorizontal: 20,

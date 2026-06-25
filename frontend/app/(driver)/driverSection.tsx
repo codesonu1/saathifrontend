@@ -482,6 +482,51 @@ const DriverSection = () => {
     }
   };
 
+  const simulateMockRideRequest = () => {
+    const mockRide: Ride = {
+      _id: 'mock_ride_' + Date.now(),
+      status: 'searching',
+      offerPrice: Math.floor(Math.random() * 200) + 150, // 150 to 350
+      pickUpLocation: 'Kathmandu Mall',
+      dropOffLocation: 'Road Division Bhaktapur, Katunje',
+      pickUp: {
+        location: 'Kathmandu Mall',
+        coords: {
+          type: 'Point',
+          coordinates: [85.3123, 27.7007]
+        }
+      },
+      dropOff: {
+        location: 'Road Division Bhaktapur, Katunje',
+        coords: {
+          type: 'Point',
+          coordinates: [85.4282, 27.6713]
+        }
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      passenger: {
+        _id: 'mock_passenger_' + Date.now(),
+        firstName: 'Sagar',
+        lastName: 'Thapa',
+        mobile: '+9779812345678',
+        photo: 'https://api.dicebear.com/9.x/glass/png?seed=Sagar'
+      },
+      vehicleType: {
+        _id: '507f1f77bcf86cd799439012',
+        name: 'Car',
+        basePrice: 150,
+        pricePerKm: 35
+      }
+    };
+    
+    setAvailableRides(prev => {
+      if (prev.some(r => r._id === mockRide._id)) return prev;
+      return [...prev, mockRide];
+    });
+    showToast('Mock ride request received!', 'info');
+  };
+
   const handleMakeOffer = async (ride: Ride) => {
     // Prevent accepting multiple offers
     if (acceptedOfferId) {
@@ -492,6 +537,45 @@ const DriverSection = () => {
     // Prevent making multiple offers for the same ride
     if (pendingOfferRideId === ride._id) {
       showToast('You have already made an offer for this ride. Please wait for passenger response.', 'error');
+      return;
+    }
+
+    if (ride._id.startsWith('mock_ride_')) {
+      console.log('Simulating mock offer acceptance for ride:', ride);
+      setOfferLoading(prev => ({ ...prev, [ride._id]: true }));
+      setLoading(true);
+      setPendingOfferRideId(ride._id);
+      
+      setTimeout(async () => {
+        setOfferLoading(prev => ({ ...prev, [ride._id]: false }));
+        setLoading(false);
+        setAcceptedOfferId(ride._id);
+        showToast('Your offer was accepted!', 'success');
+        
+        // Set user role to driver before navigating
+        await userRoleManager.setRole('driver');
+        
+        // Navigate to ride tracker with full details and simulating parameter
+        router.push({
+          pathname: '../(common)/rideTracker',
+          params: {
+            rideId: ride._id,
+            simulating: 'true',
+            driverName: 'Vardan Shah',
+            from: ride.pickUp?.location || ride.pickUpLocation || 'Kathmandu Mall',
+            to: ride.dropOff?.location || ride.dropOffLocation || 'Road Division Bhaktapur',
+            fare: ride.offerPrice.toString(),
+            passengerName: `${ride.passenger?.firstName} ${ride.passenger?.lastName}`,
+            pickupLat: '27.7007',
+            pickupLng: '85.3123',
+            dropoffLat: '27.6713',
+            dropoffLng: '85.4282',
+            vehicleNo: 'BA-1-PA-1234',
+            vehicleModel: 'Cultus',
+            userRole: 'driver',
+          },
+        });
+      }, 1500);
       return;
     }
     
@@ -1070,9 +1154,14 @@ const DriverSection = () => {
           <View style={styles.ridesContainer}>
             <View style={styles.ridesHeader}>
               <Text style={styles.ridesTitle}>Available Rides ({availableRides.length})</Text>
-              <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-                <MaterialIcons name="refresh" size={20} color="#075B5E" />
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <TouchableOpacity onPress={simulateMockRideRequest} style={styles.simulateButton}>
+                  <Text style={styles.simulateButtonText}>Simulate</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+                  <MaterialIcons name="refresh" size={20} color="#075B5E" />
+                </TouchableOpacity>
+              </View>
             </View>
             
             {loading ? (
@@ -1396,6 +1485,17 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     padding: 8,
+  },
+  simulateButton: {
+    backgroundColor: '#075B5E',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  simulateButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   loadingContainer: {
     flex: 1,
