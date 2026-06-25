@@ -49,6 +49,7 @@ const RideOffersScreen = () => {
   const router = useRouter();
   const navigation = useNavigation();
   const timeoutsRef = useRef<any[]>([]);
+  const isNavigatingToTrackerRef = useRef(false);
   
   const rideId = params.rideId as string;
   const from = params.from as string;
@@ -105,6 +106,10 @@ const RideOffersScreen = () => {
     
     // Handle swipe gestures - only for this screen
     const unsubscribe = navigation.addListener('beforeRemove', (e: any) => {
+      // If we are actively navigating to the tracker, let it go through
+      if (isNavigatingToTrackerRef.current) {
+        return;
+      }
       // Only prevent navigation if we're on this screen and haven't confirmed
       if (!cancelling && !rideCancelled) {
         e.preventDefault();
@@ -146,6 +151,33 @@ const RideOffersScreen = () => {
     try {
       setLoading(true);
       console.log('RideOffers: Loading offers for rideId:', rideId);
+
+      // First check if the ride is already accepted/in-progress
+      try {
+        const details = await rideService.getRideDetails(rideId);
+        console.log('RideOffers: loadOffers status check:', details?.status);
+        if (details?.status === 'accepted' || details?.status === 'in-progress') {
+          console.log('RideOffers: Ride is already active, redirecting to tracker...');
+          await userRoleManager.setRole('passenger');
+          isNavigatingToTrackerRef.current = true;
+          router.replace({
+            pathname: '../(common)/rideTracker',
+            params: {
+              rideId: details._id || rideId,
+              driverName: details.driver?.firstName && details.driver?.lastName 
+                ? `${details.driver.firstName} ${details.driver.lastName}`
+                : (details.driver?.firstName || 'Driver'),
+              from: details.pickUpLocation || from,
+              to: details.dropOffLocation || to,
+              fare: ((details as any).acceptedOffer?.offerAmount || (details as any).offerPrice || fare)?.toString(),
+              vehicle: details.vehicleType?.name || vehicle,
+            },
+          });
+          return;
+        }
+      } catch (err) {
+        console.error('RideOffers: Error checking ride details in loadOffers:', err);
+      }
       
       // First try WebSocket
       try {
@@ -249,6 +281,44 @@ const RideOffersScreen = () => {
   };
 
   const handleAcceptOffer = async (offerId: string) => {
+    // Intercept mock offers for testing offline/UI flows
+    if (offerId.startsWith('mock_')) {
+      try {
+        setAcceptLoading(prev => ({ ...prev, [offerId]: true }));
+        setLoading(true);
+        showToast('Offer accepted! Redirecting to ride...', 'success');
+        
+        // Find the mock offer from current offers list
+        const offer = offers.find(o => o._id === offerId);
+        const actualDriverName = offer ? `${offer.driver?.firstName} ${offer.driver?.lastName}` : 'Ramesh Adhikari';
+        const actualVehicle = offer ? offer.driver?.vehicleDetails?.vehicleModel : 'Bajaj Pulsar 150 (Red)';
+        const actualFareAmt = offer ? offer.offeredPrice.toString() : fare;
+
+        setTimeout(async () => {
+          await userRoleManager.setRole('passenger');
+          isNavigatingToTrackerRef.current = true;
+          router.replace({
+            pathname: '../(common)/rideTracker',
+            params: {
+              rideId: rideId,
+              driverName: actualDriverName,
+              from: from,
+              to: to,
+              fare: actualFareAmt,
+              vehicle: actualVehicle,
+              simulating: 'true',
+            },
+          });
+        }, 1500);
+      } catch (err) {
+        console.error('Error simulating mock accept:', err);
+      } finally {
+        setAcceptLoading(prev => ({ ...prev, [offerId]: false }));
+        setLoading(false);
+      }
+      return;
+    }
+
     try {
       setAcceptLoading(prev => ({ ...prev, [offerId]: true }));
       setLoading(true);
@@ -489,6 +559,7 @@ const RideOffersScreen = () => {
             );
             // Only navigate if the accepted offer belongs to the current user (passenger)
             await userRoleManager.setRole('passenger');
+            isNavigatingToTrackerRef.current = true;
             router.push({
               pathname: '../(common)/rideTracker',
               params: {

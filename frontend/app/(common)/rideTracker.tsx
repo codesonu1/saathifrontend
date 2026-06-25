@@ -13,6 +13,7 @@ import {
   TextInput,
   BackHandler,
   Modal,
+  ScrollView,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -64,6 +65,15 @@ async function getTestDriverLocation(pickup: {lat: number, lng: number} | null) 
 }
 
 const USE_TEST_DRIVER_LOCATION = true; // Set to false for real GPS tracking(Manual)
+
+const CANCELLATION_REASONS = [
+  'Driver asking for more money',
+  'Plan changed / No longer need a ride',
+  'Driver is not moving / ETA is too long',
+  'Driver requested to cancel',
+  'Selected wrong vehicle type',
+  'Other reason'
+];
 
 const lastProgressRef = { current: 0 };
 
@@ -421,6 +431,7 @@ const RideTrackerScreen = () => {
   const [isLoadingDetails, setIsLoadingDetails] = useState(true);
   const [rideStartTime, setRideStartTime] = useState<number | null>(null);
   const [cancellationReason, setCancellationReason] = useState('');
+  const [selectedReasonIndex, setSelectedReasonIndex] = useState<number | null>(null);
   const [isCancellationModalVisible, setIsCancellationModalVisible] = useState(false);
   const [showBackConfirmation, setShowBackConfirmation] = useState(false);
   const [modal, setModal] = useState<{
@@ -442,6 +453,63 @@ const RideTrackerScreen = () => {
   const [loadingRoute, setLoadingRoute] = useState(false);
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const mapRef = useRef<MapView>(null);
+  const simIntervalRef = useRef<any>(null);
+
+  // --- PASSENGER UI STATES & countdown ---
+  const [etaSeconds, setEtaSeconds] = useState(180);
+  const [hasInitializedEta, setHasInitializedEta] = useState(false);
+  const [pickupNote, setPickupNote] = useState('');
+  const [isPickupNotesModalVisible, setIsPickupNotesModalVisible] = useState(false);
+
+  // Reset initialization flag when not accepted
+  useEffect(() => {
+    if (rideStatus !== 'accepted') {
+      setHasInitializedEta(false);
+    }
+  }, [rideStatus]);
+
+  // Update ETA dynamically when driverLocation or pickupLocation changes
+  useEffect(() => {
+    if (driverLocation && pickupLocation && rideStatus === 'accepted') {
+      const distance = calculateDistance(
+        driverLocation.lat,
+        driverLocation.lng,
+        pickupLocation.lat,
+        pickupLocation.lng
+      );
+      // Assume average speed of 25 km/h in Kathmandu
+      const calculatedSeconds = Math.max(0, Math.round((distance / 25) * 3600));
+      
+      if (!hasInitializedEta) {
+        setEtaSeconds(calculatedSeconds);
+        setHasInitializedEta(true);
+      } else {
+        // Only update if the driver is significantly delayed or advanced to prevent restart loop
+        if (calculatedSeconds > etaSeconds + 30 || etaSeconds > calculatedSeconds + 60) {
+          setEtaSeconds(calculatedSeconds);
+        }
+      }
+    }
+  }, [driverLocation, pickupLocation, rideStatus, hasInitializedEta, etaSeconds]);
+
+  // Countdown timer ticking down every second
+  useEffect(() => {
+    let timer: any;
+    if (rideStatus === 'accepted') {
+      timer = setInterval(() => {
+        setEtaSeconds(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [rideStatus]);
 
   // Compute the actual fare from ride details or use initial fare
   const actualFare = rideDetails?.acceptedOffer?.offerAmount || 
@@ -887,11 +955,23 @@ const RideTrackerScreen = () => {
               setTimeout(() => {
                 if (isMounted.current) {
                   const role = userRole as string;
-                  if (role === 'passenger') {
-                    router.push('/(tabs)/rideRate');
-                  } else {
-                    router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
-                  }
+                  router.push({
+                    pathname: '/(tabs)/rideRate',
+                    params: {
+                      rideId,
+                      userRole: role,
+                      passengerName: rideDetails?.passenger?.firstName && rideDetails?.passenger?.lastName 
+                        ? `${rideDetails.passenger.firstName} ${rideDetails.passenger.lastName}`
+                        : (rideDetails?.passenger?.firstName || 'Passenger'),
+                      driverName: rideDetails?.driver?.firstName && rideDetails?.driver?.lastName 
+                        ? `${rideDetails.driver.firstName} ${rideDetails.driver.lastName}`
+                        : (rideDetails?.driver?.firstName || 'Driver'),
+                      from: from || ((rideDetails as any)?.pickUpLocation || 'Pickup Location'),
+                      to: to || ((rideDetails as any)?.dropOffLocation || 'Dropoff Location'),
+                      fare: actualFare.toString(),
+                      vehicle: vehicle || ((rideDetails as any)?.vehicleType?.name || 'Vehicle')
+                    }
+                  });
                 }
               }, 2000);
             }
@@ -1113,9 +1193,132 @@ const RideTrackerScreen = () => {
     isMounted.current = true;
     console.log('[RideTracker] Initializing rideId:', rideId, 'userRole:', userRole, 'rideStatus:', rideStatus);
     
-        const setupWebSocketAndFetch = async () => {
+    const setupWebSocketAndFetch = async () => {
       try {
         setIsLoadingDetails(true);
+
+        // Check if we are simulating/mocking for testing
+        const isSimulating = params.simulating === 'true';
+        if (isSimulating || (rideId && rideId.startsWith('mock_'))) {
+          console.log('[setupWebSocketAndFetch] Simulating ride tracker, loading mock details...');
+          
+          // Setup mock pickup and dropoff coords (Kathmandu areas)
+          const mockPickup = { lat: 27.7172, lng: 85.3240 };
+          const mockDropoff = { lat: 27.6710, lng: 85.3122 };
+          setPickupLocation(mockPickup);
+          setDropoffLocation(mockDropoff);
+          
+          // Setup mock driver location slightly offset from pickup
+          const mockDriver = { lat: 27.7190, lng: 85.3280 };
+          setDriverLocation(mockDriver);
+          setCompletedRoute([mockDriver]);
+          
+          // Construct mock ride details
+          const mockRide: any = {
+            _id: rideId,
+            status: 'accepted',
+            passenger: {
+              _id: 'mock_passenger_1',
+              firstName: 'Test',
+              lastName: 'Passenger',
+              mobile: '9801020304',
+            },
+            driver: {
+              _id: 'mock_driver_1',
+              firstName: params.driverName ? String(params.driverName).split(' ')[0] : 'Ramesh',
+              lastName: params.driverName ? String(params.driverName).split(' ').slice(1).join(' ') : 'Adhikari',
+              mobile: '+9779812345678',
+              rating: 4.8,
+            },
+            driverProfile: {
+              rating: 4.77,
+              totalRides: 142,
+              vehicleColor: 'White',
+              vehicleMake: 'Suzuki',
+              vehicleModel: params.vehicle ? String(params.vehicle) : 'White Suzuki Cultus',
+              vehicleRegNum: 'LF-638',
+            },
+            vehicleType: {
+              name: params.vehicle ? String(params.vehicle) : 'Car',
+            },
+            offerPrice: parseFloat(params.fare as string) || 120,
+            pickUpLocation: params.from ? String(params.from) : 'Kathmandu',
+            dropOffLocation: params.to ? String(params.to) : 'Lalitpur',
+          };
+          setRideDetails(mockRide);
+          setIsLoadingDetails(false);
+          
+          // Initialize simulated driver movement (arriving & ongoing trip progress)
+          let step = 0;
+          let phase = 1; // 1: Arriving, 2: Ongoing
+          
+          simIntervalRef.current = setInterval(() => {
+            step += 1;
+            
+            if (phase === 1) {
+              // Phase 1: Move driver closer to pickup (15 steps of 2s each = 30s total)
+              const totalSteps = 15;
+              const ratio = Math.min(1, step / totalSteps);
+              const newLat = mockDriver.lat + (mockPickup.lat - mockDriver.lat) * ratio;
+              const newLng = mockDriver.lng + (mockPickup.lng - mockDriver.lng) * ratio;
+              setDriverLocation({ lat: newLat, lng: newLng });
+              
+              if (step >= totalSteps) {
+                // Reached pickup! Wait 1 second, then transition to ongoing trip
+                phase = 2;
+                step = 0;
+                
+                setTimeout(() => {
+                  setRideStatus('in-progress');
+                  rideStartedConfirmedRef.current = true;
+                  showToast('Ride started!', 'success');
+                }, 1000);
+              }
+            } else if (phase === 2) {
+              // Phase 2: Move driver from pickup to dropoff (15 steps of 2s each = 30s total)
+              const totalSteps = 15;
+              const ratio = Math.min(1, step / totalSteps);
+              const newLat = mockPickup.lat + (mockDropoff.lat - mockPickup.lat) * ratio;
+              const newLng = mockPickup.lng + (mockDropoff.lng - mockPickup.lng) * ratio;
+              setDriverLocation({ lat: newLat, lng: newLng });
+              
+              const currentProgress = Math.round(ratio * 100);
+              setProgress(currentProgress);
+              
+              Animated.timing(progressAnimation, {
+                toValue: currentProgress,
+                duration: 500,
+                useNativeDriver: false,
+              }).start();
+              
+              if (step >= totalSteps) {
+                // Reached dropoff! Complete ride
+                if (simIntervalRef.current) clearInterval(simIntervalRef.current);
+                
+                setTimeout(() => {
+                  setRideStatus('completed');
+                  showToast('Ride completed!', 'success');
+                  
+                  setTimeout(() => {
+                    router.push({
+                      pathname: '/(tabs)/rideRate',
+                      params: {
+                        rideId,
+                        driverName: params.driverName ? String(params.driverName) : 'Ramesh Adhikari',
+                        from: params.from ? String(params.from) : 'Kathmandu',
+                        to: params.to ? String(params.to) : 'Lalitpur',
+                        fare: params.fare ? String(params.fare) : '120',
+                        vehicle: params.vehicle ? String(params.vehicle) : 'Car'
+                      }
+                    });
+                  }, 2000);
+                }, 1000);
+              }
+            }
+          }, 2000);
+          
+          return;
+        }
         
         // EARLY EXIT: If ride is already cancelled, don't setup anything
         if (rideStatus === 'cancelled' || rideCancelled) {
@@ -1324,6 +1527,9 @@ const RideTrackerScreen = () => {
       locationTrackingStartedRef.current = false;
       webSocketService.disconnect('ride');
       webSocketService.disconnect(userRole);
+      if (simIntervalRef.current) {
+        clearInterval(simIntervalRef.current);
+      }
       
       // Clean up socket error handler
       const rideSocket = webSocketService.getSocket('ride');
@@ -1410,11 +1616,24 @@ const RideTrackerScreen = () => {
             showToast('Ride completed!', 'success');
             setTimeout(() => {
               if (isMounted.current) {
-                if (userRole === 'passenger') {
-                  router.push('/(tabs)/rideRate');
-                } else {
-                  router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
-                }
+                const role = userRole as string;
+                router.push({
+                  pathname: '/(tabs)/rideRate',
+                  params: {
+                    rideId,
+                    userRole: role,
+                    passengerName: rideDetails?.passenger?.firstName && rideDetails?.passenger?.lastName 
+                      ? `${rideDetails.passenger.firstName} ${rideDetails.passenger.lastName}`
+                      : (rideDetails?.passenger?.firstName || 'Passenger'),
+                    driverName: rideDetails?.driver?.firstName && rideDetails?.driver?.lastName 
+                      ? `${rideDetails.driver.firstName} ${rideDetails.driver.lastName}`
+                      : (rideDetails?.driver?.firstName || 'Driver'),
+                    from: from || ((rideDetails as any)?.pickUpLocation || 'Pickup Location'),
+                    to: to || ((rideDetails as any)?.dropOffLocation || 'Dropoff Location'),
+                    fare: actualFare.toString(),
+                    vehicle: vehicle || ((rideDetails as any)?.vehicleType?.name || 'Vehicle')
+                  }
+                });
               }
             }, 2000);
           } else if (newStatus === 'searching') {
@@ -1430,6 +1649,9 @@ const RideTrackerScreen = () => {
                 }
               }
             }, 2000);
+          } else if (newStatus === 'ongoing') {
+            setRideStatus('in-progress');
+            rideStartedConfirmedRef.current = true;
           } else {
             // Update status for other status changes
             setRideStatus(newStatus as any);
@@ -1459,23 +1681,23 @@ const RideTrackerScreen = () => {
         setTimeout(() => {
           if (isMounted.current) {
             const role = userRole as string;
-            if (role === 'passenger') {
-              router.push({
-                pathname: '/(tabs)/rideRate',
-                params: {
-                  rideId,
-                  driverName: rideDetails?.driver?.firstName && rideDetails?.driver?.lastName 
-                    ? `${rideDetails.driver.firstName} ${rideDetails.driver.lastName}`
-                    : (rideDetails?.driver?.firstName || 'Driver'),
-                  from: from || ((rideDetails as any)?.pickUpLocation || 'Pickup Location'),
-                  to: to || ((rideDetails as any)?.dropOffLocation || 'Dropoff Location'),
-                  fare: actualFare.toString(),
-                  vehicle: vehicle || ((rideDetails as any)?.vehicleType?.name || 'Vehicle')
-                }
-              });
-            } else {
-              router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
-            }
+            router.push({
+              pathname: '/(tabs)/rideRate',
+              params: {
+                rideId,
+                userRole: role,
+                passengerName: rideDetails?.passenger?.firstName && rideDetails?.passenger?.lastName 
+                  ? `${rideDetails.passenger.firstName} ${rideDetails.passenger.lastName}`
+                  : (rideDetails?.passenger?.firstName || 'Passenger'),
+                driverName: rideDetails?.driver?.firstName && rideDetails?.driver?.lastName 
+                  ? `${rideDetails.driver.firstName} ${rideDetails.driver.lastName}`
+                  : (rideDetails?.driver?.firstName || 'Driver'),
+                from: from || ((rideDetails as any)?.pickUpLocation || 'Pickup Location'),
+                to: to || ((rideDetails as any)?.dropOffLocation || 'Dropoff Location'),
+                fare: actualFare.toString(),
+                vehicle: vehicle || ((rideDetails as any)?.vehicleType?.name || 'Vehicle')
+              }
+            });
           }
         }, 2000);
       }
@@ -1810,23 +2032,23 @@ const RideTrackerScreen = () => {
         setTimeout(() => {
           if (isMounted.current) {
             const role = userRole as string;
-            if (role === 'passenger') {
-              router.push({
-                pathname: '/(tabs)/rideRate',
-                params: {
-                  rideId,
-                  driverName: rideDetails?.driver?.firstName && rideDetails?.driver?.lastName 
-                    ? `${rideDetails.driver.firstName} ${rideDetails.driver.lastName}`
-                    : (rideDetails?.driver?.firstName || 'Driver'),
-                  from: from || ((rideDetails as any)?.pickUpLocation || 'Pickup Location'),
-                  to: to || ((rideDetails as any)?.dropOffLocation || 'Dropoff Location'),
-                  fare: actualFare.toString(),
-                  vehicle: vehicle || ((rideDetails as any)?.vehicleType?.name || 'Vehicle')
-                }
-              });
-            } else {
-              router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
-            }
+            router.push({
+              pathname: '/(tabs)/rideRate',
+              params: {
+                rideId,
+                userRole: role,
+                passengerName: rideDetails?.passenger?.firstName && rideDetails?.passenger?.lastName 
+                  ? `${rideDetails.passenger.firstName} ${rideDetails.passenger.lastName}`
+                  : (rideDetails?.passenger?.firstName || 'Passenger'),
+                driverName: rideDetails?.driver?.firstName && rideDetails?.driver?.lastName 
+                  ? `${rideDetails.driver.firstName} ${rideDetails.driver.lastName}`
+                  : (rideDetails?.driver?.firstName || 'Driver'),
+                from: from || ((rideDetails as any)?.pickUpLocation || 'Pickup Location'),
+                to: to || ((rideDetails as any)?.dropOffLocation || 'Dropoff Location'),
+                fare: actualFare.toString(),
+                vehicle: vehicle || ((rideDetails as any)?.vehicleType?.name || 'Vehicle')
+              }
+            });
           }
         }, 2000);
       }
@@ -1873,6 +2095,15 @@ const RideTrackerScreen = () => {
     setIsCancellationModalVisible(true);
   };
 
+  const handleSelectReason = (index: number) => {
+    setSelectedReasonIndex(index);
+    if (index === CANCELLATION_REASONS.length - 1) {
+      setCancellationReason('');
+    } else {
+      setCancellationReason(CANCELLATION_REASONS[index]);
+    }
+  };
+
   const handleConfirmCancelRide = async () => {
     if (!cancellationReason) {
       showToast('Please provide a reason for cancellation.', 'error');
@@ -1884,6 +2115,7 @@ const RideTrackerScreen = () => {
       showToast('Ride is already cancelled', 'info');
       setIsCancellationModalVisible(false);
       setCancellationReason('');
+      setSelectedReasonIndex(null);
       return;
     }
     
@@ -1900,6 +2132,7 @@ const RideTrackerScreen = () => {
           showToast('Ride is already cancelled', 'info');
           setIsCancellationModalVisible(false);
           setCancellationReason('');
+          setSelectedReasonIndex(null);
           setCancelling(false);
           
           // Clean up and redirect
@@ -1966,6 +2199,7 @@ const RideTrackerScreen = () => {
       setCancelling(false);
       setIsCancellationModalVisible(false);
       setCancellationReason('');
+      setSelectedReasonIndex(null);
     }
   };
 
@@ -2262,6 +2496,32 @@ const RideTrackerScreen = () => {
         : driverName);
   const otherUserRole = userRole === 'driver' ? 'passenger' : 'driver';
 
+  // --- PASSENGER VIEW HELPERS ---
+  const isBike = vehicle?.toLowerCase().includes('bike') || vehicle?.toLowerCase().includes('motorcycle') || vehicle?.toLowerCase().includes('scooter');
+  const vehicleIconName = isBike ? 'motorcycle' : 'directions-car';
+  const vehicleNameFormatted = (rideDetails as any)?.driverProfile?.vehicleMake 
+    ? `${(rideDetails as any).driverProfile.vehicleColor || ''} ${(rideDetails as any).driverProfile.vehicleMake} ${(rideDetails as any).driverProfile.vehicleModel || ''}`.trim()
+    : (vehicle || (isBike ? 'Red Honda Splendor' : 'White Suzuki Cultus'));
+  const vehicleRegNum = (rideDetails as any)?.driverProfile?.vehicleRegNum || 'LF-638';
+  const driverRating = (rideDetails as any)?.driverProfile?.rating || '4.77';
+  const driverFirstName = otherUserName ? otherUserName.split(' ')[0] : 'Driver';
+
+  const formatEtaTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
+  const handleComingButtonPress = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    showToast("Ok, notified driver you are coming!", "success");
+  };
+
+  const handleSafetyPress = () => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    showToast("Emergency safety feature triggered. Help is on the way.", "error");
+  };
+
   return (
     <ErrorBoundary>
       <View style={styles.container}>
@@ -2417,109 +2677,351 @@ const RideTrackerScreen = () => {
         )}
       </View>
       <View style={styles.bottomSheet}>
-        <View style={styles.progressContainer}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressTitle}>Ride Progress</Text>
-            <Text style={[styles.statusText, { color: getStatusColor() }]}>{getStatusText()}</Text>
-          </View>
-          <View style={styles.progressBar}>
-            <Animated.View
-              style={[
-                styles.progressFill,
-                {
-                  width: progressAnimation.interpolate({
-                    inputRange: [0, 100],
-                    outputRange: ['0%', '100%'],
-                  }),
-                },
-              ]}
-            />
-          </View>
-          <Text style={styles.progressText}>{Math.round(progress)}%</Text>
-        </View>
-        <View style={styles.detailsContainer}>
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <MaterialIcons name="location-on" size={20} color="#4CAF50" />
-              <Text style={styles.detailText}>From: {from}</Text>
-            </View>
-            <View style={styles.detailItem}>
-              <MaterialIcons name="location-on" size={20} color="#F44336" />
-              <Text style={styles.detailText}>To: {to}</Text>
-            </View>
-          </View>
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <MaterialIcons name="person" size={20} color="#075B5E" />
-              <Text style={styles.detailText}>
-                {otherUserRole.charAt(0).toUpperCase() + otherUserRole.slice(1)}: {otherUserName}
-              </Text>
-            </View>
-            <View style={styles.detailItem}>
-              <MaterialIcons name="currency-rupee" size={20} color="#d6ab1e" />
-              <Text style={styles.detailText}>Fare: रू {parseFloat(actualFare).toFixed(0)}</Text>
-            </View>
-          </View>
-          <View style={styles.detailRow}>
-            <View style={styles.detailItem}>
-              <MaterialIcons name="directions-car" size={20} color="#075B5E" />
-              <Text style={styles.detailText}>Vehicle: {vehicle}</Text>
-            </View>
-          </View>
-        </View>
-        <View style={styles.buttonContainer}>
-          {userRole === 'driver' && rideStatus === 'accepted' && (
-          <TouchableOpacity
-              style={[styles.button, { backgroundColor: '#075B5E' }]}
-              onPress={handleStartRide}
-            disabled={loading}
+        {userRole === 'passenger' ? (
+          <ScrollView
+            style={styles.passengerSheetScroll}
+            contentContainerStyle={styles.passengerSheetContent}
+            showsVerticalScrollIndicator={false}
           >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.buttonText}>Start Ride</Text>
-              )}
-          </TouchableOpacity>
-        )}
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: '#F44336' }]}
-            onPress={handleCancelRide}
-            disabled={cancelling}
-          >
-            <Text style={styles.buttonText}>Cancel Ride</Text>
-          </TouchableOpacity>
-          
-
-          <View style={styles.contactButtons}>
-            <TouchableOpacity
-              style={[styles.contactButton, { backgroundColor: '#4CAF50' }]}
-              onPress={handleCallOtherUser}
-            >
-              <MaterialIcons name="phone" size={18} color="#fff" />
-              <Text style={styles.contactButtonText}>Call</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.contactButton, { backgroundColor: '#2196F3' }]}
-              onPress={handleMessageOtherUser}
-            >
-              <View style={{ position: 'relative' }}>
-                <MaterialIcons name="message" size={18} color="#fff" />
-                {hasUnreadMessages && (
-                  <Animated.View 
-                    style={[
-                      styles.unreadBadge,
-                      {
-                        transform: [{ scale: unreadBadgeAnimation }]
-                      }
-                    ]}
-                  />
-                )}
+            {/* Header Section: Title, Vehicle Details, Car Icon, and License Plate */}
+            <View style={styles.passengerHeaderRow}>
+              <View style={styles.passengerHeaderTextContainer}>
+                <Text style={styles.passengerTitleText}>
+                  {rideStatus === 'accepted' ? (etaSeconds <= 0 ? 'Driver is waiting for you' : 'Driver is arriving') : 'Heading to destination'}
+                </Text>
+                <Text style={styles.passengerVehicleText}>
+                  {vehicleNameFormatted}
+                </Text>
               </View>
-              <Text style={styles.contactButtonText}>Message</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+              <View style={styles.passengerVehicleRight}>
+                <View style={styles.passengerVehicleIconCircle}>
+                  <MaterialIcons name={vehicleIconName} size={30} color="#075B5E" />
+                </View>
+                <View style={styles.passengerPlateBadge}>
+                  <Text style={styles.passengerPlateText}>{vehicleRegNum}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Premium Countdown / ETA Card (Only when accepted) */}
+            {rideStatus === 'accepted' && (
+              <View style={styles.passengerEtaCard}>
+                <View style={styles.passengerEtaInfo}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.passengerEtaLabel}>
+                      {etaSeconds <= 0 ? 'ARRIVED' : 'ARRIVING IN'}
+                    </Text>
+                    <Text style={[
+                      styles.passengerEtaTime,
+                      etaSeconds <= 0 && { fontSize: 20, marginTop: 4 }
+                    ]}>
+                      {etaSeconds <= 0 ? 'Driver has arrived!' : formatEtaTime(etaSeconds)}
+                    </Text>
+                  </View>
+                  <View style={styles.passengerEtaVisualContainer}>
+                    <MaterialIcons name="local-taxi" size={24} color="#075B5E" />
+                    <Text style={styles.passengerEtaVisualText}>
+                      {etaSeconds <= 0 ? 'Meet at pickup' : 'Please be ready'}
+                    </Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.passengerComingButton}
+                  onPress={handleComingButtonPress}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.passengerComingButtonText}>Ok, I'm coming</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Premium Ride Progress Card (Only when in-progress) */}
+            {rideStatus === 'in-progress' && (
+              <View style={styles.passengerEtaCard}>
+                <View style={styles.passengerEtaInfo}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.passengerEtaLabel}>ON THE WAY</Text>
+                    <Text style={[
+                      styles.passengerEtaTime,
+                      { fontSize: 22, marginTop: 4 }
+                    ]}>
+                      {progress >= 100 ? 'Arrived at destination' : 'Heading to destination'}
+                    </Text>
+                  </View>
+                  <View style={styles.passengerEtaVisualContainer}>
+                    <MaterialIcons name="navigation" size={24} color="#075B5E" />
+                    <Text style={styles.passengerEtaVisualText}>{Math.round(progress)}% done</Text>
+                  </View>
+                </View>
+                {/* Progress Bar */}
+                <View style={{ width: '100%', height: 6, backgroundColor: '#E5E7EB', borderRadius: 3, marginTop: 12, overflow: 'hidden' }}>
+                  <Animated.View
+                    style={{
+                      height: '100%',
+                      backgroundColor: '#075B5E',
+                      width: progressAnimation.interpolate({
+                        inputRange: [0, 100],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    }}
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* Contact and Safety Action Circular Buttons Row */}
+            <View style={styles.passengerActionsRow}>
+              {/* 1. Driver Circle: Profile Photo & Rating */}
+              <View style={styles.passengerActionItem}>
+                <View style={styles.passengerAvatarWrapper}>
+                  <View style={styles.passengerAvatarContainer}>
+                    <MaterialIcons name="person" size={36} color="#075B5E" />
+                  </View>
+                  <View style={styles.passengerRatingBadge}>
+                    <Text style={styles.passengerRatingText}>⭐ {driverRating}</Text>
+                  </View>
+                </View>
+                <Text style={styles.passengerActionLabel} numberOfLines={1}>
+                  {driverFirstName}
+                </Text>
+              </View>
+
+              {/* 2. Contact Circle */}
+              <View style={styles.passengerActionItem}>
+                <TouchableOpacity
+                  style={[styles.passengerCircleButton, { backgroundColor: '#E8F5F5' }]}
+                  onPress={handleCallOtherUser}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="phone" size={26} color="#075B5E" />
+                </TouchableOpacity>
+                <Text style={styles.passengerActionLabel}>Contact driver</Text>
+              </View>
+
+              {/* 3. Safety Circle */}
+              <View style={styles.passengerActionItem}>
+                <TouchableOpacity
+                  style={[styles.passengerCircleButton, { backgroundColor: '#FFF5F5' }]}
+                  onPress={handleSafetyPress}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ position: 'relative' }}>
+                    <MaterialIcons name="security" size={26} color="#EF4444" />
+                    <View style={styles.safetyRedDot} />
+                  </View>
+                </TouchableOpacity>
+                <Text style={styles.passengerActionLabel}>Safety</Text>
+              </View>
+            </View>
+
+            {/* Dashed Note Card for Pickup Instructions (Only when accepted) */}
+            {rideStatus === 'accepted' && (
+              <TouchableOpacity
+                style={styles.passengerDashedNotesCard}
+                onPress={() => setIsPickupNotesModalVisible(true)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.passengerNotesLeft}>
+                  <MaterialIcons name="edit-note" size={24} color="#075B5E" />
+                  <Text style={styles.passengerNotesText} numberOfLines={1}>
+                    {pickupNote ? `Instructions: "${pickupNote}"` : 'Any pickup notes for driver?'}
+                  </Text>
+                </View>
+                <MaterialIcons name="keyboard-arrow-right" size={24} color="#075B5E" />
+              </TouchableOpacity>
+            )}
+
+            {/* Consolidated Payment & Trip Card */}
+            <View style={styles.passengerConsolidatedCard}>
+              {/* Payment details */}
+              <View style={styles.passengerPaymentRow}>
+                <Text style={styles.passengerPaymentLabel}>Payment</Text>
+                <View style={styles.passengerPaymentContent}>
+                  <MaterialIcons name="payments" size={20} color="#075B5E" style={{ marginRight: 6 }} />
+                  <Text style={styles.passengerPaymentValue}>रू {parseFloat(actualFare).toFixed(0)} Cash</Text>
+                </View>
+              </View>
+
+              {/* Divider inside consolidated card */}
+              <View style={styles.passengerCardDivider} />
+
+              {/* Current Trip Details */}
+              <View style={styles.passengerTripContainer}>
+                <Text style={styles.passengerTripLabel}>Your current trip</Text>
+                <View style={styles.passengerTripRow}>
+                  <View style={styles.passengerTripIndicatorCol}>
+                    <View style={styles.passengerTripDotGreen} />
+                    <View style={styles.passengerTripLine} />
+                    <View style={styles.passengerTripDotRed} />
+                  </View>
+                  <View style={styles.passengerTripAddressCol}>
+                    <Text style={styles.passengerAddressText} numberOfLines={1}>
+                      From: {from}
+                    </Text>
+                    <Text style={styles.passengerAddressText} numberOfLines={1}>
+                      To: {to}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Cancel Ride Option (Subtle low-profile capsule button - Only when accepted) */}
+            {rideStatus === 'accepted' && (
+              <TouchableOpacity
+                style={styles.passengerCancelCapsuleButton}
+                onPress={handleCancelRide}
+                disabled={cancelling}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.passengerCancelCapsuleText}>Cancel Ride</Text>
+              </TouchableOpacity>
+            )}
+          </ScrollView>
+        ) : (
+          <>
+            <View style={styles.progressContainer}>
+              <View style={styles.progressHeader}>
+                <Text style={styles.progressTitle}>Ride Progress</Text>
+                <Text style={[styles.statusText, { color: getStatusColor() }]}>{getStatusText()}</Text>
+              </View>
+              <View style={styles.progressBar}>
+                <Animated.View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: progressAnimation.interpolate({
+                        inputRange: [0, 100],
+                        outputRange: ['0%', '100%'],
+                      }),
+                    },
+                  ]}
+                />
+              </View>
+              <Text style={styles.progressText}>{Math.round(progress)}%</Text>
+            </View>
+            <View style={styles.detailsContainer}>
+              <View style={styles.detailRow}>
+                <View style={styles.detailItem}>
+                  <MaterialIcons name="location-on" size={20} color="#4CAF50" />
+                  <Text style={styles.detailText}>From: {from}</Text>
+                </View>
+                <View style={styles.detailItem}>
+                  <MaterialIcons name="location-on" size={20} color="#F44336" />
+                  <Text style={styles.detailText}>To: {to}</Text>
+                </View>
+              </View>
+              <View style={styles.detailRow}>
+                <View style={styles.detailItem}>
+                  <MaterialIcons name="person" size={20} color="#075B5E" />
+                  <Text style={styles.detailText}>
+                    {otherUserRole.charAt(0).toUpperCase() + otherUserRole.slice(1)}: {otherUserName}
+                  </Text>
+                </View>
+                <View style={styles.detailItem}>
+                  <MaterialIcons name="currency-rupee" size={20} color="#d6ab1e" />
+                  <Text style={styles.detailText}>Fare: रू {parseFloat(actualFare).toFixed(0)}</Text>
+                </View>
+              </View>
+              <View style={styles.detailRow}>
+                <View style={styles.detailItem}>
+                  <MaterialIcons name="directions-car" size={20} color="#075B5E" />
+                  <Text style={styles.detailText}>Vehicle: {vehicle}</Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.buttonContainer}>
+              {userRole === 'driver' && rideStatus === 'accepted' && (
+                <TouchableOpacity
+                  style={[styles.button, { backgroundColor: '#075B5E' }]}
+                  onPress={handleStartRide}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Start Ride</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.button, { backgroundColor: '#F44336' }]}
+                onPress={handleCancelRide}
+                disabled={cancelling}
+              >
+                <Text style={styles.buttonText}>Cancel Ride</Text>
+              </TouchableOpacity>
+
+              <View style={styles.contactButtons}>
+                <TouchableOpacity
+                  style={[styles.contactButton, { backgroundColor: '#4CAF50' }]}
+                  onPress={handleCallOtherUser}
+                >
+                  <MaterialIcons name="phone" size={18} color="#fff" />
+                  <Text style={styles.contactButtonText}>Call</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.contactButton, { backgroundColor: '#2196F3' }]}
+                  onPress={handleMessageOtherUser}
+                >
+                  <View style={{ position: 'relative' }}>
+                    <MaterialIcons name="message" size={18} color="#fff" />
+                    {hasUnreadMessages && (
+                      <Animated.View
+                        style={[
+                          styles.unreadBadge,
+                          {
+                            transform: [{ scale: unreadBadgeAnimation }]
+                          }
+                        ]}
+                      />
+                    )}
+                  </View>
+                  <Text style={styles.contactButtonText}>Message</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
       </View>
+
+      {/* Pickup Notes Modal */}
+      {isPickupNotesModalVisible && (
+        <Modal
+          visible={true}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setIsPickupNotesModalVisible(false)}
+        >
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
+            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, minHeight: 250 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333' }}>Pickup Notes</Text>
+                <TouchableOpacity onPress={() => setIsPickupNotesModalVisible(false)}>
+                  <MaterialIcons name="close" size={24} color="#666" />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={{ width: '100%', height: 100, borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 10, fontSize: 16, textAlignVertical: 'top', backgroundColor: '#f9f9f9', marginBottom: 20 }}
+                placeholder="e.g. Please wait near the blue gate..."
+                value={pickupNote}
+                onChangeText={setPickupNote}
+                autoFocus
+              />
+              <TouchableOpacity
+                style={{ backgroundColor: '#075B5E', padding: 14, borderRadius: 8, alignItems: 'center' }}
+                onPress={() => {
+                  setIsPickupNotesModalVisible(false);
+                  showToast("Pickup note saved", "success");
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Save Note</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />
 
       {isCancellationModalVisible && (
@@ -2527,30 +3029,139 @@ const RideTrackerScreen = () => {
           visible={true}
         animationType="fade"
         transparent={true}
-        onRequestClose={() => setIsCancellationModalVisible(false)}
+        onRequestClose={() => {
+          setIsCancellationModalVisible(false);
+          setCancellationReason('');
+          setSelectedReasonIndex(null);
+        }}
       >
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.18)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 14, paddingVertical: 18, paddingHorizontal: 16, width: '100%', maxWidth: 320, alignItems: 'center', borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 12, elevation: 4 }}>
-            <Text style={{ fontSize: 17, fontWeight: '700', color: '#222', textAlign: 'center', marginBottom: 6 }}>Cancel Ride</Text>
-            <TextInput
-              style={{ width: '100%', minHeight: 60, borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 10, fontSize: 15, color: '#333', marginBottom: 14, backgroundColor: '#fafbfc' }}
-              placeholder="Cancellation reason"
-              multiline
-              numberOfLines={3}
-              value={cancellationReason}
-              onChangeText={setCancellationReason}
-            />
-            <View style={{ flexDirection: 'row', gap: 10, width: '100%', justifyContent: 'flex-end' }}>
-              <TouchableOpacity style={{ paddingVertical: 8, paddingHorizontal: 16, borderRadius: 6, backgroundColor: 'transparent', marginRight: 2 }} onPress={() => { setIsCancellationModalVisible(false); setCancellationReason(''); }}>
-                <Text style={{ color: '#888', fontSize: 15, fontWeight: '600' }}>Back</Text>
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, paddingVertical: 20, paddingHorizontal: 16, width: '100%', maxWidth: 340, alignItems: 'center', borderWidth: 1, borderColor: '#F3F4F6', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.10, shadowRadius: 12, elevation: 5 }}>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#111827', textAlign: 'center', marginBottom: 4 }}>Cancel Ride</Text>
+            <Text style={{ fontSize: 13, color: '#6B7280', textAlign: 'center', marginBottom: 16 }}>Please select a reason for cancellation:</Text>
+            
+            <View style={{ width: '100%', maxHeight: 280 }}>
+              <ScrollView style={{ width: '100%' }} showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
+                {CANCELLATION_REASONS.map((reason, index) => {
+                  const isSelected = selectedReasonIndex === index;
+                  return (
+                    <TouchableOpacity
+                      key={index}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        width: '100%',
+                        paddingVertical: 12,
+                        paddingHorizontal: 12,
+                        borderWidth: 1,
+                        borderColor: isSelected ? '#075B5E' : '#E5E7EB',
+                        borderRadius: 8,
+                        marginBottom: 8,
+                        backgroundColor: isSelected ? '#F0F7F7' : '#FFF',
+                      }}
+                      onPress={() => handleSelectReason(index)}
+                    >
+                      <View style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        borderWidth: 2,
+                        borderColor: isSelected ? '#075B5E' : '#D1D5DB',
+                        marginRight: 10,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}>
+                        {isSelected && (
+                          <View style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 5,
+                            backgroundColor: '#075B5E',
+                          }} />
+                        )}
+                      </View>
+                      <Text style={{
+                        fontSize: 14,
+                        color: isSelected ? '#075B5E' : '#374151',
+                        fontWeight: isSelected ? '600' : '400',
+                        flex: 1,
+                      }} numberOfLines={2}>
+                        {reason}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {selectedReasonIndex === CANCELLATION_REASONS.length - 1 && (
+              <TextInput
+                style={{
+                  width: '100%',
+                  minHeight: 60,
+                  borderWidth: 1,
+                  borderColor: '#075B5E',
+                  borderRadius: 8,
+                  padding: 10,
+                  fontSize: 14,
+                  color: '#374151',
+                  marginTop: 8,
+                  marginBottom: 12,
+                  backgroundColor: '#F9FAFB',
+                  textAlignVertical: 'top'
+                }}
+                placeholder="Please specify your reason..."
+                multiline
+                numberOfLines={3}
+                value={cancellationReason}
+                onChangeText={setCancellationReason}
+              />
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 10, width: '100%', justifyContent: 'space-between', marginTop: 12 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: 12,
+                  borderRadius: 8,
+                  backgroundColor: '#F3F4F6',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+                onPress={() => {
+                  setIsCancellationModalVisible(false);
+                  setCancellationReason('');
+                  setSelectedReasonIndex(null);
+                }}
+              >
+                <Text style={{ color: '#4B5563', fontSize: 15, fontWeight: '600' }}>Back</Text>
               </TouchableOpacity>
-                              <TouchableOpacity style={{ paddingVertical: 8, paddingHorizontal: 18, borderRadius: 6, backgroundColor: '#EF4444' }} onPress={handleConfirmCancelRide} disabled={cancelling}>
-                {cancelling ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Confirm Cancel</Text>
-                )}
-              </TouchableOpacity>
+              
+              {(() => {
+                const isConfirmDisabled = selectedReasonIndex === null || 
+                  (selectedReasonIndex === CANCELLATION_REASONS.length - 1 && !cancellationReason.trim()) || 
+                  cancelling;
+                return (
+                  <TouchableOpacity
+                    style={{
+                      flex: 1.5,
+                      paddingVertical: 12,
+                      borderRadius: 8,
+                      backgroundColor: isConfirmDisabled ? '#FCA5A5' : '#EF4444',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    onPress={handleConfirmCancelRide}
+                    disabled={isConfirmDisabled}
+                  >
+                    {cancelling ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>Confirm Cancel</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
           </View>
         </View>
@@ -2857,6 +3468,324 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 10,
     fontWeight: 'bold',
+  },
+  passengerSheetScroll: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  passengerSheetContent: {
+    paddingBottom: 24,
+  },
+  passengerHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  passengerHeaderTextContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  passengerTitleText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1A1A1A',
+    marginBottom: 4,
+  },
+  passengerVehicleText: {
+    fontSize: 15,
+    color: '#666',
+  },
+  passengerVehicleRight: {
+    alignItems: 'center',
+  },
+  passengerVehicleIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#F0F7F7',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  passengerPlateBadge: {
+    backgroundColor: '#F3F4F6',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  passengerPlateText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#374151',
+  },
+  passengerEtaCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 18,
+    borderWidth: 1.5,
+    borderColor: '#E8F5F5',
+    shadowColor: '#075B5E',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  passengerEtaInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  passengerEtaLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  passengerEtaTime: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: '#075B5E',
+  },
+  passengerEtaVisualContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F0F7F7',
+    borderRadius: 12,
+    padding: 10,
+    width: 100,
+  },
+  passengerEtaVisualText: {
+    fontSize: 10,
+    color: '#075B5E',
+    fontWeight: '700',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  passengerComingButton: {
+    backgroundColor: '#075B5E',
+    borderRadius: 24,
+    paddingVertical: 12,
+    alignItems: 'center',
+    shadowColor: '#075B5E',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  passengerComingButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
+  },
+  passengerActionsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    marginVertical: 14,
+  },
+  passengerActionItem: {
+    alignItems: 'center',
+    width: 90,
+  },
+  passengerAvatarWrapper: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  passengerAvatarContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#E8F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: '#075B5E',
+  },
+  passengerRatingBadge: {
+    position: 'absolute',
+    bottom: -4,
+    right: -10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 1,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  passengerRatingText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#333',
+  },
+  passengerCircleButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  safetyRedDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+    borderWidth: 1.5,
+    borderColor: '#FFF5F5',
+  },
+  passengerActionLabel: {
+    fontSize: 13,
+    color: '#4B5563',
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  passengerDivider: {
+    height: 1,
+    backgroundColor: '#F3F4F6',
+    marginVertical: 14,
+  },
+  passengerDashedNotesCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F7FCFC',
+    borderStyle: 'dashed',
+    borderWidth: 1.5,
+    borderColor: '#075B5E',
+    borderRadius: 12,
+    padding: 14,
+    marginVertical: 6,
+  },
+  passengerNotesLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  passengerNotesText: {
+    fontSize: 15,
+    color: '#374151',
+    fontWeight: '600',
+    marginLeft: 10,
+    flex: 1,
+  },
+  passengerConsolidatedCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    padding: 16,
+    marginTop: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  passengerCardDivider: {
+    height: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 14,
+  },
+  passengerPaymentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  passengerPaymentLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+  },
+  passengerPaymentContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  passengerPaymentValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#075B5E',
+  },
+  passengerTripContainer: {
+    marginTop: 2,
+  },
+  passengerTripLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  passengerTripRow: {
+    flexDirection: 'row',
+  },
+  passengerTripIndicatorCol: {
+    alignItems: 'center',
+    width: 20,
+    marginRight: 10,
+    paddingTop: 5,
+  },
+  passengerTripDotGreen: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#10B981',
+  },
+  passengerTripLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: '#E5E7EB',
+    marginVertical: 4,
+    borderStyle: 'dashed',
+  },
+  passengerTripDotRed: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444',
+  },
+  passengerTripAddressCol: {
+    flex: 1,
+    gap: 10,
+  },
+  passengerAddressText: {
+    fontSize: 14,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  passengerCancelCapsuleButton: {
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1,
+    borderColor: '#FEE2E2',
+    borderRadius: 24,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 24,
+  },
+  passengerCancelCapsuleText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#EF4444',
   },
 });
 

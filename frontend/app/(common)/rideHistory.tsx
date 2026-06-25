@@ -317,19 +317,24 @@ const RideHistoryScreen = () => {
           <Icon name={getVehicleIcon(ride.vehicleType?.name)} size={28} color="#fff" />
         </View>
         <View style={styles.detailsContainer}>
-          {isCancelled ? (
-            <Text style={styles.cancelledText}>You cancelled</Text>
-          ) : (
-            <Text style={styles.pickupText} numberOfLines={1}>
+          <View style={styles.routeContainer}>
+            <Text style={styles.routeText} numberOfLines={1}>
               {ride.pickUpLocation || ride.pickUp?.location || 'Unknown pickup'}
             </Text>
-          )}
-          <Text style={styles.destinationText} numberOfLines={1}>
-            {ride.dropOffLocation || ride.dropOff?.location || 'Unknown destination'}
-          </Text>
-          <Text style={styles.timeText}>
-            {ride.createdAt ? formatTime(ride.createdAt) : ''}
-          </Text>
+            <Icon name="arrow-forward" size={16} color="#666" style={styles.arrowIcon} />
+            <Text style={styles.routeText} numberOfLines={1}>
+              {ride.dropOffLocation || ride.dropOff?.location || 'Unknown destination'}
+            </Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.timeText}>
+              {ride.createdAt ? formatTime(ride.createdAt) : ''}
+            </Text>
+            <Text style={styles.bulletSeparator}>•</Text>
+            <Text style={[styles.statusText, isCancelled ? styles.cancelledStatusText : styles.completedStatusText]}>
+              {isCancelled ? 'Cancelled' : 'Successful'}
+            </Text>
+          </View>
         </View>
         <View style={styles.priceContainer}>
           <Text style={styles.priceText}>
@@ -542,6 +547,40 @@ const styles = StyleSheet.create({
     color: "#666",
     textAlign: "center",
     marginTop: 4,
+  },
+  routeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  routeText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '500',
+    flex: 1,
+  },
+  arrowIcon: {
+    marginHorizontal: 6,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  bulletSeparator: {
+    fontSize: 12,
+    color: '#ccc',
+    marginHorizontal: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  completedStatusText: {
+    color: '#075B5E',
+  },
+  cancelledStatusText: {
+    color: '#EA2F14',
   },
 })
 
