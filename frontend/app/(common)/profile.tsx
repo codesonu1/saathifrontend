@@ -7,6 +7,7 @@ import apiClient from '../utils/apiClient';
 import * as ImagePicker from 'expo-image-picker';
 import AppModal from '../../components/ui/AppModal';
 import Constants from 'expo-constants';
+import { useUserRole } from '../utils/userRoleManager';
 
 const { width } = Dimensions.get('window');
 const ASSET_BASE_URL = Constants.expoConfig?.extra?.PUBLIC_ASSET_URL || 'http://192.168.1.71:9000';
@@ -14,6 +15,7 @@ const DEFAULT_BASE_URL = Constants.expoConfig?.extra?.DEFAULT_BASE_URL || 'http:
 
 const ProfileSettingsScreen = () => {
   const router = useRouter();
+  const activeRole = useUserRole();
   const [name, setName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -21,6 +23,8 @@ const ProfileSettingsScreen = () => {
   const [loading, setLoading] = useState(true);
   const [imageUri, setImageUri] = useState('https://www.shutterstock.com/image-vector/default-avatar-photo-placeholder-grey-600nw-2007531536.jpg'); // Default image
   const [uploading, setUploading] = useState(false);
+  const [rating, setRating] = useState<number | null>(null);
+  const [totalRides, setTotalRides] = useState<number>(0);
   const [modal, setModal] = useState<{
     visible: boolean;
     type: 'success' | 'error' | 'info';
@@ -58,6 +62,24 @@ const ProfileSettingsScreen = () => {
         
         const photoUrl = getFullImageUrl(userData.photo);
         setImageUri(photoUrl);
+
+        // Fetch rating depending on active role
+        if (activeRole === 'driver') {
+          try {
+            const driverResponse = await apiClient.get('driver-profile');
+            const driverData = driverResponse.data.data;
+            if (driverData) {
+              setRating(driverData.rating || 5);
+              setTotalRides(driverData.totalRides || 0);
+            }
+          } catch (driverErr) {
+            console.error('Failed to fetch driver profile for rating:', driverErr);
+            // Fallback to user rating
+            setRating(userData.rating || 5);
+          }
+        } else {
+          setRating(userData.rating || 5);
+        }
       } catch (err) {
         console.error('Failed to fetch user data:', err);
         showModal('error', 'Error', 'Failed to load profile data. Please try again.');
@@ -66,7 +88,7 @@ const ProfileSettingsScreen = () => {
       }
     };
     fetchUserData();
-  }, []);
+  }, [activeRole]);
 
   const handleSave = async () => {
     setLoading(true);
@@ -219,6 +241,21 @@ const ProfileSettingsScreen = () => {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Rating Display */}
+        <View style={styles.ratingContainer}>
+          <View style={styles.ratingBadge}>
+            <Icon name="star" size={18} color="#FFD700" style={{ marginRight: 4 }} />
+            <Text style={styles.ratingText}>
+              {rating !== null ? rating.toFixed(1) : '5.0'}
+            </Text>
+          </View>
+          <Text style={styles.ratingLabel}>
+            {activeRole === 'driver' 
+              ? `Driver Rating (${totalRides} ${totalRides === 1 ? 'ride' : 'rides'})` 
+              : 'Passenger Rating'}
+          </Text>
+        </View>
       </View>
       <View style={styles.inputContainer}>
         <TextInput
@@ -350,6 +387,32 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  ratingContainer: {
+    alignItems: 'center',
+    marginTop: -10,
+    marginBottom: 5,
+  },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF8E7',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#FFE0B2',
+  },
+  ratingText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FF9800',
+  },
+  ratingLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 6,
+    fontWeight: '500',
   },
 });
 

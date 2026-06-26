@@ -48,6 +48,13 @@ const DriverSection = () => {
   
   // Driver mode states
   const [isOnline, setIsOnline] = useState(false);
+  const onlineTargetRef = React.useRef(isOnline);
+  
+  // Keep onlineTargetRef updated when isOnline changes via other flows
+  useEffect(() => {
+    onlineTargetRef.current = isOnline;
+  }, [isOnline]);
+
   const [availableRides, setAvailableRides] = useState<Ride[]>([]);
   const [myRides, setMyRides] = useState<Ride[]>([]);
   const [currentRide, setCurrentRide] = useState<Ride | null>(null);
@@ -167,6 +174,12 @@ const DriverSection = () => {
 
   async function setupWebSocket() {
     try {
+      // Remove any existing listeners first to avoid duplicate callbacks
+      webSocketService.off('newRideRequest', undefined, 'driver');
+      webSocketService.off('offerAccepted', undefined, 'driver');
+      webSocketService.off('offerCreated', undefined, 'driver');
+      webSocketService.off('passengerCancelledRide', undefined, 'driver');
+      webSocketService.off('offerRejected', undefined, 'driver');
       
       // Connect to driver namespace for driver-specific events
       await webSocketService.connect(undefined, 'driver');
@@ -393,12 +406,15 @@ const DriverSection = () => {
   };
 
   const handleOnlineToggle = async () => {
+    const newStatus = !isOnline;
+    console.log('Driver: Toggling online status to:', newStatus);
+    
+    onlineTargetRef.current = newStatus;
+    // Optimistic UI update: toggle the state immediately for instant feedback
+    setIsOnline(newStatus);
+    setLoading(true);
+
     try {
-      setLoading(true);
-      const newStatus = !isOnline;
-      
-      console.log('Driver: Toggling online status to:', newStatus);
-      
       if (newStatus) {
         // Check KYC status first
         if (kycStatus !== 'approved' && kycStatus !== 'verified') {
@@ -411,20 +427,40 @@ const DriverSection = () => {
           } else {
             showToast('Please complete KYC verification before going online', 'error');
           }
-          setLoading(false);
+          if (onlineTargetRef.current === newStatus) {
+            setIsOnline(false); // Revert
+            setLoading(false);
+          }
           return;
         }
         
-        // Get current location
+        // 1. Connect to WebSocket
         try {
-          // 1. Connect to WebSocket
+          if (!onlineTargetRef.current) {
+            setLoading(false);
+            return;
+          }
           await setupWebSocket();
-          if (!webSocketService.isSocketConnected()) {
+          
+          if (!onlineTargetRef.current) {
+            webSocketService.disconnect('driver');
+            setLoading(false);
+            return;
+          }
+
+          if (!webSocketService.isSocketConnected('driver')) {
             throw new Error('WebSocket connection failed.');
           }
 
           // 2. Get location
           const location = await locationService.getCurrentLocation();
+          
+          if (!onlineTargetRef.current) {
+            webSocketService.disconnect('driver');
+            setLoading(false);
+            return;
+          }
+
           console.log('Driver: Current location:', location);
           
           // 3. Ping status
@@ -432,18 +468,17 @@ const DriverSection = () => {
             latitude: location.latitude,
             longitude: location.longitude
           }, 'driver');
-          const pingSuccess = true; // Assume success for now
           
-          if (pingSuccess) {
-            setIsOnline(true);
+          if (onlineTargetRef.current === newStatus) {
             showToast('You are now online!', 'success');
-          } else {
-            throw new Error('Failed to update online status.');
           }
         } catch (error: any) {
           console.error('Driver: Failed to go online:', error.message);
-          showToast('Failed to go online. Please check your connection and try again.', 'error');
-          webSocketService.disconnect(); // Ensure cleanup on failure
+          if (onlineTargetRef.current === newStatus) {
+            showToast('Failed to go online. Please check your connection and try again.', 'error');
+            setIsOnline(false); // Revert
+            webSocketService.disconnect('driver'); // Ensure cleanup on failure
+          }
         }
       } else {
         // Going offline - notify passengers
@@ -464,7 +499,6 @@ const DriverSection = () => {
           }
         }
         
-        setIsOnline(false);
         // Clear any pending offers when going offline
         setPendingOfferRideId(null);
         setPendingOfferId(null);
@@ -472,13 +506,30 @@ const DriverSection = () => {
         setOfferLoading({});
         setRaiseFareLoading(false);
         setAcceptedOfferId(null);
-        showToast('You are now offline', 'info');
+        
+        // Stop location tracking
+        if (stopLocationTracking) {
+          stopLocationTracking();
+          setStopLocationTracking(null);
+        }
+        
+        // Disconnect WebSocket
+        webSocketService.disconnect('driver');
+        
+        if (onlineTargetRef.current === newStatus) {
+          showToast('You are now offline', 'info');
+        }
       }
     } catch (error) {
       console.error('Driver: Error toggling online status:', error);
-      showToast('Error changing online status', 'error');
+      if (onlineTargetRef.current === newStatus) {
+        showToast('Error changing online status', 'error');
+        setIsOnline(!newStatus); // Revert on error
+      }
     } finally {
-      setLoading(false);
+      if (onlineTargetRef.current === newStatus) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1140,7 +1191,7 @@ const DriverSection = () => {
               </Text>
             </View>
             <TouchableOpacity
-              style={[styles.toggleButton, isOnline && styles.toggleButtonActive]}
+              style={[styles.toggleButton, isOnline && styles.toggleButtonActive, loading && { opacity: 0.6 }]}
               onPress={handleOnlineToggle}
               activeOpacity={0.8}
             >

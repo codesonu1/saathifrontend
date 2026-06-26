@@ -66,12 +66,21 @@ async function getTestDriverLocation(pickup: {lat: number, lng: number} | null) 
 
 const USE_TEST_DRIVER_LOCATION = true; // Set to false for real GPS tracking(Manual)
 
-const CANCELLATION_REASONS = [
+const PASSENGER_CANCELLATION_REASONS = [
   'Driver asking for more money',
   'Plan changed / No longer need a ride',
   'Driver is not moving / ETA is too long',
   'Driver requested to cancel',
   'Selected wrong vehicle type',
+  'Other reason'
+];
+
+const DRIVER_CANCELLATION_REASONS = [
+  'Passenger did not show up',
+  'Passenger requested to cancel',
+  'Incorrect pickup location / Hard to reach',
+  'Vehicle issue / Breakdown / Flat tire',
+  'Traffic delay / Cannot reach pickup in time',
   'Other reason'
 ];
 
@@ -401,6 +410,9 @@ const RideTrackerScreen = () => {
   const navigation = useNavigation();
   const rideId = params.rideId as string;
   const userRole = useUserRole();
+  const cancellationReasons = userRole === 'driver'
+    ? DRIVER_CANCELLATION_REASONS
+    : PASSENGER_CANCELLATION_REASONS;
   const driverName = params.driverName as string;
   const passengerName = params.passengerName as string;
   const from = params.from as string;
@@ -1300,15 +1312,18 @@ const RideTrackerScreen = () => {
                   showToast('Ride completed!', 'success');
                   
                   setTimeout(() => {
+                    const role = userRole as string;
                     router.push({
                       pathname: '/(tabs)/rideRate',
                       params: {
                         rideId,
-                        driverName: params.driverName ? String(params.driverName) : 'Ramesh Adhikari',
-                        from: params.from ? String(params.from) : 'Kathmandu',
-                        to: params.to ? String(params.to) : 'Lalitpur',
-                        fare: params.fare ? String(params.fare) : '120',
-                        vehicle: params.vehicle ? String(params.vehicle) : 'Car'
+                        userRole: role,
+                        passengerName: params.passengerName ? String(params.passengerName) : (rideDetails?.passenger?.firstName ? `${rideDetails.passenger.firstName} ${rideDetails.passenger.lastName || ''}` : 'Passenger'),
+                        driverName: params.driverName ? String(params.driverName) : (rideDetails?.driver?.firstName ? `${rideDetails.driver.firstName} ${rideDetails.driver.lastName || ''}` : 'Driver'),
+                        from: params.from ? String(params.from) : ((rideDetails as any)?.pickUpLocation || 'Kathmandu Mall'),
+                        to: params.to ? String(params.to) : ((rideDetails as any)?.dropOffLocation || 'Bhaktapur'),
+                        fare: (rideDetails?.offerPrice || params.fare || '120').toString(),
+                        vehicle: params.vehicle ? String(params.vehicle) : ((rideDetails as any)?.vehicleType?.name || 'Car')
                       }
                     });
                   }, 2000);
@@ -2097,10 +2112,10 @@ const RideTrackerScreen = () => {
 
   const handleSelectReason = (index: number) => {
     setSelectedReasonIndex(index);
-    if (index === CANCELLATION_REASONS.length - 1) {
+    if (index === cancellationReasons.length - 1) {
       setCancellationReason('');
     } else {
-      setCancellationReason(CANCELLATION_REASONS[index]);
+      setCancellationReason(cancellationReasons[index]);
     }
   };
 
@@ -2879,7 +2894,10 @@ const RideTrackerScreen = () => {
             )}
           </ScrollView>
         ) : (
-          <>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ flexGrow: 1 }}
+          >
             <View style={styles.progressContainer}>
               <View style={styles.progressHeader}>
                 <Text style={styles.progressTitle}>Ride Progress</Text>
@@ -2981,7 +2999,7 @@ const RideTrackerScreen = () => {
                 </TouchableOpacity>
               </View>
             </View>
-          </>
+          </ScrollView>
         )}
       </View>
 
@@ -3042,7 +3060,7 @@ const RideTrackerScreen = () => {
             
             <View style={{ width: '100%', maxHeight: 280 }}>
               <ScrollView style={{ width: '100%' }} showsVerticalScrollIndicator={true} nestedScrollEnabled={true}>
-                {CANCELLATION_REASONS.map((reason, index) => {
+                {cancellationReasons.map((reason, index) => {
                   const isSelected = selectedReasonIndex === index;
                   return (
                     <TouchableOpacity
@@ -3094,7 +3112,7 @@ const RideTrackerScreen = () => {
               </ScrollView>
             </View>
 
-            {selectedReasonIndex === CANCELLATION_REASONS.length - 1 && (
+            {selectedReasonIndex === cancellationReasons.length - 1 && (
               <TextInput
                 style={{
                   width: '100%',
@@ -3139,7 +3157,7 @@ const RideTrackerScreen = () => {
               
               {(() => {
                 const isConfirmDisabled = selectedReasonIndex === null || 
-                  (selectedReasonIndex === CANCELLATION_REASONS.length - 1 && !cancellationReason.trim()) || 
+                  (selectedReasonIndex === cancellationReasons.length - 1 && !cancellationReason.trim()) || 
                   cancelling;
                 return (
                   <TouchableOpacity
