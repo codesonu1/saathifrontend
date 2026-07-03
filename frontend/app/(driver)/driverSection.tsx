@@ -1205,14 +1205,9 @@ const DriverSection = () => {
           <View style={styles.ridesContainer}>
             <View style={styles.ridesHeader}>
               <Text style={styles.ridesTitle}>Available Rides ({availableRides.length})</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <TouchableOpacity onPress={simulateMockRideRequest} style={styles.simulateButton}>
-                  <Text style={styles.simulateButtonText}>Simulate</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-                  <MaterialIcons name="refresh" size={20} color="#075B5E" />
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
+                <MaterialIcons name="refresh" size={20} color="#075B5E" />
+              </TouchableOpacity>
             </View>
             
             {loading ? (

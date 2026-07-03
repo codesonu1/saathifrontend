@@ -131,7 +131,8 @@ const PassengerHomeScreen = () => {
 
   const handleDecrementPrice = () => {
     const currentPrice = parseFloat(offerPrice) || 0;
-    const newPrice = Math.max(50, currentPrice - 10);
+    const minPrice = selectedVehicleType?.basePrice || 50;
+    const newPrice = Math.max(minPrice, currentPrice - 10);
     setOfferPrice(newPrice.toString());
   };
   const [sidePanelVisible, setSidePanelVisible] = useState(false)
@@ -924,6 +925,7 @@ const PassengerHomeScreen = () => {
                 boundingBox={KATHMANDU_BOUNDING_BOX}
               />
             </View>
+
           </View>
 
           {/* Interactive Fare Card (only when pickup and destination coordinates are set) */}

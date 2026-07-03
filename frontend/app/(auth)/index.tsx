@@ -9,24 +9,42 @@ const SplashScreen = () => {
 
   React.useEffect(() => {
     const checkAuthAndNavigate = async () => {
-      await initializeApiClient();
-      const token = await AsyncStorage.getItem('accessToken');
-      const role = await AsyncStorage.getItem('userRole');
-      if (token && role) {
-        // Try to refresh token if possible
-        const refreshed = await refreshAccessToken();
-        const validToken = refreshed || (await getAccessToken());
-        if (validToken) {
-          if (role === 'driver') {
-            router.replace('/(driver)');
-          } else {
-            router.replace('/(tabs)');
+      console.log('SplashScreen: Starting checkAuthAndNavigate...');
+      try {
+        console.log('SplashScreen: Initializing API Client...');
+        await initializeApiClient();
+        console.log('SplashScreen: API Client Initialized.');
+        
+        console.log('SplashScreen: Fetching token from AsyncStorage...');
+        const token = await AsyncStorage.getItem('accessToken');
+        console.log('SplashScreen: Token fetched:', token);
+        
+        console.log('SplashScreen: Fetching role from AsyncStorage...');
+        const role = await AsyncStorage.getItem('userRole');
+        console.log('SplashScreen: Role fetched:', role);
+        
+        if (token && role) {
+          console.log('SplashScreen: Stored token and role found. Refreshing token...');
+          const refreshed = await refreshAccessToken();
+          console.log('SplashScreen: Token refresh result:', refreshed);
+          const validToken = refreshed || (await getAccessToken());
+          if (validToken) {
+            if (role === 'driver') {
+              console.log('SplashScreen: Navigating to Driver dashboard...');
+              router.replace('/(driver)');
+            } else {
+              console.log('SplashScreen: Navigating to Passenger dashboard...');
+              router.replace('/(tabs)');
+            }
+            return;
           }
-          return;
         }
+        console.log('SplashScreen: No valid session. Navigating to Login...');
+        router.replace('/login');
+      } catch (err) {
+        console.error('SplashScreen: Error in checkAuthAndNavigate:', err);
+        router.replace('/login');
       }
-      // If not logged in, go to login
-      router.replace('/login');
     };
     checkAuthAndNavigate();
   }, [router]);

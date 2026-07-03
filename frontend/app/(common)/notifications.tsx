@@ -122,11 +122,7 @@ const Notifications = () => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
-    if (userRole === 'driver') {
-      setNotifications(DRIVER_MOCK_NOTIFICATIONS);
-    } else {
-      setNotifications(PASSENGER_MOCK_NOTIFICATIONS);
-    }
+    setNotifications([]);
   }, [userRole]);
   
   const [toast, setToast] = useState<{

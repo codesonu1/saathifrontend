@@ -211,6 +211,8 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
     </TouchableOpacity>
   );
 
+  const displayValue = value === 'Current Location' ? '' : value;
+
   return (
     <View style={styles.container}>
       <TouchableOpacity
@@ -245,8 +247,8 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
               <MaterialIcons name="search" size={20} color="#666" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search for a place"
-                value={value}
+                placeholder={value === 'Current Location' ? 'Current Location' : 'Search for a place'}
+                value={displayValue}
                 onChangeText={handleSearch}
                 autoFocus
               />
@@ -260,7 +262,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
             keyExtractor={(item, index) => item.place_id || `place_${index}`}
             style={styles.resultsList}
             ListEmptyComponent={
-              !loading && value.length >= 3 ? (
+              !loading && displayValue.length >= 3 ? (
                 <View style={styles.emptyState}>
                   <MaterialIcons name="search-off" size={48} color="#ccc" />
                   <Text style={styles.emptyStateText}>No places found</Text>

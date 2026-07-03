@@ -1,6 +1,18 @@
 import { LogBox } from 'react-native';
 LogBox.ignoreAllLogs(true);
 
+// Suppress useInsertionEffect react core warnings in Metro/console
+const originalWarn = console.warn;
+console.warn = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('useInsertionEffect')) return;
+  originalWarn(...args);
+};
+const originalError = console.error;
+console.error = (...args) => {
+  if (typeof args[0] === 'string' && args[0].includes('useInsertionEffect')) return;
+  originalError(...args);
+};
+
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';

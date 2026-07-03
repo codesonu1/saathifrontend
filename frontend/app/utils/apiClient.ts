@@ -2,11 +2,15 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import webSocketService from './websocketService';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
-const API_URL = Constants.expoConfig?.extra?.API_URL || 'http://10.0.2.2:9000/api/v1';
+const API_URL = Platform.OS === 'web'
+  ? 'http://localhost:9000/api/v1'
+  : (Constants.expoConfig?.extra?.API_URL || 'http://10.0.2.2:9000/api/v1');
 
 const apiClient = axios.create({
   baseURL: API_URL,
+  timeout: 5000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -72,7 +76,8 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Do not attempt to retry if the request itself was to the refresh-token endpoint
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/refresh-token')) {
       originalRequest._retry = true;
       const refreshed = await refreshAccessToken();
       if (refreshed) {

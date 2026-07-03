@@ -192,79 +192,14 @@ const RideOffersScreen = () => {
       let fetchedOffers = await rideService.getRideOffersForPassenger(rideId);
       console.log('RideOffers: Received offers:', fetchedOffers);
       
-      // Fallback to mock offers if none found (for local UI testing/preview)
-      if (fetchedOffers.length === 0) {
-        // Start with no offers and show loading indicator
-        setOffers([]);
-        
-        // Add Ramesh's offer after 2.5 seconds
-        const t1 = setTimeout(() => {
-          const rameshOffer: RideOffer = {
-            _id: 'mock_offer_1',
-            ride: rideId,
-            driver: {
-              _id: 'mock_driver_1',
-              firstName: 'Ramesh',
-              lastName: 'Adhikari',
-              mobile: '+9779812345678',
-              rating: 4.8,
-              vehicleDetails: {
-                vehicleModel: 'Bajaj Pulsar 150 (Red)',
-                vehicleRegNum: 'Ba 95 Pa 1234',
-              }
-            },
-            offeredPrice: parseFloat(fare) || 120,
-            message: 'I am nearby and can pick you up in 3 minutes!',
-            status: 'pending',
-            createdAt: new Date(),
-          };
-          setOffers(prev => {
-            if (prev.some(o => o._id === rameshOffer._id)) return prev;
-            return [...prev, rameshOffer];
-          });
-          setLoading(false); // Stop loading indicator when the first card arrives
-          showToast('New ride offer received!', 'info');
-        }, 2500);
-        timeoutsRef.current.push(t1);
+      const isSelectedBike = vehicle?.toLowerCase().includes('bike') || vehicle?.toLowerCase().includes('motorcycle') || vehicle?.toLowerCase().includes('scooter');
 
-        // Add Sita's offer after 5.5 seconds (3 seconds after Ramesh)
-        const t2 = setTimeout(() => {
-          const sitaOffer: RideOffer = {
-            _id: 'mock_offer_2',
-            ride: rideId,
-            driver: {
-              _id: 'mock_driver_2',
-              firstName: 'Sita',
-              lastName: 'Shrestha',
-              mobile: '+9779876543210',
-              rating: 4.9,
-              vehicleDetails: {
-                vehicleModel: 'Suzuki Gixxer 155 (Black)',
-                vehicleRegNum: 'Ba 82 Pa 5678',
-              }
-            },
-            offeredPrice: (parseFloat(fare) || 120) + 20,
-            message: 'Can pick you up immediately.',
-            status: 'pending',
-            createdAt: new Date(),
-          };
-          setOffers(prev => {
-            if (prev.some(o => o._id === sitaOffer._id)) return prev;
-            return [...prev, sitaOffer];
-          });
-          showToast('New ride offer received!', 'info');
-        }, 5500);
-        timeoutsRef.current.push(t2);
-      } else {
-        // If we have actual backend offers, display them immediately and stop loading
-        // Check if any offers were removed (driver went offline)
-        if (previousOffersCount > fetchedOffers.length) {
-          showToast('Some drivers went offline. Offers updated.', 'info');
-        }
-        setPreviousOffersCount(fetchedOffers.length);
-        setOffers(fetchedOffers);
-        setLoading(false);
+      if (previousOffersCount > fetchedOffers.length) {
+        showToast('Some drivers went offline. Offers updated.', 'info');
       }
+      setPreviousOffersCount(fetchedOffers.length);
+      setOffers(fetchedOffers);
+      setLoading(false);
       
     } catch (error) {
       console.error('RideOffers: Error loading offers:', error);
@@ -430,6 +365,18 @@ const RideOffersScreen = () => {
       router.replace('/(tabs)');
     } else {
       setShowCancelConfirmation(true);
+    }
+  };
+
+  const handleSimulateDriverBid = async () => {
+    try {
+      showToast("Triggering simulated driver bid...", "info");
+      const response = await apiClient.post(`rides/test/mock-offer/${rideId}`);
+      console.log('Simulate driver bid response:', response.data);
+      showToast("Mock driver bid created!", "success");
+    } catch (error) {
+      console.error('Error simulating driver bid:', error);
+      showToast("Failed to simulate driver bid", "error");
     }
   };
 
@@ -801,6 +748,7 @@ const RideOffersScreen = () => {
       />
 
 
+
     </View>
   );
 };
@@ -1050,6 +998,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
+  },
+  devFloatButton: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    backgroundColor: '#FF9800',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 5,
+    zIndex: 9999,
+  },
+  devFloatButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
 

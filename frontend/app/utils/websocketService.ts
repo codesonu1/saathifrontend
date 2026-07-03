@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 import { getAccessToken } from './apiClient';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 export interface WebSocketResponse {
   code: number;
@@ -30,7 +31,9 @@ class WebSocketService {
   private sockets: { [key: string]: Socket | null } = {};
   private isConnected: { [key: string]: boolean } = {};
   private connectionPromises: { [key: string]: Promise<void> | null } = {};
-  private baseUrl: string = Constants.expoConfig?.extra?.WEBSOCKET_URL || 'http://10.0.2.2:9000';
+  private baseUrl: string = Platform.OS === 'web'
+    ? 'http://localhost:9000'
+    : (Constants.expoConfig?.extra?.WEBSOCKET_URL || 'http://10.0.2.2:9000');
 
   async connect(rideId?: string, namespace: 'driver' | 'passenger' | 'ride' = 'driver'): Promise<void> {
     try {

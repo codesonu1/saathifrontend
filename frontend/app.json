@@ -63,9 +63,9 @@
     },
     "extra": {
       "router": {},
-      "API_URL": "http://10.0.2.2:9000/api/v1",
-      "WEBSOCKET_URL": "http://10.0.2.2:9000",
-      "PUBLIC_ASSET_URL": "http://10.0.2.2:9000",
+      "API_URL": "http://192.168.1.65:9000/api/v1",
+      "WEBSOCKET_URL": "http://192.168.1.65:9000",
+      "PUBLIC_ASSET_URL": "http://192.168.1.65:9000",
       "DEFAULT_BASE_URL": "http://localhost:3000",
       "GOOGLE_MAPS_API_KEY": "AIzaSyC_ywfottDW64fr4FVtnvyfRZTbbFreD28",
       "SUPPORT_PHONE": "+977980010100",

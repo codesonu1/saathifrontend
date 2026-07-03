@@ -143,9 +143,9 @@ const RideRatingScreen = () => {
         ]).start(() => {
           setTimeout(() => {
             if (userRole === 'driver') {
-              router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } })
+              router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } })
             } else {
-              router.push('/(tabs)')
+              router.replace('/(tabs)')
             }
           }, 1000)
         })
@@ -196,9 +196,7 @@ const RideRatingScreen = () => {
       <View style={styles.driverContent}>
         {/* Header */}
         <View style={styles.driverHeader}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.driverBackButton}>
-            <Icon name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
+          <View style={styles.placeholder} />
           <Text style={styles.driverHeaderTitle}>Trip Summary</Text>
           <View style={styles.placeholder} />
         </View>
@@ -332,7 +330,7 @@ const RideRatingScreen = () => {
           <TouchableOpacity 
             style={styles.driverSkipButton} 
             onPress={() => {
-              router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
+              router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
             }}
           >
             <Text style={styles.driverSkipButtonText}>Skip Feedback</Text>
@@ -377,9 +375,7 @@ const RideRatingScreen = () => {
               <>
                 {/* Header */}
                 <View style={styles.header}>
-                  <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <Icon name="arrow-back" size={24} color="#075B5E" />
-                  </TouchableOpacity>
+                  <View style={styles.placeholder} />
                   <Text style={styles.headerTitle}>Rate Your Ride</Text>
                   <View style={styles.placeholder} />
                 </View>
@@ -423,7 +419,7 @@ const RideRatingScreen = () => {
                           <Icon name="payment" size={18} color="#075B5E" />
                         </View>
                         <Text style={styles.tripLabel}>Fare:</Text>
-                        <Text style={styles.tripValue}>₹{parseFloat(actualFare).toFixed(0)}</Text>
+                        <Text style={styles.tripValue}>रू {parseFloat(actualFare).toFixed(0)}</Text>
                       </View>
                       <View style={styles.tripRow}>
                         <View style={styles.iconContainer}>
@@ -490,7 +486,7 @@ const RideRatingScreen = () => {
                   <TouchableOpacity 
                     style={styles.skipButton} 
                     onPress={() => {
-                      router.push("/(tabs)")
+                      router.replace("/(tabs)")
                     }}
                   >
                     <Text style={styles.skipButtonText}>Skip</Text>

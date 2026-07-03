@@ -7,6 +7,7 @@ import { clearAccessToken } from '../utils/apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const LoginScreen = () => {
+  console.log("LoginScreen: Rendering LoginScreen component...");
   const router = useRouter();
 
   const handlePLogin = () => {

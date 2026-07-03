@@ -64,7 +64,7 @@ async function getTestDriverLocation(pickup: {lat: number, lng: number} | null) 
   };
 }
 
-const USE_TEST_DRIVER_LOCATION = true; // Set to false for real GPS tracking(Manual)
+const USE_TEST_DRIVER_LOCATION = false; // Set to false for real GPS tracking(Manual)
 
 const PASSENGER_CANCELLATION_REASONS = [
   'Driver asking for more money',
@@ -219,18 +219,22 @@ const simulateDriverMovement = async (
 ) => {
   setSimulating(true);
   locationService.stopLocationTracking();
+  const safeStart = startLocation || { lat: 27.700769, lng: 85.300140 };
+  const safePickup = pickupLocation || { lat: 27.700769, lng: 85.300140 };
+  const safeDropoff = dropoffLocation || { lat: 27.6710, lng: 85.4298 };
+
   if (!mainRoutePolyline || mainRoutePolyline.length === 0) {
-    await simulateStraightLineMovement(rideId, startLocation, pickupLocation, dropoffLocation, onLocationUpdate, onProgressUpdate, setSimulating, userRole, rideStatusRef, rideStartTime);
+    await simulateStraightLineMovement(rideId, safeStart, safePickup, safeDropoff, onLocationUpdate, onProgressUpdate, setSimulating, userRole, rideStatusRef, rideStartTime);
     return;
   }
   const stepDelay = 1000;
-  const startIdx = findClosestPointIndex(mainRoutePolyline, startLocation);
-  const pickupIdx = findClosestPointIndex(mainRoutePolyline, pickupLocation);
-  const dropoffIdx = findClosestPointIndex(mainRoutePolyline, dropoffLocation);
+  const startIdx = findClosestPointIndex(mainRoutePolyline, safeStart);
+  const pickupIdx = findClosestPointIndex(mainRoutePolyline, safePickup);
+  const dropoffIdx = findClosestPointIndex(mainRoutePolyline, safeDropoff);
   // Phase 1: Start to Pickup (0-10% progress)
-  const phase1Steps = 25;
+  const phase1Steps = 15;
   for (let i = 0; i <= phase1Steps; i++) {
-    if (rideStatusRef.current === 'cancelled' || rideStatusRef.current !== 'in-progress') break;
+    if (rideStatusRef.current === 'cancelled' || rideStatusRef.current === 'completed') break;
     const t = i / phase1Steps;
     const currentIdx = Math.floor(startIdx + (pickupIdx - startIdx) * t);
     const currentPoint = mainRoutePolyline[currentIdx];
@@ -241,10 +245,10 @@ const simulateDriverMovement = async (
       lastProgressRef.current = progress;
       onProgressUpdate(progress);
     }
-    // Always send simulated location to backend
-    if (userRole === 'driver') {
+    // Send simulated location to backend (non-blocking)
+    if (userRole === 'driver' && rideId && !rideId.startsWith('mock_')) {
       try {
-        await webSocketService.emitEvent(
+        webSocketService.emitEvent(
           'updateRideLocation',
           { latitude: currentPoint.latitude, longitude: currentPoint.longitude },
           (response: any) => {},
@@ -256,9 +260,9 @@ const simulateDriverMovement = async (
     await new Promise(resolve => setTimeout(resolve, stepDelay));
   }
   // Phase 2: Pickup to Dropoff (10-100% progress)
-  const phase2Steps = 25;
+  const phase2Steps = 30;
   for (let i = 0; i <= phase2Steps; i++) {
-    if (rideStatusRef.current === 'cancelled' || rideStatusRef.current !== 'in-progress') break;
+    if (rideStatusRef.current === 'cancelled' || rideStatusRef.current === 'completed') break;
     const t = i / phase2Steps;
     const currentIdx = Math.floor(pickupIdx + (dropoffIdx - pickupIdx) * t);
     const currentPoint = mainRoutePolyline[currentIdx];
@@ -270,9 +274,10 @@ const simulateDriverMovement = async (
       onProgressUpdate(progress);
     }
     
-    if (userRole === 'driver') {
+    // Send simulated location to backend (non-blocking)
+    if (userRole === 'driver' && rideId && !rideId.startsWith('mock_')) {
       try {
-        await webSocketService.emitEvent(
+        webSocketService.emitEvent(
           'updateRideLocation',
           { latitude: currentPoint.latitude, longitude: currentPoint.longitude },
           (response: any) => {},
@@ -298,29 +303,30 @@ const simulateStraightLineMovement = async (
   rideStatusRef: React.RefObject<string>,
   rideStartTime: number | null
 ) => {
-  console.log('[simulateStraightLineMovement] Using straight line movement');
-  setSimulating(true);
-  locationService.stopLocationTracking();
-  const totalSteps = 50;
+  const safeStart = startLocation || { lat: 27.700769, lng: 85.300140 };
+  const safePickup = pickupLocation || { lat: 27.700769, lng: 85.300140 };
+  const safeDropoff = dropoffLocation || { lat: 27.6710, lng: 85.4298 };
+  const phase1Steps = 15;
+  const phase2Steps = 30;
   const stepDelay = 1000;
 
-  onLocationUpdate(startLocation);
+  onLocationUpdate(safeStart);
 
   // Phase 1: Current location to pickup (0-10%)
-  for (let i = 0; i <= totalSteps; i++) {
-    if (rideStatusRef.current === 'cancelled' || rideStatusRef.current !== 'in-progress') {
+  for (let i = 0; i <= phase1Steps; i++) {
+    if (rideStatusRef.current === 'cancelled' || rideStatusRef.current === 'completed') {
       break;
     }
-    const t = i / totalSteps;
-    const currentLat = startLocation.lat + (pickupLocation.lat - startLocation.lat) * t;
-    const currentLng = startLocation.lng + (pickupLocation.lng - startLocation.lng) * t;
+    const t = i / phase1Steps;
+    const currentLat = safeStart.lat + (safePickup.lat - safeStart.lat) * t;
+    const currentLng = safeStart.lng + (safePickup.lng - safeStart.lng) * t;
     const location = { lat: currentLat, lng: currentLng };
     
     onLocationUpdate(location);
     const progress = Math.round(t * 10);
     onProgressUpdate(progress);
     
-    if (userRole === 'driver' && !USE_TEST_DRIVER_LOCATION) {
+    if (userRole === 'driver' && !USE_TEST_DRIVER_LOCATION && rideId && !rideId.startsWith('mock_')) {
       try {
         webSocketService.emitEvent(
           'updateRideLocation',
@@ -338,22 +344,22 @@ const simulateStraightLineMovement = async (
   }
 
   // Phase 2: Pickup to dropoff (10-100%)
-  for (let i = 0; i <= totalSteps; i++) {
-    if (rideStatusRef.current === 'cancelled' || rideStatusRef.current !== 'in-progress') {
+  for (let i = 0; i <= phase2Steps; i++) {
+    if (rideStatusRef.current === 'cancelled' || rideStatusRef.current === 'completed') {
       break;
     }
-    const t = i / totalSteps;
-    const currentLat = pickupLocation.lat + (dropoffLocation.lat - pickupLocation.lat) * t;
-    const currentLng = pickupLocation.lng + (dropoffLocation.lng - pickupLocation.lng) * t;
+    const t = i / phase2Steps;
+    const currentLat = safePickup.lat + (safeDropoff.lat - safePickup.lat) * t;
+    const currentLng = safePickup.lng + (safeDropoff.lng - safePickup.lng) * t;
     const location = { lat: currentLat, lng: currentLng };
     
     onLocationUpdate(location);
     const progress = Math.round(10 + t * 90);
     onProgressUpdate(progress);
     
-    if (userRole === 'driver' && !USE_TEST_DRIVER_LOCATION) {
+    if (userRole === 'driver' && !USE_TEST_DRIVER_LOCATION && rideId && !rideId.startsWith('mock_')) {
       try {
-        await webSocketService.emitEvent(
+        webSocketService.emitEvent(
           'updateRideLocation',
           { latitude: currentLat, longitude: currentLng },
           (response: any) => {
@@ -428,6 +434,7 @@ const RideTrackerScreen = () => {
     rideCancelled ? 'cancelled' : (rideInProgress ? 'in-progress' : 'accepted')
   );
   const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [driverArrived, setDriverArrived] = useState(false);
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [dropoffLocation, setDropoffLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [rideDetails, setRideDetails] = useState<Ride | null>(null);
@@ -466,12 +473,12 @@ const RideTrackerScreen = () => {
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const mapRef = useRef<MapView>(null);
   const simIntervalRef = useRef<any>(null);
+  const mockPickupRef = useRef({ lat: 27.7172, lng: 85.3240 });
+  const mockDropoffRef = useRef({ lat: 27.6710, lng: 85.3122 });
 
   // --- PASSENGER UI STATES & countdown ---
   const [etaSeconds, setEtaSeconds] = useState(180);
   const [hasInitializedEta, setHasInitializedEta] = useState(false);
-  const [pickupNote, setPickupNote] = useState('');
-  const [isPickupNotesModalVisible, setIsPickupNotesModalVisible] = useState(false);
 
   // Reset initialization flag when not accepted
   useEffect(() => {
@@ -544,6 +551,7 @@ const RideTrackerScreen = () => {
   const locationTrackingStartedRef = useRef(false);
   const initialDriverLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const progressStartedRef = useRef(false); // Track if progress has started updating
+  const simulationFinishedRef = useRef(false);
 
   // Update refs
   useEffect(() => {
@@ -558,6 +566,17 @@ const RideTrackerScreen = () => {
     dropoffLocationRef.current = dropoffLocation;
     console.log('[RefUpdate] dropoffLocationRef:', dropoffLocation);
   }, [dropoffLocation]);
+
+  // Automatically trigger simulation when status is in-progress (commented out for real GPS mode)
+  // useEffect(() => {
+  //   if (userRole === 'driver' && rideStatus === 'in-progress' && !simulating && !simulationFinishedRef.current) {
+  //     console.log('[AutoSimulate] Triggering auto simulation for driver');
+  //     const timer = setTimeout(() => {
+  //       handleSimulateMovement();
+  //     }, 1000);
+  //     return () => clearTimeout(timer);
+  //   }
+  // }, [rideStatus, simulating, userRole]);
 
   // --- TOAST HELPERS ---
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -600,6 +619,10 @@ const RideTrackerScreen = () => {
   // --- BACK BUTTON HANDLER ---
   useEffect(() => {
     const backAction = () => {
+      // If ride is completed or cancelled, completely block going back
+      if (rideStatus === 'completed' || rideStatus === 'cancelled') {
+        return true;
+      }
       // Show confirmation modal if ride is in progress or accepted
       if (rideStatus === 'in-progress' || rideStatus === 'accepted') {
         setShowBackConfirmation(true);
@@ -960,15 +983,18 @@ const RideTrackerScreen = () => {
             useNativeDriver: false,
           }).start();
               
-              await emitWhenConnectedRef.current('endRide', { rideId }, 'ride');
+              const isMock = rideId && rideId.startsWith('mock_');
+              if (!isMock) {
+                await emitWhenConnectedRef.current('endRide', { rideId }, 'ride');
+              }
               setRideStatus('completed');
               setRideStartTime(null);
               showToast('Ride completed!', 'success');
               setTimeout(() => {
                 if (isMounted.current) {
                   const role = userRole as string;
-                  router.push({
-                    pathname: '/(tabs)/rideRate',
+                  router.replace({
+                    pathname: '/rideRate',
                     params: {
                       rideId,
                       userRole: role,
@@ -1071,19 +1097,23 @@ const RideTrackerScreen = () => {
         }
         const newLocation = { lat: data.currLocation.latitude, lng: data.currLocation.longitude };
 
-        // CRITICAL: Only update driver location if test mode is disabled
-        // If test mode is enabled, the test location should not be overridden by backend updates
-        if (!USE_TEST_DRIVER_LOCATION || userRole !== 'driver') {
-          // Update driver location and route immediately
-          setDriverLocation(newLocation);
-          setCompletedRoute(prev => {
-            const newRoute = [...prev.slice(-100), newLocation];
-            console.log('[handleRideLocationUpdated] Updated completedRoute:', newRoute);
-            return newRoute;
-          });
-          console.log('[handleRideLocationUpdated] Updated driver location from backend:', newLocation);
+        // CRITICAL: Only update driver location if simulation mode is disabled
+        // If simulation mode is active, simulated updates should not be overridden by network latency
+        if (!simulating) {
+          if (!USE_TEST_DRIVER_LOCATION || userRole !== 'driver') {
+            // Update driver location and route immediately
+            setDriverLocation(newLocation);
+            setCompletedRoute(prev => {
+              const newRoute = [...prev.slice(-100), newLocation];
+              console.log('[handleRideLocationUpdated] Updated completedRoute:', newRoute);
+              return newRoute;
+            });
+            console.log('[handleRideLocationUpdated] Updated driver location from backend:', newLocation);
+          } else {
+            console.log('[handleRideLocationUpdated] Test mode enabled - ignoring backend driver location update:', newLocation);
+          }
         } else {
-          console.log('[handleRideLocationUpdated] Test mode enabled - ignoring backend driver location update:', newLocation);
+          console.log('[handleRideLocationUpdated] Simulation active - ignoring backend driver location update:', newLocation);
         }
         
         // --- PROGRESS UPDATE ---
@@ -1112,7 +1142,7 @@ const RideTrackerScreen = () => {
       1000,
       { leading: true, trailing: true }
     ),
-    [rideId, userRole, progressAnimation]
+    [rideId, userRole, progressAnimation, simulating]
   );
 
   // --- INITIALIZE LOCATION TRACKING ---
@@ -1203,6 +1233,7 @@ const RideTrackerScreen = () => {
   // --- SETUP WEBSOCKET AND FETCH RIDE DETAILS ---
   useEffect(() => {
     isMounted.current = true;
+    lastProgressRef.current = 0;
     console.log('[RideTracker] Initializing rideId:', rideId, 'userRole:', userRole, 'rideStatus:', rideStatus);
     
     const setupWebSocketAndFetch = async () => {
@@ -1276,15 +1307,14 @@ const RideTrackerScreen = () => {
               setDriverLocation({ lat: newLat, lng: newLng });
               
               if (step >= totalSteps) {
-                // Reached pickup! Wait 1 second, then transition to ongoing trip
+                // Reached pickup! Pause simulation and wait for passenger action
+                if (simIntervalRef.current) clearInterval(simIntervalRef.current);
+                setDriverArrived(true);
+                showToast('Driver has arrived at the pickup location!', 'success');
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                
                 phase = 2;
                 step = 0;
-                
-                setTimeout(() => {
-                  setRideStatus('in-progress');
-                  rideStartedConfirmedRef.current = true;
-                  showToast('Ride started!', 'success');
-                }, 1000);
               }
             } else if (phase === 2) {
               // Phase 2: Move driver from pickup to dropoff (15 steps of 2s each = 30s total)
@@ -1313,8 +1343,8 @@ const RideTrackerScreen = () => {
                   
                   setTimeout(() => {
                     const role = userRole as string;
-                    router.push({
-                      pathname: '/(tabs)/rideRate',
+                    router.replace({
+                      pathname: '/rideRate',
                       params: {
                         rideId,
                         userRole: role,
@@ -1344,9 +1374,9 @@ const RideTrackerScreen = () => {
           setTimeout(() => {
             if (isMounted.current) {
               if (userRole === 'passenger') {
-                router.push('/(tabs)');
+                router.replace('/(tabs)');
               } else {
-                router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
+                router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
               }
             }
           }, 2000);
@@ -1364,9 +1394,9 @@ const RideTrackerScreen = () => {
             setTimeout(() => {
               if (isMounted.current) {
                 if (userRole === 'passenger') {
-                  router.push('/(tabs)');
+                  router.replace('/(tabs)');
                 } else {
-                  router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
+                  router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
                 }
               }
             }, 2000);
@@ -1404,9 +1434,9 @@ const RideTrackerScreen = () => {
             setTimeout(() => {
               if (isMounted.current) {
                 if (userRole === 'passenger') {
-                  router.push('/(tabs)');
+                  router.replace('/(tabs)');
                 } else {
-                  router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
+                  router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
                 }
               }
             }, 2000);
@@ -1538,6 +1568,7 @@ const RideTrackerScreen = () => {
     return () => {
       console.log('[RideTracker] Cleanup effect');
       isMounted.current = false;
+      lastProgressRef.current = 0;
       locationService.stopLocationTracking();
       locationTrackingStartedRef.current = false;
       webSocketService.disconnect('ride');
@@ -1591,9 +1622,9 @@ const RideTrackerScreen = () => {
           setTimeout(() => {
             if (isMounted.current) {
               if (userRole === 'passenger') {
-                router.push('/(tabs)');
+                router.replace('/(tabs)');
               } else {
-                router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
+                router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
               }
             }
           }, 2000);
@@ -1620,9 +1651,9 @@ const RideTrackerScreen = () => {
             setTimeout(() => {
               if (isMounted.current) {
                 if (userRole === 'passenger') {
-                  router.push('/(tabs)');
+                  router.replace('/(tabs)');
                 } else {
-                  router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
+                  router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
                 }
               }
             }, 2000);
@@ -1632,8 +1663,8 @@ const RideTrackerScreen = () => {
             setTimeout(() => {
               if (isMounted.current) {
                 const role = userRole as string;
-                router.push({
-                  pathname: '/(tabs)/rideRate',
+                router.replace({
+                  pathname: '/rideRate',
                   params: {
                     rideId,
                     userRole: role,
@@ -1696,8 +1727,8 @@ const RideTrackerScreen = () => {
         setTimeout(() => {
           if (isMounted.current) {
             const role = userRole as string;
-            router.push({
-              pathname: '/(tabs)/rideRate',
+            router.replace({
+              pathname: '/rideRate',
               params: {
                 rideId,
                 userRole: role,
@@ -1773,6 +1804,25 @@ const RideTrackerScreen = () => {
       handleNewMessage(data);
     };
 
+    // Handle driver arrived event
+    const handleDriverArrived = (data: any) => {
+      console.log('[RideTracker] Driver arrived event received:', data);
+      setDriverArrived(true);
+      if (userRole === 'passenger') {
+        showToast('Driver has arrived at the pickup location!', 'success');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    };
+
+    // Handle passenger coming event
+    const handlePassengerComing = (data: any) => {
+      console.log('[RideTracker] Passenger coming event received:', data);
+      if (userRole === 'driver') {
+        showToast('Passenger is coming to the vehicle!', 'info');
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    };
+
     // Set up event listeners
     webSocketService.on('rideCancelled', handleRideCancelled, 'ride');
     webSocketService.on('rideStatusUpdate', handleRideStatusUpdate, 'ride');
@@ -1781,6 +1831,8 @@ const RideTrackerScreen = () => {
     webSocketService.on('rideLocationUpdated', handleRideLocationUpdated, 'ride');
     webSocketService.on('newMessage', handleNewMessage, 'ride');
     webSocketService.on('messageCreated', handleMessageCreated, 'ride');
+    webSocketService.on('driverArrived', handleDriverArrived, 'ride');
+    webSocketService.on('passengerComing', handlePassengerComing, 'ride');
     
     console.log('[RideTracker] WebSocket event listeners set up successfully');
 
@@ -1794,6 +1846,8 @@ const RideTrackerScreen = () => {
       webSocketService.off('rideLocationUpdated', handleRideLocationUpdated, 'ride');
       webSocketService.off('newMessage', handleNewMessage, 'ride');
       webSocketService.off('messageCreated', handleMessageCreated, 'ride');
+      webSocketService.off('driverArrived', handleDriverArrived, 'ride');
+      webSocketService.off('passengerComing', handlePassengerComing, 'ride');
     };
   }, [rideId, userRole, rideStatus, rideCancelled, router, isWebSocketConnected, isLoadingDetails]);
 
@@ -1886,6 +1940,21 @@ const RideTrackerScreen = () => {
   };
 
   // --- BUTTON HANDLERS ---
+  const handleDriverArrivedAction = async () => {
+    try {
+      setLoading(true);
+      setDriverArrived(true);
+      showToast("Notified passenger that you have arrived!", "success");
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await emitWhenConnectedRef.current('driverArrived', { rideId }, 'ride');
+    } catch (error) {
+      console.error('[handleDriverArrivedAction] Error:', error);
+      showToast("Failed to send arrival notification", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleStartRide = async () => {
     if (userRole !== 'driver') {
       console.log('[handleStartRide] Not driver, skipping');
@@ -1914,7 +1983,10 @@ const RideTrackerScreen = () => {
         useNativeDriver: false,
       }).start();
       
-      await emitWhenConnectedRef.current('startRide', { rideId }, 'ride');
+      const isMockRide = rideId && rideId.startsWith('mock_');
+      if (!isMockRide && !simulating) {
+        await emitWhenConnectedRef.current('startRide', { rideId }, 'ride');
+      }
       setRideStatus('in-progress');
       rideStartedConfirmedRef.current = true;
       showToast('Ride started!', 'success');
@@ -1924,7 +1996,7 @@ const RideTrackerScreen = () => {
       console.log('[handleStartRide] Progress will stay at 0% until driver moves');
       
       // Send initial location update - backend will calculate progress automatically
-      if (driverLocation) {
+      if (driverLocation && !isMockRide && !simulating) {
         try {
           await emitWhenConnectedRef.current('updateRideLocation', {
             latitude: driverLocation.lat,
@@ -1973,12 +2045,50 @@ const RideTrackerScreen = () => {
     }
   };
 
-  const handleSimulateMovement = async () => {
-    if (!driverLocation || !pickupLocation || !dropoffLocation) {
-      console.error('[handleSimulateMovement] Missing location data');
-      showToast('Missing location data for simulation', 'error');
-      return;
+  const handleCompleteRideAction = async () => {
+    setLoading(true);
+    try {
+      const isMock = rideId && rideId.startsWith('mock_');
+      if (!isMock) {
+        await emitWhenConnectedRef.current('endRide', { rideId }, 'ride');
+      }
+      setRideStatus('completed');
+      showToast('Ride completed!', 'success');
+      setTimeout(() => {
+        if (isMounted.current) {
+          const role = userRole as string;
+          router.replace({
+            pathname: '/rideRate',
+            params: {
+              rideId,
+              userRole: role,
+              passengerName: rideDetails?.passenger?.firstName && rideDetails?.passenger?.lastName 
+                ? `${rideDetails.passenger.firstName} ${rideDetails.passenger.lastName}`
+                : (rideDetails?.passenger?.firstName || 'Passenger'),
+              driverName: rideDetails?.driver?.firstName && rideDetails?.driver?.lastName 
+                ? `${rideDetails.driver.firstName} ${rideDetails.driver.lastName}`
+                : (rideDetails?.driver?.firstName || 'Driver'),
+              from: from || ((rideDetails as any)?.pickUpLocation || 'Pickup Location'),
+              to: to || ((rideDetails as any)?.dropOffLocation || 'Dropoff Location'),
+              fare: actualFare.toString(),
+              vehicle: vehicle || ((rideDetails as any)?.vehicleType?.name || 'Vehicle')
+            }
+          });
+        }
+      }, 2000);
+    } catch (error) {
+      console.error('[handleCompleteRideAction] Error:', error);
+      showToast('Error completing ride', 'error');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleSimulateMovement = async () => {
+    const safePickup = pickupLocation || { lat: 27.700769, lng: 85.300140 };
+    const safeDropoff = dropoffLocation || { lat: 27.6710, lng: 85.4298 };
+    const isMockRide = rideId && rideId.startsWith('mock_');
+    simulationFinishedRef.current = false;
     setLoading(true);
     try {
       console.log('[handleSimulateMovement] Starting simulation');
@@ -1986,18 +2096,15 @@ const RideTrackerScreen = () => {
         await handleStartRide();
       }
       // --- NEW: Immediately send simulated (near-pickup) location to backend and reset completed route ---
-      const initialSimLocation = await getTestDriverLocation(pickupLocation);
+      const initialSimLocation = await getTestDriverLocation(safePickup);
       if (initialSimLocation) {
         setDriverLocation(initialSimLocation);
         setCompletedRoute([initialSimLocation]);
-        try {
-          await emitWhenConnectedRef.current('updateRideLocation', {
+        if (!isMockRide && !simulating) {
+          emitWhenConnectedRef.current('updateRideLocation', {
             latitude: initialSimLocation.lat,
             longitude: initialSimLocation.lng
-          }, 'ride');
-          console.log('[handleSimulateMovement] Sent initial simulated location update to backend:', initialSimLocation);
-        } catch (error) {
-          console.error('[handleSimulateMovement] Failed to send initial simulated location update:', error);
+          }, 'ride').catch(() => {});
         }
       }
       // --- END NEW ---
@@ -2008,11 +2115,14 @@ const RideTrackerScreen = () => {
         duration: 500,
         useNativeDriver: false,
       }).start();
+      
+      setLoading(false); // Disable loading overlay immediately so the map updates visually
+      
       await simulateDriverMovement(
         rideId,
-        initialSimLocation || driverLocation,
-        pickupLocation,
-        dropoffLocation,
+        initialSimLocation || driverLocation || safePickup,
+        safePickup,
+        safeDropoff,
         (location) => {
           setDriverLocation(location);
           setCompletedRoute(prev => {
@@ -2041,14 +2151,16 @@ const RideTrackerScreen = () => {
           duration: 500,
           useNativeDriver: false,
         }).start();
-        await emitWhenConnectedRef.current('endRide', { rideId }, 'ride');
+        if (!isMockRide && !simulating) {
+          await emitWhenConnectedRef.current('endRide', { rideId }, 'ride');
+        }
         setRideStatus('completed');
         showToast('Ride completed!', 'success');
         setTimeout(() => {
           if (isMounted.current) {
             const role = userRole as string;
-            router.push({
-              pathname: '/(tabs)/rideRate',
+            router.replace({
+              pathname: '/rideRate',
               params: {
                 rideId,
                 userRole: role,
@@ -2073,6 +2185,7 @@ const RideTrackerScreen = () => {
       setSimulating(false);
     } finally {
       setLoading(false);
+      simulationFinishedRef.current = true;
     }
   };
 
@@ -2514,9 +2627,26 @@ const RideTrackerScreen = () => {
   // --- PASSENGER VIEW HELPERS ---
   const isBike = vehicle?.toLowerCase().includes('bike') || vehicle?.toLowerCase().includes('motorcycle') || vehicle?.toLowerCase().includes('scooter');
   const vehicleIconName = isBike ? 'motorcycle' : 'directions-car';
-  const vehicleNameFormatted = (rideDetails as any)?.driverProfile?.vehicleMake 
-    ? `${(rideDetails as any).driverProfile.vehicleColor || ''} ${(rideDetails as any).driverProfile.vehicleMake} ${(rideDetails as any).driverProfile.vehicleModel || ''}`.trim()
-    : (vehicle || (isBike ? 'Red Honda Splendor' : 'White Suzuki Cultus'));
+  const getFormattedVehicleName = () => {
+    const make = (rideDetails as any)?.driverProfile?.vehicleMake || '';
+    const color = (rideDetails as any)?.driverProfile?.vehicleColor || '';
+    const model = (rideDetails as any)?.driverProfile?.vehicleModel || '';
+    
+    if (!make && !model) {
+      return vehicle || (isBike ? 'Red Honda Splendor' : 'White Suzuki Cultus');
+    }
+    
+    if (model.toLowerCase().includes(make.toLowerCase()) && model.toLowerCase().includes(color.toLowerCase())) {
+      return model;
+    }
+    
+    if (model.toLowerCase().includes(make.toLowerCase())) {
+      return `${color} ${model}`.trim();
+    }
+    
+    return `${color} ${make} ${model}`.trim();
+  };
+  const vehicleNameFormatted = getFormattedVehicleName();
   const vehicleRegNum = (rideDetails as any)?.driverProfile?.vehicleRegNum || 'LF-638';
   const driverRating = (rideDetails as any)?.driverProfile?.rating || '4.77';
   const driverFirstName = otherUserName ? otherUserName.split(' ')[0] : 'Driver';
@@ -2527,9 +2657,10 @@ const RideTrackerScreen = () => {
     return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
-  const handleComingButtonPress = () => {
+  const handleComingButtonPress = async () => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     showToast("Ok, notified driver you are coming!", "success");
+    await emitWhenConnectedRef.current('passengerComing', { rideId }, 'ride');
   };
 
   const handleSafetyPress = () => {
@@ -2542,19 +2673,148 @@ const RideTrackerScreen = () => {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
         <View style={styles.mapContainer}>
-          <TouchableOpacity style={styles.backButton} onPress={handleBackButtonPress}>
-            <MaterialIcons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          {userRole === 'driver' && rideStatus === 'in-progress' && !simulating && (
-            <TouchableOpacity style={styles.simulateButton} onPress={handleSimulateMovement}>
-              <MaterialIcons name="play-arrow" size={20} color="#075B5E" />
-              <Text style={styles.simulateButtonText}>Simulate</Text>
+          {rideStatus !== 'completed' && rideStatus !== 'cancelled' && (
+            <TouchableOpacity style={styles.backButton} onPress={handleBackButtonPress}>
+              <MaterialIcons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
           )}
-          {userRole === 'driver' && simulating && (
-            <View style={styles.simulateButton}>
-              <MaterialIcons name="directions-car" size={20} color="#075B5E" />
-              <Text style={styles.simulateButtonText}>Simulating...</Text>
+
+
+          
+          {userRole === 'passenger' && USE_TEST_DRIVER_LOCATION && (
+            <View style={styles.devControlsContainer}>
+              <Text style={{ fontSize: 9, fontWeight: '800', color: '#6B7280', marginBottom: 4, letterSpacing: 0.5 }}>SIMULATE DRIVER</Text>
+              {!driverArrived && rideStatus === 'accepted' && (
+                <TouchableOpacity 
+                  style={[styles.devButton, { backgroundColor: '#FF9800' }]} 
+                  onPress={async () => {
+                    setDriverArrived(true);
+                    await emitWhenConnectedRef.current('driverArrived', { rideId }, 'ride');
+                    showToast("Simulated driver arrival", "info");
+                  }}
+                >
+                  <Text style={styles.devButtonText}>Arrive</Text>
+                </TouchableOpacity>
+              )}
+              {driverArrived && rideStatus === 'accepted' && (
+                <TouchableOpacity 
+                  style={[styles.devButton, { backgroundColor: '#4CAF50' }]} 
+                  onPress={async () => {
+                    // 1. Start the ride locally and emit to socket asynchronously (non-blocking)
+                    setRideStatus('in-progress');
+                    rideStartedConfirmedRef.current = true;
+                    if (rideId && !rideId.startsWith('mock_')) {
+                      emitWhenConnectedRef.current('startRide', { rideId }, 'ride').catch(() => {});
+                    }
+
+                    // 2. Start simulation movement immediately
+                    setSimulating(true);
+                    showToast("Ride started! Driving to destination...", "success");
+                    
+                    const initialSimLocation = await getTestDriverLocation(pickupLocation);
+                    const startLoc = initialSimLocation || driverLocation || pickupLocation;
+                    
+                    setProgress(0);
+                    Animated.timing(progressAnimation, { toValue: 0, duration: 0, useNativeDriver: false }).start();
+                    
+                    await simulateDriverMovement(
+                      rideId,
+                      startLoc,
+                      pickupLocation,
+                      dropoffLocation,
+                      (location) => {
+                        setDriverLocation(location);
+                        setCompletedRoute(prev => [...prev.slice(-100), location]);
+                      },
+                      (progressVal) => {
+                        setProgress(progressVal);
+                        Animated.timing(progressAnimation, {
+                          toValue: progressVal,
+                          duration: 500,
+                          useNativeDriver: false,
+                        }).start();
+                      },
+                      setSimulating,
+                      userRole,
+                      rideStatusRef,
+                      rideStartTime
+                    );
+                    
+                    // Reached dropoff! Complete ride locally and transition to rating screen
+                    setRideStatus('completed');
+                    showToast('Ride completed!', 'success');
+                    
+                    setTimeout(() => {
+                      const role = userRole as string;
+                      router.replace({
+                        pathname: '/rideRate',
+                        params: {
+                          rideId,
+                          userRole: role,
+                        },
+                      });
+                    }, 1500);
+                  }}
+                >
+                  <Text style={styles.devButtonText}>Move Trip</Text>
+                </TouchableOpacity>
+              )}
+              {rideStatus === 'in-progress' && !simulating && (
+                <TouchableOpacity 
+                  style={styles.devButton} 
+                  onPress={async () => {
+                    setSimulating(true);
+                    showToast("Starting simulated driver movement...", "info");
+                    
+                    const initialSimLocation = await getTestDriverLocation(pickupLocation);
+                    if (initialSimLocation) {
+                      setProgress(0);
+                      Animated.timing(progressAnimation, { toValue: 0, duration: 0, useNativeDriver: false }).start();
+                      
+                      await simulateDriverMovement(
+                        rideId,
+                        initialSimLocation || driverLocation,
+                        pickupLocation,
+                        dropoffLocation,
+                        (location) => {
+                          setDriverLocation(location);
+                          setCompletedRoute(prev => [...prev.slice(-100), location]);
+                        },
+                        (progressVal) => {
+                          setProgress(progressVal);
+                          Animated.timing(progressAnimation, {
+                            toValue: progressVal,
+                            duration: 500,
+                            useNativeDriver: false,
+                          }).start();
+                        },
+                        setSimulating,
+                        'driver',
+                        rideStatusRef,
+                        rideStartTime,
+                        mainRoutePolyline
+                      );
+                      
+                      // Reached dropoff! Complete ride locally and transition to rating screen
+                      setRideStatus('completed');
+                      showToast('Ride completed!', 'success');
+                      
+                      setTimeout(() => {
+                        const role = userRole as string;
+                        router.replace({
+                          pathname: '/rideRate',
+                          params: {
+                            rideId,
+                            userRole: role,
+                          },
+                        });
+                      }, 1500);
+                    }
+                  }}
+                >
+                  <Text style={styles.devButtonText}>Move Trip</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
           
@@ -2702,7 +2962,9 @@ const RideTrackerScreen = () => {
             <View style={styles.passengerHeaderRow}>
               <View style={styles.passengerHeaderTextContainer}>
                 <Text style={styles.passengerTitleText}>
-                  {rideStatus === 'accepted' ? (etaSeconds <= 0 ? 'Driver is waiting for you' : 'Driver is arriving') : 'Heading to destination'}
+                  {rideStatus === 'accepted' 
+                    ? (driverArrived ? 'Driver is waiting for you' : 'Driver is arriving') 
+                    : (rideStatus === 'in-progress' ? 'Trip Underway' : 'Trip Completed')}
                 </Text>
                 <Text style={styles.passengerVehicleText}>
                   {vehicleNameFormatted}
@@ -2724,29 +2986,31 @@ const RideTrackerScreen = () => {
                 <View style={styles.passengerEtaInfo}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.passengerEtaLabel}>
-                      {etaSeconds <= 0 ? 'ARRIVED' : 'ARRIVING IN'}
+                      {driverArrived ? 'ARRIVED' : 'ARRIVING IN'}
                     </Text>
                     <Text style={[
                       styles.passengerEtaTime,
-                      etaSeconds <= 0 && { fontSize: 20, marginTop: 4 }
+                      driverArrived && { fontSize: 20, marginTop: 4 }
                     ]}>
-                      {etaSeconds <= 0 ? 'Driver has arrived!' : formatEtaTime(etaSeconds)}
+                      {driverArrived ? 'Driver has arrived!' : formatEtaTime(etaSeconds)}
                     </Text>
                   </View>
                   <View style={styles.passengerEtaVisualContainer}>
                     <MaterialIcons name="local-taxi" size={24} color="#075B5E" />
                     <Text style={styles.passengerEtaVisualText}>
-                      {etaSeconds <= 0 ? 'Meet at pickup' : 'Please be ready'}
+                      {driverArrived ? 'Meet at pickup' : 'Please be ready'}
                     </Text>
                   </View>
                 </View>
-                <TouchableOpacity
-                  style={styles.passengerComingButton}
-                  onPress={handleComingButtonPress}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.passengerComingButtonText}>Ok, I'm coming</Text>
-                </TouchableOpacity>
+                {driverArrived && (
+                  <TouchableOpacity
+                    style={styles.passengerComingButton}
+                    onPress={handleComingButtonPress}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.passengerComingButtonText}>Ok, I'm coming</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
 
@@ -2801,14 +3065,26 @@ const RideTrackerScreen = () => {
                 </Text>
               </View>
 
-              {/* 2. Contact Circle */}
+              {/* 2. Contact Circle (Message Driver) */}
               <View style={styles.passengerActionItem}>
                 <TouchableOpacity
                   style={[styles.passengerCircleButton, { backgroundColor: '#E8F5F5' }]}
-                  onPress={handleCallOtherUser}
+                  onPress={handleMessageOtherUser}
                   activeOpacity={0.8}
                 >
-                  <MaterialIcons name="phone" size={26} color="#075B5E" />
+                  <View style={{ position: 'relative' }}>
+                    <MaterialIcons name="message" size={26} color="#075B5E" />
+                    {hasUnreadMessages && (
+                      <Animated.View
+                        style={[
+                          styles.unreadBadge,
+                          {
+                            transform: [{ scale: unreadBadgeAnimation }]
+                          }
+                        ]}
+                      />
+                    )}
+                  </View>
                 </TouchableOpacity>
                 <Text style={styles.passengerActionLabel}>Contact driver</Text>
               </View>
@@ -2828,23 +3104,6 @@ const RideTrackerScreen = () => {
                 <Text style={styles.passengerActionLabel}>Safety</Text>
               </View>
             </View>
-
-            {/* Dashed Note Card for Pickup Instructions (Only when accepted) */}
-            {rideStatus === 'accepted' && (
-              <TouchableOpacity
-                style={styles.passengerDashedNotesCard}
-                onPress={() => setIsPickupNotesModalVisible(true)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.passengerNotesLeft}>
-                  <MaterialIcons name="edit-note" size={24} color="#075B5E" />
-                  <Text style={styles.passengerNotesText} numberOfLines={1}>
-                    {pickupNote ? `Instructions: "${pickupNote}"` : 'Any pickup notes for driver?'}
-                  </Text>
-                </View>
-                <MaterialIcons name="keyboard-arrow-right" size={24} color="#075B5E" />
-              </TouchableOpacity>
-            )}
 
             {/* Consolidated Payment & Trip Card */}
             <View style={styles.passengerConsolidatedCard}>
@@ -2937,7 +3196,7 @@ const RideTrackerScreen = () => {
                   </Text>
                 </View>
                 <View style={styles.detailItem}>
-                  <MaterialIcons name="currency-rupee" size={20} color="#d6ab1e" />
+                  <MaterialIcons name="payment" size={20} color="#d6ab1e" />
                   <Text style={styles.detailText}>Fare: रू {parseFloat(actualFare).toFixed(0)}</Text>
                 </View>
               </View>
@@ -2949,7 +3208,20 @@ const RideTrackerScreen = () => {
               </View>
             </View>
             <View style={styles.buttonContainer}>
-              {userRole === 'driver' && rideStatus === 'accepted' && (
+              {userRole === 'driver' && rideStatus === 'accepted' && !driverArrived && (
+                <TouchableOpacity
+                  style={[styles.button, { backgroundColor: '#FF9800' }]}
+                  onPress={handleDriverArrivedAction}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Arrived at Pickup</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              {userRole === 'driver' && rideStatus === 'accepted' && driverArrived && (
                 <TouchableOpacity
                   style={[styles.button, { backgroundColor: '#075B5E' }]}
                   onPress={handleStartRide}
@@ -2959,6 +3231,19 @@ const RideTrackerScreen = () => {
                     <ActivityIndicator color="#fff" />
                   ) : (
                     <Text style={styles.buttonText}>Start Ride</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+              {userRole === 'driver' && rideStatus === 'in-progress' && (
+                <TouchableOpacity
+                  style={[styles.button, { backgroundColor: '#4CAF50' }]}
+                  onPress={handleCompleteRideAction}
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.buttonText}>Complete Ride</Text>
                   )}
                 </TouchableOpacity>
               )}
@@ -3002,43 +3287,6 @@ const RideTrackerScreen = () => {
           </ScrollView>
         )}
       </View>
-
-      {/* Pickup Notes Modal */}
-      {isPickupNotesModalVisible && (
-        <Modal
-          visible={true}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => setIsPickupNotesModalVisible(false)}
-        >
-          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' }}>
-            <View style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, minHeight: 250 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333' }}>Pickup Notes</Text>
-                <TouchableOpacity onPress={() => setIsPickupNotesModalVisible(false)}>
-                  <MaterialIcons name="close" size={24} color="#666" />
-                </TouchableOpacity>
-              </View>
-              <TextInput
-                style={{ width: '100%', height: 100, borderWidth: 1, borderColor: '#eee', borderRadius: 8, padding: 10, fontSize: 16, textAlignVertical: 'top', backgroundColor: '#f9f9f9', marginBottom: 20 }}
-                placeholder="e.g. Please wait near the blue gate..."
-                value={pickupNote}
-                onChangeText={setPickupNote}
-                autoFocus
-              />
-              <TouchableOpacity
-                style={{ backgroundColor: '#075B5E', padding: 14, borderRadius: 8, alignItems: 'center' }}
-                onPress={() => {
-                  setIsPickupNotesModalVisible(false);
-                  showToast("Pickup note saved", "success");
-                }}
-              >
-                <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>Save Note</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
-      )}
 
       <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />
 
@@ -3804,6 +4052,35 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     color: '#EF4444',
+  },
+  devControlsContainer: {
+    position: 'absolute',
+    top: 130,
+    right: 16,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    zIndex: 9999,
+  },
+  devButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    backgroundColor: '#075B5E',
+  },
+  devButtonText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
   },
 });
 

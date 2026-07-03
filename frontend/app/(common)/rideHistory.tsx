@@ -192,7 +192,7 @@ const RideHistoryScreen = () => {
         }
       ];
       
-      const combinedRides = [...filteredRides, ...mockRides];
+      const combinedRides = [...filteredRides];
       const grouped = groupRidesByDate(combinedRides);
       setSections(grouped);
     } catch (err) {

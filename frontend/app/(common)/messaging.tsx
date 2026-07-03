@@ -59,8 +59,7 @@ const MessagingScreen = () => {
     message: '',
     type: 'info',
   });
-  const [showCallModal, setShowCallModal] = useState(false);
-  
+
   const showToast = (message: string, type: 'info' | 'success' | 'error') => setToast({ visible: true, message, type });
   const hideToast = () => setToast(prev => ({ ...prev, visible: false }));
 
@@ -291,11 +290,6 @@ const MessagingScreen = () => {
       showToast('Phone number not available', 'error');
       return;
     }
-    setShowCallModal(true);
-  };
-
-  const confirmCall = () => {
-    setShowCallModal(false);
     Linking.openURL(`tel:${otherUserPhone}`);
   };
 
@@ -434,16 +428,7 @@ const MessagingScreen = () => {
         <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />
       )}
       
-      {/* Call Confirmation Modal */}
-      <ConfirmationModal
-        visible={showCallModal}
-        title="Make a Call"
-        message={`Call ${otherUserName}?`}
-        confirmText="Call"
-        cancelText="Cancel"
-        onConfirm={confirmCall}
-        onCancel={() => setShowCallModal(false)}
-      />
+
       
       {error && <Text style={styles.errorText}>{error}</Text>}
     </SafeAreaView>
