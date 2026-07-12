@@ -144,27 +144,8 @@ const DriverHomeScreen = () => {
         if (response.data.data) {
           // Driver is logged in and has a profile
           setIsAccountRestored(true);
-          const profile = response.data.data;
-          
-          setVehicleDetails({
-            type: profile.vehicleMake || 'Not specified',
-            licensePlate: profile.vehicleRegNum || profile.licensePlate || 'Not specified',
-            model: profile.vehicleModel || profile.model || 'Not specified',
-          });
-          setPassengerRatings({
-            averageRating: profile.rating || 0,
-            totalReviews: profile.totalRides || 0,
-          });
-          setRecentRide({
-            from: profile.lastRide?.pickupLocation || 'No recent rides',
-            to: profile.lastRide?.dropoffLocation || 'No recent rides',
-            date: profile.lastRide?.date ? new Date(profile.lastRide.date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'No recent rides',
-            fare: profile.lastRide?.fare ? `रू${profile.lastRide.fare}` : 'No recent rides',
-          });
-
-          // Fetch profit/loss data for registered drivers
-          const profitData = await calculateDriverProfitLoss();
-          setProfitLossData(profitData);
+          router.replace('/(driver)/driverSection');
+          return;
         } else {
           // Driver is not logged in or has no profile
           setIsAccountRestored(false);

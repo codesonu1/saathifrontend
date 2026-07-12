@@ -1,7 +1,8 @@
 import { io, Socket } from 'socket.io-client';
-import { getAccessToken } from './apiClient';
+import { getAccessToken, getCurrentUserId } from './apiClient';
+import { userRoleManager } from './userRoleManager';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform, DeviceEventEmitter } from 'react-native';
 
 export interface WebSocketResponse {
   code: number;
@@ -262,11 +263,30 @@ class WebSocketService {
     socket.on('newRideRequest', (data) => {
       console.log('WebSocket: New ride request event received:', data);
       this.emit('newRideRequest', data, 'driver');
+      
+      // Trigger Interactive Banner
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: 'New Ride Request 🚗',
+        message: `Pickup: ${data.pickUpLocation || 'Near you'} • Offer: रू ${data.offerPrice || data.price || 'Market Rate'}`,
+        type: 'ride_request',
+        actionLabel: 'View Requests',
+        actionRoute: '/(driver)/driverSection',
+      });
     });
 
     socket.on('offerAccepted', (data) => {
       console.log('WebSocket: Offer accepted event received:', data);
       this.emit('offerAccepted', data, 'driver');
+
+      // Trigger Interactive Banner
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: 'Offer Accepted! 🎉',
+        message: `Passenger accepted your offer. Tap to track and navigate.`,
+        type: 'ride_accepted',
+        actionLabel: 'Go to Map',
+        actionRoute: '/(common)/rideTracker',
+        actionParams: { rideId: data.rideId, userRole: 'driver' },
+      });
     });
   }
 
@@ -275,11 +295,31 @@ class WebSocketService {
     socket.on('newOffer', (data) => {
       console.log('WebSocket: New offer event received:', data);
       this.emit('newOffer', data, 'passenger');
+
+      // Trigger Interactive Banner
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: 'New Bid Received 💰',
+        message: `${data.driver?.firstName || 'Driver'} offered रू ${data.offerAmount}`,
+        type: 'ride_request',
+        actionLabel: 'View Bids',
+        actionRoute: '/(tabs)/rideOffers',
+        actionParams: { rideId: data.rideId },
+      });
     });
 
     socket.on('rideAccepted', (data) => {
       console.log('WebSocket: Ride accepted event received:', data);
       this.emit('rideAccepted', data, 'passenger');
+
+      // Trigger Interactive Banner
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: 'Ride Confirmed! 🚗',
+        message: `Driver ${data.driver?.firstName || ''} accepted your ride request.`,
+        type: 'ride_accepted',
+        actionLabel: 'Track Ride',
+        actionRoute: '/(common)/rideTracker',
+        actionParams: { rideId: data.rideId, userRole: 'passenger' },
+      });
     });
 
     socket.on('driverOffline', (data) => {
@@ -298,16 +338,107 @@ class WebSocketService {
     socket.on('rideStarted', (data) => {
       console.log('WebSocket: Ride started event received:', data);
       this.emit('rideStarted', data, 'ride');
+
+      // Trigger Interactive Banner
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: 'Trip Started 🚀',
+        message: 'Your yatra has started. Drive safe!',
+        type: 'info',
+        actionLabel: 'View Map',
+        actionRoute: '/(common)/rideTracker',
+        actionParams: { rideId: data._id || data.id, userRole: data.driverId ? 'driver' : 'passenger' },
+      });
     });
 
     socket.on('rideCompleted', (data) => {
       console.log('WebSocket: Ride completed event received:', data);
       this.emit('rideCompleted', data, 'ride');
+
+      // Trigger Interactive Banner
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: 'Trip Completed! 🏁',
+        message: 'Thank you for choosing Saathi. Tap to rate.',
+        type: 'ride_completed',
+        actionLabel: 'Rate Trip',
+        actionRoute: '/rideRate',
+        actionParams: { rideId: data._id || data.id },
+      });
     });
 
     socket.on('rideCancelled', (data) => {
       console.log('WebSocket: Ride cancelled event received:', data);
       this.emit('rideCancelled', data, 'ride');
+
+      // Trigger Interactive Banner
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: 'Trip Cancelled 🛑',
+        message: 'This ride has been cancelled by the user.',
+        type: 'info',
+      });
+    });
+
+    socket.on('driverArrived', (data) => {
+      console.log('WebSocket: driverArrived event received:', data);
+      this.emit('driverArrived', data, 'ride');
+
+      // Trigger Interactive Banner for Passenger
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: 'Driver Arrived! 📍',
+        message: 'Your driver has arrived at the pickup point.',
+        type: 'ride_accepted',
+        actionLabel: 'Track Ride',
+        actionRoute: '/(common)/rideTracker',
+        actionParams: { rideId: data.rideId || data.id, userRole: 'passenger' },
+      });
+    });
+
+    socket.on('passengerComing', (data) => {
+      console.log('WebSocket: passengerComing event received:', data);
+      this.emit('passengerComing', data, 'ride');
+
+      // Trigger Interactive Banner for Driver
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: "Passenger is coming! 🏃‍♂️",
+        message: "Passenger is on their way to the vehicle.",
+        type: 'ride_accepted',
+        actionLabel: 'Track Ride',
+        actionRoute: '/(common)/rideTracker',
+        actionParams: { rideId: data.rideId || data.id, userRole: 'driver' },
+      });
+    });
+
+    socket.on('messageCreated', async (msg: any) => {
+      const messageData = msg?.data || msg;
+      console.log('WebSocket: messageCreated event received:', messageData);
+      
+      try {
+        const currentUserId = await getCurrentUserId();
+        const currentUserRole = await userRoleManager.getRole();
+        
+        // Skip notification if the message was sent by the logged-in user or matching role
+        if (
+          messageData.senderId === currentUserId || 
+          messageData.sender === currentUserId ||
+          messageData.senderRole === currentUserRole
+        ) {
+          return;
+        }
+      } catch (err) {
+        console.error('WebSocket: error filtering messageCreated sender:', err);
+      }
+      
+      // Trigger Interactive Banner for messaging
+      DeviceEventEmitter.emit('showInteractiveNotification', {
+        title: `Message from ${messageData.senderRole === 'driver' ? 'Driver' : 'Passenger'} 💬`,
+        message: messageData.content,
+        type: 'message',
+        actionLabel: 'Reply',
+        actionRoute: '/(common)/messaging',
+        actionParams: { 
+          rideId: messageData.rideId,
+          userRole: messageData.senderRole === 'driver' ? 'passenger' : 'driver'
+        },
+      });
     });
 
     socket.on('rideStatusUpdate', (data) => {

@@ -60,6 +60,11 @@ const RideOffersScreen = () => {
   // Get current user role from global manager
   const userRole = useUserRole();
 
+  const [fromAddress, setFromAddress] = useState(from || '');
+  const [toAddress, setToAddress] = useState(to || '');
+  const [rideFare, setRideFare] = useState(fare || '');
+  const [vehicleName, setVehicleName] = useState(vehicle || '');
+
   const [offers, setOffers] = useState<RideOffer[]>([]);
   const [previousOffersCount, setPreviousOffersCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -156,6 +161,12 @@ const RideOffersScreen = () => {
       try {
         const details = await rideService.getRideDetails(rideId);
         console.log('RideOffers: loadOffers status check:', details?.status);
+        if (details) {
+          if (details.pickUpLocation) setFromAddress(details.pickUpLocation);
+          if (details.dropOffLocation) setToAddress(details.dropOffLocation);
+          if (details.offerPrice) setRideFare(details.offerPrice.toString());
+          if (details.vehicleType?.name) setVehicleName(details.vehicleType.name);
+        }
         if (details?.status === 'accepted' || details?.status === 'in-progress') {
           console.log('RideOffers: Ride is already active, redirecting to tracker...');
           await userRoleManager.setRole('passenger');
@@ -227,7 +238,7 @@ const RideOffersScreen = () => {
         const offer = offers.find(o => o._id === offerId);
         const actualDriverName = offer ? `${offer.driver?.firstName} ${offer.driver?.lastName}` : 'Ramesh Adhikari';
         const actualVehicle = offer ? offer.driver?.vehicleDetails?.vehicleModel : 'Bajaj Pulsar 150 (Red)';
-        const actualFareAmt = offer ? offer.offeredPrice.toString() : fare;
+        const actualFareAmt = offer ? offer.offeredPrice.toString() : (rideFare || fare);
 
         setTimeout(async () => {
           await userRoleManager.setRole('passenger');
@@ -237,10 +248,10 @@ const RideOffersScreen = () => {
             params: {
               rideId: rideId,
               driverName: actualDriverName,
-              from: from,
-              to: to,
+              from: fromAddress || from,
+              to: toAddress || to,
               fare: actualFareAmt,
-              vehicle: actualVehicle,
+              vehicle: actualVehicle || vehicleName || vehicle,
               simulating: 'true',
             },
           });
@@ -623,7 +634,7 @@ const RideOffersScreen = () => {
             <Text style={styles.priceLabel}>Driver&apos;s Offer</Text>
             <Text style={styles.price}>रू {item.offeredPrice.toFixed(0)}</Text>
             <Text style={styles.priceDifference}>
-                            {item.offeredPrice > parseFloat(fare) ? '+' : ''}रू {(item.offeredPrice - parseFloat(fare)).toFixed(0)}
+              {item.offeredPrice > parseFloat(rideFare || fare || '0') ? '+' : ''}रू {(item.offeredPrice - parseFloat(rideFare || fare || '0')).toFixed(0)}
             </Text>
           </View>
         </View>
@@ -696,16 +707,16 @@ const RideOffersScreen = () => {
         <View style={styles.routeInfo}>
           <View style={styles.locationRow}>
             <MaterialIcons name="location-on" size={16} color="#075B5E" />
-            <Text style={styles.locationText} numberOfLines={1}>{from}</Text>
+            <Text style={styles.locationText} numberOfLines={1}>{fromAddress || from}</Text>
           </View>
           <View style={styles.locationRow}>
             <MaterialIcons name="location-on" size={16} color="#EA2F14" />
-            <Text style={styles.locationText} numberOfLines={1}>{to}</Text>
+            <Text style={styles.locationText} numberOfLines={1}>{toAddress || to}</Text>
           </View>
         </View>
         <View style={styles.rideDetails}>
-          <Text style={styles.vehicleType}>{vehicle}</Text>
-          <Text style={styles.yourOffer}>Your offer: रू {parseFloat(fare).toFixed(0)}</Text>
+          <Text style={styles.vehicleType}>{vehicleName || vehicle}</Text>
+          <Text style={styles.yourOffer}>Your offer: रू {parseFloat(rideFare || fare || '0').toFixed(0)}</Text>
         </View>
       </View>
 

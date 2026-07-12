@@ -10,7 +10,7 @@ interface ConfirmationModalProps {
   cancelText?: string;
   onConfirm: () => void;
   onCancel: () => void;
-  type?: 'warning' | 'danger' | 'info';
+  type?: 'warning' | 'danger' | 'info' | 'primary';
 }
 
 const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -58,6 +58,13 @@ const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
 
   const getTypeConfig = () => {
     switch (type) {
+      case 'primary':
+        return {
+          icon: 'warning',
+          color: '#075B5E',
+          bg: '#e6f2f2',
+          borderColor: '#075B5E'
+        };
       case 'danger':
         return {
           icon: 'alert-circle',

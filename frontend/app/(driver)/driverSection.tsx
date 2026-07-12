@@ -67,6 +67,7 @@ const DriverSection = () => {
   const [pendingOfferId, setPendingOfferId] = useState<string | null>(null);
   const [pendingOffers, setPendingOffers] = useState<Ride[]>([]);
   const [showBackConfirmation, setShowBackConfirmation] = useState(false);
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   
   const [toast, setToast] = useState<{
     visible: boolean;
@@ -749,23 +750,24 @@ const DriverSection = () => {
 
   const openSidePanel = () => setSidePanelVisible(true);
   const closeSidePanel = () => setSidePanelVisible(false);
+
+  const handleLeaveDriverMode = (targetRoute: string) => {
+    setPendingRoute(targetRoute);
+    setSidePanelVisible(false);
+    setShowBackConfirmation(true);
+  };
+
   const handleChangeRole = async (newRole: 'driver' | 'passenger') => {
     if (newRole === 'passenger') {
-      await userRoleManager.setRole('passenger');
-      router.push('/(tabs)');
+      handleLeaveDriverMode('/(tabs)');
     } else {
       await userRoleManager.setRole('driver');
-      // Optionally navigate to driver dashboard or stay
+      closeSidePanel();
     }
-    closeSidePanel();
   };
 
   const handleBackPress = () => {
-    if (isOnline || loading) {
-      setShowBackConfirmation(true);
-    } else {
-      router.push('/(driver)'); // Go to driver dashboard instead of router.back()
-    }
+    handleLeaveDriverMode('/(tabs)');
   };
 
   const handleConfirmBack = async () => {
@@ -800,11 +802,23 @@ const DriverSection = () => {
     setRaiseFareLoading(false);
     // Disconnect WebSocket
     webSocketService.disconnect();
-    // Navigate to driver dashboard
-    router.push('/(driver)');
+    
+    // Determine target route and roles
+    const target = pendingRoute || '/(tabs)';
+    setPendingRoute(null);
+
+    if (target === '/(tabs)') {
+      await userRoleManager.setRole('passenger');
+      router.replace(target);
+    } else {
+      // Keep driver role but push the target page
+      await userRoleManager.setRole('driver');
+      router.push(target as any);
+    }
   };
 
   const handleCancelBack = () => {
+    setPendingRoute(null);
     setShowBackConfirmation(false);
   };
 
@@ -1084,8 +1098,8 @@ const DriverSection = () => {
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-              <MaterialIcons name="arrow-back" size={24} color="#fff" />
+            <TouchableOpacity onPress={openSidePanel} style={styles.backButton}>
+              <MaterialIcons name="menu" size={24} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Driver Section</Text>
           </View>
@@ -1288,6 +1302,8 @@ const DriverSection = () => {
           role={role}
           rideInProgress={rideInProgress}
           onChangeRole={handleChangeRole}
+          activeItem="map"
+          onLeaveDriverMode={handleLeaveDriverMode}
         />
 
         <Toast
@@ -1299,13 +1315,15 @@ const DriverSection = () => {
 
         <ConfirmationModal
           visible={showBackConfirmation}
-          title={isOnline ? "Go Offline and Leave?" : "Cancel Loading?"}
-          message={isOnline ? "Are you sure you want to go offline?" : "Are you sure you want to cancel loading?"}
-          confirmText="Go Back"
+          title={pendingRoute === '/(tabs)' || !pendingRoute ? "Exit Driver Mode?" : "Leave Map Screen?"}
+          message={pendingRoute === '/(tabs)' || !pendingRoute 
+            ? "Are you sure you want to go offline and switch to Passenger mode?" 
+            : "Are you sure you want to go offline and leave the active matching map?"}
+          confirmText={pendingRoute === '/(tabs)' || !pendingRoute ? "Exit" : "Leave"}
           cancelText="Stay"
           onConfirm={handleConfirmBack}
           onCancel={handleCancelBack}
-          type="warning"
+          type="primary"
         />
 
         <ConfirmationModal

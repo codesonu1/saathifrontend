@@ -18,9 +18,10 @@ type SidePanelProps = {
   rideInProgress: boolean
   onChangeRole: (role: "driver" | "passenger") => void
   activeItem?: string
+  onLeaveDriverMode?: (targetRoute: string) => void
 }
 
-const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInProgress, onChangeRole, activeItem = "home" }) => {
+const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInProgress, onChangeRole, activeItem = "home", onLeaveDriverMode }) => {
   const slideAnim = useRef(new Animated.Value(-width * 0.75)).current
   const router = useRouter()
 
@@ -33,18 +34,30 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
   }, [visible, slideAnim])
 
   const navigateToProfile = () => {
-    router.push("/profile")
-    onClose()
+    if (role === "driver" && onLeaveDriverMode) {
+      onLeaveDriverMode("/profile");
+    } else {
+      router.push("/profile")
+      onClose()
+    }
   }
 
   const navigateToRideHistory = () => {
-    router.push("/rideHistory")
-    onClose()
+    if (role === "driver" && onLeaveDriverMode) {
+      onLeaveDriverMode("/rideHistory");
+    } else {
+      router.push("/rideHistory")
+      onClose()
+    }
   }
 
   const navigateToSupport = () => {
-    router.push("/support")
-    onClose()
+    if (role === "driver" && onLeaveDriverMode) {
+      onLeaveDriverMode("/support");
+    } else {
+      router.push("/support")
+      onClose()
+    }
   }
 
   const navigateToDriverSection = () => {
@@ -53,8 +66,12 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
   }
 
   const navigateToNotifications = () => {
-    router.push("/notifications")
-    onClose()
+    if (role === "driver" && onLeaveDriverMode) {
+      onLeaveDriverMode("/notifications");
+    } else {
+      router.push("/notifications")
+      onClose()
+    }
   }
 
   const handleLogout = async () => {
@@ -64,6 +81,10 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
 
   const handleChangeRole = async () => {
     if (!rideInProgress) {
+      if (role === "driver" && onLeaveDriverMode) {
+        onLeaveDriverMode("/(tabs)");
+        return;
+      }
       const newRole = role === "driver" ? "passenger" : "driver";
       await userRoleManager.setRole(newRole);
       webSocketService.disconnect('driver');
@@ -83,7 +104,6 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
   const menuItems =
     role === "driver"
       ? [
-          { id: "home", name: "Home", icon: "home", action: onClose },
           { id: "map", name: "Map", icon: "map", action: navigateToDriverSection },
           { id: "profile", name: "Profile", icon: "person-4", action: navigateToProfile },
           { id: "history", name: "Ride History", icon: "directions-car", action: navigateToRideHistory },

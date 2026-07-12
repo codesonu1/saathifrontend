@@ -24,6 +24,7 @@ import { DriverRegistrationProvider } from './DriverRegistrationContext';
 import { initializeApiClient } from './utils/apiClient';
 import { userRoleManager } from './utils/userRoleManager';
 import { View, ActivityIndicator } from 'react-native';
+import InteractiveNotification from '../components/ui/InteractiveNotification';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -59,6 +60,7 @@ export default function RootLayout() {
           <Stack.Screen name="+not-found" />
         </Stack>
         <StatusBar style="auto" />
+        <InteractiveNotification />
       </ThemeProvider>
     </DriverRegistrationProvider>
   );
