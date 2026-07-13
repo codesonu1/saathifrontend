@@ -25,6 +25,10 @@ import { initializeApiClient } from './utils/apiClient';
 import { userRoleManager } from './utils/userRoleManager';
 import { View, ActivityIndicator } from 'react-native';
 import InteractiveNotification from '../components/ui/InteractiveNotification';
+import * as SplashScreen from 'expo-splash-screen';
+
+// Prevent the native splash screen from auto-hiding at startup
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -38,13 +42,15 @@ export default function RootLayout() {
     userRoleManager.init().then(() => setRoleReady(true));
   }, []);
 
+  // Hide the native splash screen once resources are ready
+  useEffect(() => {
+    if (loaded && roleReady) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [loaded, roleReady]);
+
   if (!loaded || !roleReady) {
-    // Show a centered loading spinner while initializing
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#075B5E" />
-      </View>
-    );
+    return null; // Keep native splash showing
   }
 
   return (

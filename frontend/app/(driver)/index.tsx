@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   Alert,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -184,11 +185,11 @@ const DriverHomeScreen = () => {
   const handlePassengerMode = () => router.push('/(tabs)');
 
   if (loading) return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading...</Text>
-      </View>
-    </SafeAreaView>
+    <View style={{ flex: 1, backgroundColor: '#075B5E', justifyContent: 'center', alignItems: 'center' }}>
+      <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
+      <ActivityIndicator size="large" color="#ffffff" style={{ marginBottom: 16 }} />
+      <Text style={{ fontSize: 16, color: '#ffffff', opacity: 0.85, fontWeight: '500' }}>Loading Driver Section...</Text>
+    </View>
   );
 
   // Show driver mode (online/offline) only after registration is complete

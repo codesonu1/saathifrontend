@@ -10,6 +10,7 @@ const SplashScreen = () => {
   React.useEffect(() => {
     const checkAuthAndNavigate = async () => {
       console.log('SplashScreen: Starting checkAuthAndNavigate...');
+      const startTime = Date.now();
       try {
         console.log('SplashScreen: Initializing API Client...');
         await initializeApiClient();
@@ -23,24 +24,26 @@ const SplashScreen = () => {
         const role = await AsyncStorage.getItem('userRole');
         console.log('SplashScreen: Role fetched:', role);
         
+        let targetRoute = '/login';
         if (token && role) {
           console.log('SplashScreen: Stored token and role found. Refreshing token...');
           const refreshed = await refreshAccessToken();
           console.log('SplashScreen: Token refresh result:', refreshed);
           const validToken = refreshed || (await getAccessToken());
           if (validToken) {
-            if (role === 'driver') {
-              console.log('SplashScreen: Navigating to Driver dashboard...');
-              router.replace('/(driver)');
-            } else {
-              console.log('SplashScreen: Navigating to Passenger dashboard...');
-              router.replace('/(tabs)');
-            }
-            return;
+            targetRoute = role === 'driver' ? '/(driver)' : '/(tabs)';
           }
         }
-        console.log('SplashScreen: No valid session. Navigating to Login...');
-        router.replace('/login');
+        
+        // Enforce a minimum display time of 1.8 seconds (1800ms) for a premium experience
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = 1800 - elapsedTime;
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
+
+        console.log('SplashScreen: Navigating to target:', targetRoute);
+        router.replace(targetRoute as any);
       } catch (err) {
         console.error('SplashScreen: Error in checkAuthAndNavigate:', err);
         router.replace('/login');
@@ -59,7 +62,7 @@ const SplashScreen = () => {
       <Text style={styles.title}>Saathi</Text>
       <Text style={styles.tagline}>Your Ride, Your Way</Text>
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00809D" />
+        <ActivityIndicator size="large" color="#ffffff" />
       </View>
     </View>
   );
@@ -68,7 +71,7 @@ const SplashScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#075B5E', // Brand teal background
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -79,12 +82,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#000',
+    color: '#ffffff', // White title text
     marginTop: 10,
   },
   tagline: {
     fontSize: 16,
-    color: '#000',
+    color: '#ffffff', // White tagline text
+    opacity: 0.85,
     marginBottom: 20,
   },
   loadingContainer: {
