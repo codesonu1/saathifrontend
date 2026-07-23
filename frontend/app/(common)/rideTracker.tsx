@@ -776,9 +776,11 @@ const RideTrackerScreen = () => {
     emitWhenConnectedRef.current = emitWhenConnected;
   }, [emitWhenConnected]);
 
+  // Store reconnection attempts in a ref to persist across component renders/re-mounts
+  const reconnectAttemptsRef = useRef(0);
+
   // --- WEBSOCKET CONNECTION STATUS CHECKER ---
   useEffect(() => {
-    let reconnectAttempts = 0;
     const maxReconnectAttempts = 5;
 
     const checkWebSocketConnection = async () => {
@@ -790,8 +792,9 @@ const RideTrackerScreen = () => {
       const isConnected = webSocketService.isSocketConnected('ride');
       setIsWebSocketConnected(isConnected);
       
-      if (!isConnected && isComponentActive && reconnectAttempts < maxReconnectAttempts) {
-        reconnectAttempts++;
+      if (!isConnected && isComponentActive && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        reconnectAttemptsRef.current++;
+        console.log(`[WebSocket] Reconnecting to ride namespace (attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts})...`);
         
         try {
           // Force disconnect first to ensure clean state
@@ -800,13 +803,13 @@ const RideTrackerScreen = () => {
           
           // Try to reconnect
           await ensureSocketConnected(rideId, 'ride');
-          reconnectAttempts = 0; // Reset attempts on success
+          reconnectAttemptsRef.current = 0; // Reset attempts on success
         } catch (error) {
           // Wait longer between attempts
-          await new Promise(resolve => setTimeout(resolve, 2000 * reconnectAttempts));
+          await new Promise(resolve => setTimeout(resolve, 2000 * reconnectAttemptsRef.current));
         }
       } else if (isConnected) {
-        reconnectAttempts = 0; // Reset attempts when connected
+        reconnectAttemptsRef.current = 0; // Reset attempts when connected
       }
     };
 
@@ -818,7 +821,6 @@ const RideTrackerScreen = () => {
 
     return () => {
       clearInterval(interval);
-      reconnectAttempts = 0;
     };
   }, [isComponentActive, rideId, ensureSocketConnected, rideStatus, rideCancelled]);
 
