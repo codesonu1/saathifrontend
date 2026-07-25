@@ -379,7 +379,6 @@ class WebSocketService {
 
     socket.on('driverArrived', (data) => {
       console.log('WebSocket: driverArrived event received:', data);
-      this.emit('driverArrived', data, 'ride');
 
       // Trigger Interactive Banner for Passenger
       DeviceEventEmitter.emit('showInteractiveNotification', {
@@ -394,7 +393,6 @@ class WebSocketService {
 
     socket.on('passengerComing', (data) => {
       console.log('WebSocket: passengerComing event received:', data);
-      this.emit('passengerComing', data, 'ride');
 
       // Trigger Interactive Banner for Driver
       DeviceEventEmitter.emit('showInteractiveNotification', {
