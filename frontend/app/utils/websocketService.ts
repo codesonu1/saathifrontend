@@ -337,8 +337,8 @@ class WebSocketService {
 
     socket.on('rideStarted', (data) => {
       console.log('WebSocket: Ride started event received:', data);
-      this.emit('rideStarted', data, 'ride');
 
+      const currentRole = userRoleManager.getRole();
       // Trigger Interactive Banner
       DeviceEventEmitter.emit('showInteractiveNotification', {
         title: 'Trip Started 🚀',
@@ -346,14 +346,14 @@ class WebSocketService {
         type: 'info',
         actionLabel: 'View Map',
         actionRoute: '/(common)/rideTracker',
-        actionParams: { rideId: data._id || data.id, userRole: data.driverId ? 'driver' : 'passenger' },
+        actionParams: { rideId: data._id || data.id, userRole: currentRole },
       });
     });
 
     socket.on('rideCompleted', (data) => {
       console.log('WebSocket: Ride completed event received:', data);
-      this.emit('rideCompleted', data, 'ride');
 
+      const currentRole = userRoleManager.getRole();
       // Trigger Interactive Banner
       DeviceEventEmitter.emit('showInteractiveNotification', {
         title: 'Trip Completed! 🏁',
@@ -361,13 +361,12 @@ class WebSocketService {
         type: 'ride_completed',
         actionLabel: 'Rate Trip',
         actionRoute: '/rideRate',
-        actionParams: { rideId: data._id || data.id },
+        actionParams: { rideId: data._id || data.id, userRole: currentRole },
       });
     });
 
     socket.on('rideCancelled', (data) => {
       console.log('WebSocket: Ride cancelled event received:', data);
-      this.emit('rideCancelled', data, 'ride');
 
       // Trigger Interactive Banner
       DeviceEventEmitter.emit('showInteractiveNotification', {

@@ -241,16 +241,16 @@ const styles = StyleSheet.create({
   },
   container: {
     width: '100%',
-    backgroundColor: '#0F1E1F', // Sleek dark teal/grey premium background
+    backgroundColor: '#FFFFFF', // Clean white background for light mode
     borderRadius: 16,
     padding: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(0, 0, 0, 0.05)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 10,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    elevation: 5,
   },
   headerRow: {
     flexDirection: 'row',
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.04)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.04)',
     paddingBottom: 6,
   },
   headerLeft: {
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   },
   timeTag: {
     fontSize: 9,
-    color: '#889B9D',
+    color: '#6B7280', // Slate gray for light mode
   },
   contentRow: {
     flexDirection: 'row',
@@ -294,12 +294,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#FFF',
+    color: '#1F2937', // Dark charcoal text
     marginBottom: 2,
   },
   message: {
     fontSize: 12,
-    color: '#CFDFE0',
+    color: '#4B5563', // Soft slate gray text
     lineHeight: 16,
   },
   actionRow: {
@@ -314,7 +314,7 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   dismissText: {
-    color: '#889B9D',
+    color: '#6B7280', // Slate gray text
     fontSize: 12,
     fontWeight: '600',
   },
@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
   swipeIndicator: {
     width: 32,
     height: 3,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)', // Light indicator bar
     borderRadius: 2,
     alignSelf: 'center',
     marginTop: 6,
