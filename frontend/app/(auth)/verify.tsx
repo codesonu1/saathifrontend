@@ -1,8 +1,20 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator, BackHandler } from 'react-native';
-import { Button } from 'react-native-paper';
+import {
+  View,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  BackHandler,
+  SafeAreaView,
+  StatusBar,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import Icon from 'react-native-vector-icons/FontAwesome';
+import { MaterialIcons, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import apiClient, { setAccessToken } from '../utils/apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../../components/ui/Toast';
@@ -50,7 +62,6 @@ const VerifyScreen = () => {
       if (response.data.statusCode === 201) {
         await setAccessToken(response.data.data.accessToken);
         await AsyncStorage.setItem('refreshToken', response.data.data.refreshToken || '');
-        // Store userRole for auto-login
         const role = response.data.data.role || 'passenger';
         await AsyncStorage.setItem('userRole', role);
         showToast('Login successful!', 'success');
@@ -72,7 +83,6 @@ const VerifyScreen = () => {
   };
 
   const handleChange = (text: string) => {
-    // Only allow numbers, max CODE_LENGTH
     const clean = text.replace(/[^0-9]/g, '').slice(0, CODE_LENGTH);
     setCode(clean);
   };
@@ -81,25 +91,12 @@ const VerifyScreen = () => {
     inputRef.current?.focus();
   };
 
-  const resendOTP = async () => {
-    if (!mobile) {
-      showToast('Phone number not found', 'error');
-      return;
-    }
-    try {
-      const response = await apiClient.post('/auth/login', { mobile });
-      if (response.data.statusCode === 201) {
-        showToast('OTP resent successfully!', 'success');
-      } else {
-        showToast('Failed to resend OTP', 'error');
-      }
-    } catch (err: any) {
-      showToast('Failed to resend OTP. Please try again.', 'error');
-    }
-  };
-
   const handleBackPress = () => {
-    setShowBackConfirmation(true);
+    if (loading) {
+      setShowBackConfirmation(true);
+    } else {
+      router.back();
+    }
   };
 
   const handleConfirmBack = () => {
@@ -113,60 +110,137 @@ const VerifyScreen = () => {
 
   useEffect(() => {
     const backAction = () => {
-      setShowBackConfirmation(true);
-      return true; 
+      if (loading) {
+        setShowBackConfirmation(true);
+        return true;
+      }
+      return false;
     };
-
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
-  }, []);
+  }, [loading]);
+
+  const resendOTP = async () => {
+    setLoading(true);
+    try {
+      const response = await apiClient.post('/auth/login', { mobile });
+      if (response.data.statusCode === 201) {
+        showToast('OTP resent successfully!', 'success');
+      } else {
+        showToast('Failed to resend OTP. Please try again.', 'error');
+      }
+    } catch (err: any) {
+      let errorMessage = 'Failed to resend OTP. Please try again.';
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      }
+      showToast(errorMessage, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-        <Icon name="arrow-left" size={20} color="#000" />
-      </TouchableOpacity>
-      <View style={styles.contentContainer}>
-        <Text style={styles.title}>Enter the code</Text>
-        <Text style={styles.subtitle}>We have sent you a verification code.</Text>
-        <TouchableOpacity activeOpacity={1} onPress={handleBoxPress} style={styles.codeContainer}>
-          {[...Array(CODE_LENGTH)].map((_, idx) => (
-            <View
-              key={idx}
-              style={[styles.codeInput, code.length === idx && styles.codeInputActive, code[idx] && styles.codeInputFilled]}
-            >
-              <Text style={styles.codeDigit}>{code[idx] || ''}</Text>
-            </View>
-          ))}
-          <TextInput
-            ref={inputRef}
-            value={code}
-            onChangeText={handleChange}
-            keyboardType="numeric"
-            maxLength={CODE_LENGTH}
-            style={styles.hiddenInput}
-            autoFocus
-            editable={!loading}
-            caretHidden
-            selection={{ start: code.length, end: code.length }}
-            blurOnSubmit={false}
-          />
-        </TouchableOpacity>
-        <Button
-          mode="contained"
-          style={styles.button}
-          onPress={handleVerify}
-          disabled={loading || code.length !== CODE_LENGTH}
-          contentStyle={styles.buttonContent}
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          {loading ? <ActivityIndicator color="#fff" /> : 'Verify OTP'}
-        </Button>
-        <TouchableOpacity onPress={resendOTP} style={styles.resendContainer} disabled={loading}>
-          <Text style={styles.resendText}>Didn't receive the code? </Text>
-          <Text style={[styles.resendLink, loading && styles.resendLinkDisabled]}>Resend</Text>
-        </TouchableOpacity>
-      </View>
-      <View style={styles.keyboardPlaceholder} />
+          {/* Header Bar with Centered Red Title */}
+          <View style={styles.headerBar}>
+            <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+              <Ionicons name="arrow-back" size={22} color="#191C1D" />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Verify Phone</Text>
+            <View style={{ width: 38 }} />
+          </View>
+
+          {/* Floating White Card */}
+          <View style={styles.card}>
+            {/* Top Soft Pink Circle Badge */}
+            <View style={styles.iconBadge}>
+              <MaterialCommunityIcons name="cellphone-lock" size={28} color="#B7102A" />
+            </View>
+
+            <Text style={styles.title}>Enter Code</Text>
+            <Text style={styles.subtitle}>
+              Enter the 6-digit code sent to{' '}
+              <Text style={styles.mobileHighlight}>{mobile || 'your phone number'}</Text>
+            </Text>
+
+            {/* Change Number Link */}
+            <TouchableOpacity onPress={handleBackPress} style={styles.changeNumberButton}>
+              <Text style={styles.changeNumberText}>Change Number</Text>
+            </TouchableOpacity>
+
+            {/* OTP 6-Digit Boxes */}
+            <TouchableOpacity activeOpacity={1} onPress={handleBoxPress} style={styles.codeContainer}>
+              {[...Array(CODE_LENGTH)].map((_, idx) => (
+                <View
+                  key={idx}
+                  style={[
+                    styles.codeInput,
+                    code.length === idx && styles.codeInputActive,
+                    code[idx] && styles.codeInputFilled,
+                  ]}
+                >
+                  <Text style={styles.codeDigit}>{code[idx] || ''}</Text>
+                </View>
+              ))}
+              <TextInput
+                ref={inputRef}
+                value={code}
+                onChangeText={handleChange}
+                keyboardType="numeric"
+                maxLength={CODE_LENGTH}
+                style={styles.hiddenInput}
+                autoFocus
+                editable={!loading}
+                caretHidden
+                selection={{ start: code.length, end: code.length }}
+                blurOnSubmit={false}
+              />
+            </TouchableOpacity>
+
+            {/* Pill Primary Verify Button */}
+            <TouchableOpacity
+              style={[
+                styles.primaryPillButton,
+                (loading || code.length !== CODE_LENGTH) && styles.buttonDisabled
+              ]}
+              onPress={handleVerify}
+              disabled={loading || code.length !== CODE_LENGTH}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Verify</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Resend Link */}
+            <TouchableOpacity onPress={resendOTP} style={styles.resendContainer} disabled={loading}>
+              <Text style={styles.resendText}>Didn't receive code? </Text>
+              <Text style={[styles.resendLink, loading && styles.resendLinkDisabled]}>Resend</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* End-to-End Secure Badge */}
+          <View style={styles.secureFooter}>
+            <MaterialIcons name="security" size={14} color="#8F6F6E" style={{ marginRight: 6 }} />
+            <Text style={styles.secureText}>END-TO-END SECURE</Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
       <Toast
         visible={toast.visible}
         message={toast.message}
@@ -174,6 +248,7 @@ const VerifyScreen = () => {
         onHide={hideToast}
         duration={4000}
       />
+
       <ConfirmationModal
         visible={showBackConfirmation}
         title="Cancel Verification?"
@@ -184,68 +259,123 @@ const VerifyScreen = () => {
         onCancel={handleCancelBack}
         type="warning"
       />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
+    backgroundColor: '#F8F9FA', // Neutral off-white canvas
   },
-  backButton: {
-    padding: 10,
-    marginTop: 40,
-  },
-  contentContainer: {
-    flex: 1,
-    justifyContent: 'center',
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 24,
     alignItems: 'center',
   },
+  headerBar: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: Platform.OS === 'android' ? 12 : 6,
+    paddingBottom: 20,
+  },
+  backButton: {
+    padding: 8,
+    marginLeft: -8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#B7102A', // Energetic Red header title
+    letterSpacing: -0.3,
+  },
+  card: {
+    width: '100%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 6,
+    marginBottom: 24,
+  },
+  iconBadge: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#FFDAD8', // Soft energetic red badge background
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   title: {
-    fontSize: 25,
-    fontWeight: 'bold',
-    marginBottom: 10,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#191C1D',
     textAlign: 'center',
-    color: '#333',
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#666',
+    fontSize: 14,
+    fontWeight: '400',
+    color: '#5B403F',
     textAlign: 'center',
-    marginBottom: 30,
+    lineHeight: 20,
+  },
+  mobileHighlight: {
+    color: '#191C1D',
+    fontWeight: '600',
+  },
+  changeNumberButton: {
+    marginTop: 6,
+    marginBottom: 24,
+  },
+  changeNumberText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#B7102A',
   },
   codeContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginBottom: 30,
-    marginTop: 10,
-    position: 'relative',
+    width: '100%',
+    marginBottom: 28,
   },
   codeInput: {
-    width: 45,
-    height: 45,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    textAlign: 'center',
-    marginHorizontal: 5,
-    backgroundColor: '#f8f9fa',
+    width: 44,
+    height: 54,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F3F4F5',
+    marginHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
   },
   codeInputActive: {
-    borderColor: '#00809D',
+    borderColor: '#B7102A', // Energetic Red border on active focus
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#B7102A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   codeInputFilled: {
-    borderColor: '#00809D',
-    backgroundColor: '#e0f7fa',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#B7102A',
   },
   codeDigit: {
-    fontSize: 18,
-    color: '#333',
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#B7102A',
   },
   hiddenInput: {
     position: 'absolute',
@@ -253,33 +383,56 @@ const styles = StyleSheet.create({
     width: 1,
     height: 1,
   },
-  button: {
+  primaryPillButton: {
     width: '100%',
-    backgroundColor: '#00809D',
-    borderRadius: 12,
+    height: 52,
+    backgroundColor: '#B7102A', // Energetic Red
+    borderRadius: 26, // Full Pill button shape
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#B7102A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 18,
   },
-  buttonContent: {
-    height: 48,
+  buttonDisabled: {
+    backgroundColor: '#E4BEBC',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
   },
   resendContainer: {
     flexDirection: 'row',
-    marginTop: 20,
     alignItems: 'center',
   },
   resendText: {
+    color: '#5B403F',
     fontSize: 14,
-    color: '#666',
   },
   resendLink: {
+    color: '#B7102A',
+    fontWeight: '700',
     fontSize: 14,
-    color: '#00809D',
-    fontWeight: '600',
   },
   resendLinkDisabled: {
-    color: '#ccc',
+    color: '#E4BEBC',
   },
-  keyboardPlaceholder: {
-    height: 200,
+  secureFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  secureText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8F6F6E',
+    letterSpacing: 1.5,
   },
 });
 

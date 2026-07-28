@@ -1,133 +1,406 @@
-import React from 'react';
-import { View, StyleSheet, Text, Image } from 'react-native';
-import { Button } from 'react-native-paper';
+import React, { useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ActivityIndicator,
+  SafeAreaView,
+  StatusBar,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import Icon from 'react-native-vector-icons/FontAwesome';
-import { clearAccessToken } from '../utils/apiClient';
+import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import apiClient, { clearAccessToken } from '../utils/apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Toast from '../../components/ui/Toast';
 
 const LoginScreen = () => {
-  console.log("LoginScreen: Rendering LoginScreen component...");
   const router = useRouter();
+  const [phone, setPhone] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    type: 'success' | 'error' | 'info';
+  }>({
+    visible: false,
+    message: '',
+    type: 'info',
+  });
 
-  const handlePLogin = () => {
-    router.push('/(auth)/phoneLogin'); 
+  const showToast = (message: string, type: 'success' | 'error' | 'info') => {
+    setToast({ visible: true, message, type });
   };
 
-  const handleGLogin = () => {
-    router.push('/(auth)/setup?source=google');
+  const hideToast = () => {
+    setToast(prev => ({ ...prev, visible: false }));
+  };
+
+  const validatePhone = (phoneNumber: string) => {
+    const phoneRegex = /^(\+977|977)?[9][6-8]\d{8}$/;
+    return phoneRegex.test(phoneNumber.replace(/\s/g, ''));
+  };
+
+  const handleVerify = async () => {
+    const trimmedPhone = phone.trim();
+    
+    if (!trimmedPhone) {
+      showToast('Please enter your phone number', 'error');
+      return;
+    }
+
+    if (!validatePhone(trimmedPhone)) {
+      showToast('Please enter a valid phone number', 'error');
+      return;
+    }
+
+    setLoading(true);
+    
+    try {
+      const response = await apiClient.post('/auth/login', { mobile: trimmedPhone });
+
+      if (response.data.statusCode === 201) {
+        showToast('OTP sent successfully!', 'success');
+        setTimeout(() => {
+          router.push({
+            pathname: '/(auth)/verify',
+            params: { mobile: trimmedPhone }
+          });
+        }, 1200);
+      } else {
+        showToast('Failed to send OTP. Please try again.', 'error');
+      }
+    } catch (err: any) {
+      let errorMessage = 'Failed to send OTP. Please try again.';
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      }
+      showToast(errorMessage, 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.contentContainer}>
-        <View style={styles.imageContainer}>
-          <Image
-            source={require('../../assets/images/login.jpg')}
-            style={styles.image}
-            resizeMode="contain"
-          />
-        </View>
-        <Text style={styles.title}>Your app for safe ride</Text>
-        <Text style={styles.subtitle}>Rides that feels like friendship</Text>
-      </View>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
 
-      <View style={styles.buttonContainer}>
-        <Button 
-          mode="contained" 
-          style={styles.button} 
-          onPress={handlePLogin}
-          contentStyle={styles.buttonContent}
-          icon={() => <Icon name="phone" size={20} color="#000"/>}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          Continue with phone
-        </Button>
-        
-        <Button 
-          mode="outlined" 
-          style={styles.googleButton} 
-          onPress={handleGLogin}
-          contentStyle={styles.buttonContent}
-          icon={() => <Icon name="google" size={20} color="#000"/>}
-        >
-          <Text style={styles.googleButtonText}>Continue with Google</Text>
-        </Button>
-        
-        <Text style={styles.terms}>
-          Joining our app means you agree with our Terms of Use and Privacy Policy. Welcome onboard!
-        </Text>
-      </View>
-    </View>
+          {/* Top Brand Header */}
+          <View style={styles.brandContainer}>
+            <View style={styles.logoBadge}>
+              <MaterialIcons name="directions-car" size={30} color="#FFFFFF" />
+            </View>
+            <Text style={styles.brandTitle}>Saathi</Text>
+          </View>
+
+          {/* Floating Card Container */}
+          <View style={styles.card}>
+            <Text style={styles.title}>Welcome back</Text>
+            <Text style={styles.subtitle}>Log in to your account to continue</Text>
+
+            {/* Input Label */}
+            <Text style={styles.inputLabel}>Phone Number</Text>
+
+            {/* Split Country Code + Phone Input Container */}
+            <View style={styles.inputContainer}>
+              <View style={styles.countrySelector}>
+                <Text style={styles.countryText}>+977</Text>
+                <Ionicons name="chevron-down" size={14} color="#5B403F" style={{ marginLeft: 4 }} />
+              </View>
+              <TextInput
+                style={[styles.input, loading && styles.inputDisabled]}
+                value={phone}
+                onChangeText={setPhone}
+                keyboardType="phone-pad"
+                placeholder="98XXXXXXXX"
+                placeholderTextColor="#A0A0A0"
+                maxLength={15}
+                editable={!loading}
+              />
+            </View>
+
+            {/* Primary Action Button (Energetic Red) */}
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                (loading || !phone.trim()) && styles.buttonDisabled
+              ]}
+              onPress={handleVerify}
+              disabled={loading || !phone.trim()}
+              activeOpacity={0.85}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.primaryButtonText}>Send OTP</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            {/* Social Authentication Buttons */}
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={() => router.push('/(auth)/setup?source=google')}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="logo-google" size={18} color="#EA4335" style={{ marginRight: 10 }} />
+              <Text style={styles.socialButtonText}>Continue with Google</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.socialButton}
+              onPress={() => router.push('/(auth)/setup?source=facebook')}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              <FontAwesome5 name="facebook" size={18} color="#1877F2" style={{ marginRight: 10 }} />
+              <Text style={styles.socialButtonText}>Continue with Facebook</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Footer Links */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              onPress={() => router.push('/(auth)/phoneRegister')}
+              disabled={loading}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.footerLinkText}>
+                Don't have an account? <Text style={styles.signUpHighlight}>Sign up</Text>
+              </Text>
+            </TouchableOpacity>
+
+            <View style={styles.legalRow}>
+              <TouchableOpacity>
+                <Text style={styles.legalText}>Terms of Service</Text>
+              </TouchableOpacity>
+              <Text style={styles.legalDot}> • </Text>
+              <TouchableOpacity>
+                <Text style={styles.legalText}>Privacy Policy</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        type={toast.type}
+        onHide={hideToast}
+        duration={4000}
+      />
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F8F9FA', // Canvas neutral background
   },
-  contentContainer: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? 32 : 16,
+    paddingBottom: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  logoBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 16,
+    backgroundColor: '#B7102A', // Energetic Red
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    shadowColor: '#B7102A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    marginBottom: 8,
   },
-  imageContainer: {
-    width: '100%',
-    height: 300,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 40,
+  brandTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#B7102A',
+    letterSpacing: -0.5,
   },
-  image: {
+  card: {
     width: '100%',
-    height: '90%',
+    maxWidth: 420,
+    backgroundColor: '#FFFFFF', // Pure White surface
+    borderRadius: 24,
+    padding: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.05,
+    shadowRadius: 20,
+    elevation: 6,
+    marginBottom: 24,
   },
   title: {
-    fontSize: 25,
-    fontWeight: 'bold',
-    marginBottom: 10,
-    textAlign: 'center',
-    color: '#333',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#191C1D',
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 15,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  buttonContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-    paddingTop: 20,
-  },
-  button: {
-    width: '100%',
-    backgroundColor: '#00809D',
-    marginBottom: 12,
-    borderRadius: 12,
-  },
-  googleButton: {
-    width: '100%',
-    borderColor: '#dadce0',
-    borderWidth: 1,
-    marginBottom: 20,
-    borderRadius: 12,
-    backgroundColor: '#fff',
-  },
-  googleButtonText: {
+    fontSize: 14,
     fontWeight: '400',
-    color: "#075B5E",
+    color: '#5B403F',
+    marginBottom: 24,
   },
-  buttonContent: {
-    height: 48,
-  },
-  terms: {
+  inputLabel: {
     fontSize: 12,
-    color: '#666',
-    textAlign: 'center',
-    lineHeight: 16,
-    paddingHorizontal: 20,
+    fontWeight: '600',
+    color: '#5B403F',
+    marginBottom: 8,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F5',
+    borderRadius: 12,
+    height: 52,
+    paddingHorizontal: 14,
+    marginBottom: 20,
+  },
+  countrySelector: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 12,
+    borderRightWidth: 1,
+    borderRightColor: '#E4BEBC',
+  },
+  countryText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#191C1D',
+  },
+  input: {
+    flex: 1,
+    height: '100%',
+    paddingLeft: 12,
+    fontSize: 15,
+    color: '#191C1D',
+    fontWeight: '500',
+  },
+  inputDisabled: {
+    opacity: 0.6,
+  },
+  primaryButton: {
+    width: '100%',
+    height: 50,
+    backgroundColor: '#B7102A', // Energetic Red
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#B7102A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+    marginBottom: 8,
+  },
+  buttonDisabled: {
+    backgroundColor: '#E4BEBC',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  primaryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#E4BEBC',
+    opacity: 0.6,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8F6F6E',
+    letterSpacing: 0.5,
+  },
+  socialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E4BEBC',
+    backgroundColor: '#F8F9FA',
+    marginBottom: 12,
+  },
+  socialButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#191C1D',
+  },
+  footer: {
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  footerLinkText: {
+    fontSize: 14,
+    color: '#5B403F',
+    fontWeight: '400',
+    marginBottom: 14,
+  },
+  signUpHighlight: {
+    color: '#B7102A',
+    fontWeight: '700',
+  },
+  legalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  legalText: {
+    fontSize: 12,
+    color: '#5B403F',
+    opacity: 0.85,
+    fontWeight: '500',
+  },
+  legalDot: {
+    fontSize: 12,
+    color: '#5B403F',
+    opacity: 0.5,
   },
 });
 
@@ -138,4 +411,3 @@ export async function logoutAndResetNavigation(router: any) {
   await AsyncStorage.removeItem('userRole');
   router.replace('/login');
 }
-
