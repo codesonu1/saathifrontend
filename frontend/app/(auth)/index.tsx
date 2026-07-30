@@ -9,18 +9,58 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { initializeApiClient, refreshAccessToken, getAccessToken } from '../utils/apiClient';
+import { initializeApiClient, refreshAccessToken, getAccessToken } from '@/services/apiClient';
 import { MaterialIcons, Ionicons } from '@expo/vector-icons';
 
 const SplashScreen = () => {
   const router = useRouter();
 
-  // Sequential pulsing animation for the 3 loading dots
+  // Animations
+  const contentFadeAnim = useRef(new Animated.Value(0)).current;
+  const contentScaleAnim = useRef(new Animated.Value(0.85)).current;
+  const screenOpacityAnim = useRef(new Animated.Value(1)).current;
+
+  // Subtle breathing/pulsing animation for the S logo
+  const breathingAnim = useRef(new Animated.Value(1)).current;
+
+  // Sequential pulsing animation for loading dots
   const dot1Opacity = useRef(new Animated.Value(0.3)).current;
   const dot2Opacity = useRef(new Animated.Value(0.3)).current;
   const dot3Opacity = useRef(new Animated.Value(0.3)).current;
 
   useEffect(() => {
+    // 0-0.5s Entrance animation for logo and brand title
+    Animated.parallel([
+      Animated.timing(contentFadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.spring(contentScaleAnim, {
+        toValue: 1,
+        friction: 6,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Subtle continuous logo breathing effect
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathingAnim, {
+          toValue: 1.06,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(breathingAnim, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+
+    // Pulsing dots animation
     const animateDots = () => {
       Animated.loop(
         Animated.sequence([
@@ -61,55 +101,51 @@ const SplashScreen = () => {
     };
 
     animateDots();
-  }, [dot1Opacity, dot2Opacity, dot3Opacity]);
+  }, [contentFadeAnim, contentScaleAnim, breathingAnim, dot1Opacity, dot2Opacity, dot3Opacity]);
 
   useEffect(() => {
     const checkAuthAndNavigate = async () => {
-      console.log('SplashScreen: Starting checkAuthAndNavigate...');
       const startTime = Date.now();
       try {
-        console.log('SplashScreen: Initializing API Client...');
         await initializeApiClient();
-        console.log('SplashScreen: API Client Initialized.');
         
-        console.log('SplashScreen: Fetching token from AsyncStorage...');
         const token = await AsyncStorage.getItem('accessToken');
-        console.log('SplashScreen: Token fetched:', token);
-        
-        console.log('SplashScreen: Fetching role from AsyncStorage...');
         const role = await AsyncStorage.getItem('userRole');
-        console.log('SplashScreen: Role fetched:', role);
         
         let targetRoute = '/login';
         if (token && role) {
-          console.log('SplashScreen: Stored token and role found. Refreshing token...');
           const refreshed = await refreshAccessToken();
-          console.log('SplashScreen: Token refresh result:', refreshed);
           const validToken = refreshed || (await getAccessToken());
           if (validToken) {
-            targetRoute = role === 'driver' ? '/(driver)' : '/(tabs)';
+            targetRoute = role === 'driver' ? '/(driver)' : '/(tabs)/';
           }
         }
         
-        // Enforce a minimum display time of 1.8 seconds (1800ms) for a premium experience
+        // Professional mobile splash duration: 2.8 seconds (2800ms)
         const elapsedTime = Date.now() - startTime;
-        const remainingTime = 1800 - elapsedTime;
+        const remainingTime = 2800 - elapsedTime;
         if (remainingTime > 0) {
           await new Promise(resolve => setTimeout(resolve, remainingTime));
         }
 
-        console.log('SplashScreen: Navigating to target:', targetRoute);
-        router.replace(targetRoute as any);
+        // Smooth exit fade out before navigating
+        Animated.timing(screenOpacityAnim, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => {
+          router.replace(targetRoute as any);
+        });
       } catch (err) {
-        console.error('SplashScreen: Error in checkAuthAndNavigate:', err);
+        console.error('SplashScreen error:', err);
         router.replace('/login');
       }
     };
     checkAuthAndNavigate();
-  }, [router]);
+  }, [router, screenOpacityAnim]);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Animated.View style={[styles.container, { opacity: screenOpacityAnim }]}>
       <StatusBar barStyle="light-content" backgroundColor="#B90E2B" translucent />
 
       {/* Top Right Route/Node Watermark Illustration */}
@@ -122,11 +158,27 @@ const SplashScreen = () => {
         <Ionicons name="map-outline" size={320} color="rgba(255, 255, 255, 0.07)" />
       </View>
 
-      {/* Center Content */}
-      <View style={styles.centerContent}>
-        {/* Circle Car Badge */}
+      {/* Center Content with Entrance Animation */}
+      <Animated.View 
+        style={[
+          styles.centerContent, 
+          { 
+            opacity: contentFadeAnim, 
+            transform: [{ scale: contentScaleAnim }] 
+          }
+        ]}
+      >
+        {/* Circle Logo Badge */}
         <View style={styles.iconCircle}>
-          <MaterialIcons name="directions-car" size={38} color="#B90E2B" />
+          <Animated.Image
+            source={require('../../assets/images/SplashLogo.png')}
+            style={{
+              width: 54,
+              height: 54,
+              resizeMode: 'contain',
+              transform: [{ scale: breathingAnim }],
+            }}
+          />
         </View>
 
         {/* Brand Name */}
@@ -141,13 +193,13 @@ const SplashScreen = () => {
           </View>
           <Text style={styles.subtitle}>EFFORTLESS MOVEMENT</Text>
         </View>
-      </View>
+      </Animated.View>
 
       {/* Footer */}
       <View style={styles.footerContainer}>
         <Text style={styles.footerText}>Powered by Saathi Global © 2024</Text>
       </View>
-    </SafeAreaView>
+    </Animated.View>
   );
 };
 
