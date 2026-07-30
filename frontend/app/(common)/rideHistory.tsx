@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, StatusBar, ActivityIndicator, SectionList, SafeAreaView } from "react-native"
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, StatusBar, ActivityIndicator, SectionList, SafeAreaView, Platform } from "react-native"
 import Icon from "react-native-vector-icons/MaterialIcons"
 import { useRouter } from "expo-router"
-import { useUserRole } from "../utils/userRoleManager"
-import { rideService, Ride } from '../utils/rideService';
+import { useUserRole } from '@/services/userRoleManager'
+import { rideService, Ride } from '@/services/rideService';
 
 const { width } = Dimensions.get("window")
 
@@ -401,12 +401,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#F8F9FA",
   },
   header: {
-    marginTop: 33,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 44,
+    paddingBottom: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#E9ECEF",

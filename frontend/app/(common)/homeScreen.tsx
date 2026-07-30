@@ -7,7 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import { StatusBar } from "expo-status-bar"
 import SidePanel from "./sidepanel"
 import LocationSearch from '../../components/LocationSearch';
-import { locationService } from '../utils/locationService';
+import { locationService } from '@/services/locationService';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { MaterialIcons } from '@expo/vector-icons'
 import Toast from '../../components/ui/Toast';

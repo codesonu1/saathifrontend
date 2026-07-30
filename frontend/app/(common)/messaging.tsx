@@ -20,9 +20,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
-import webSocketService from '../utils/websocketService';
+import webSocketService from '@/services/websocketService';
 import ProfileImage from '../../components/ProfileImage';
-import { getCurrentUserId } from '../utils/apiClient';
+import { getCurrentUserId } from '@/services/apiClient';
 
 const PRIMARY = '#075B5E';
 const SECONDARY = '#EA2F14';

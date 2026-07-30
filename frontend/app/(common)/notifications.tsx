@@ -10,10 +10,10 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import websocketService from '../utils/websocketService';
-import apiClient from '../utils/apiClient';
+import websocketService from '@/services/websocketService';
+import apiClient from '@/services/apiClient';
 import Toast from '../../components/ui/Toast';
-import { userRoleManager, useUserRole } from '../utils/userRoleManager';
+import { userRoleManager, useUserRole } from '@/services/userRoleManager';
 import * as Haptics from 'expo-haptics';
 
 interface NotificationItem {

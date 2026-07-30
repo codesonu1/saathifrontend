@@ -6,15 +6,15 @@ import Icon from "react-native-vector-icons/MaterialIcons"
 import ProfileImage from '../../components/ProfileImage';
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useState, useEffect, useRef } from "react"
-import { rideService } from '../utils/rideService'
-import { useUserRole } from '../utils/userRoleManager'
+import { rideService } from '@/services/rideService'
+import { useUserRole } from '@/services/userRoleManager'
 import AppModal from '../../components/ui/AppModal';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import Toast from '../../components/ui/Toast';
 import { emitRideRemoved } from './rideHistory';
-import { userRoleManager } from '../utils/userRoleManager';
-import { locationService } from '../utils/locationService';
+import { userRoleManager } from '@/services/userRoleManager';
+import { locationService } from '@/services/locationService';
 
 const { width, height } = Dimensions.get("window")
 
@@ -464,7 +464,7 @@ const RideDetailsScreen = () => {
   };
   
   const handleSupport = () => {
-    router.push("/support")
+    router.push("/(common)/support")
   }
 
   const handleRepeatRide = () => {

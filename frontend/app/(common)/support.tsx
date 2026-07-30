@@ -1,6 +1,6 @@
 "use client"
 
-import { View, Text, TouchableOpacity, StyleSheet, Linking, SafeAreaView, StatusBar, ScrollView } from "react-native"
+import { View, Text, TouchableOpacity, StyleSheet, Linking, SafeAreaView, StatusBar, ScrollView, Platform } from "react-native"
 import Icon from "react-native-vector-icons/MaterialIcons"
 import { useRouter } from "expo-router"
 import Constants from 'expo-constants';
@@ -206,7 +206,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 44,
+    paddingBottom: 12,
     elevation: 4,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -214,14 +215,12 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   backButton: {
-    padding: 8,
-    marginTop: 25,
+    padding: 4,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "600",
     color: "#075B5E",
-    marginTop: 25,
   },
   placeholder: {
     width: 40,

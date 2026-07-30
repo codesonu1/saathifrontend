@@ -5,8 +5,8 @@ import { useRef, useEffect } from "react"
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Dimensions } from "react-native"
 import Icon from "react-native-vector-icons/MaterialIcons"
 import { useRouter } from "expo-router"
-import { userRoleManager } from '../utils/userRoleManager';
-import webSocketService from '../utils/websocketService';
+import { userRoleManager } from '@/services/userRoleManager';
+import webSocketService from '@/services/websocketService';
 import { logoutAndResetNavigation } from '../(auth)/login';
 
 const { width, height: screenHeight } = Dimensions.get("window")
@@ -35,41 +35,41 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
 
   const navigateToProfile = () => {
     if (role === "driver" && onLeaveDriverMode) {
-      onLeaveDriverMode("/profile");
+      onLeaveDriverMode("/(common)/profile");
     } else {
-      router.push("/profile")
+      router.push("/(common)/profile")
       onClose()
     }
   }
 
   const navigateToRideHistory = () => {
     if (role === "driver" && onLeaveDriverMode) {
-      onLeaveDriverMode("/rideHistory");
+      onLeaveDriverMode("/(common)/rideHistory");
     } else {
-      router.push("/rideHistory")
+      router.push("/(common)/rideHistory")
       onClose()
     }
   }
 
   const navigateToSupport = () => {
     if (role === "driver" && onLeaveDriverMode) {
-      onLeaveDriverMode("/support");
+      onLeaveDriverMode("/(common)/support");
     } else {
-      router.push("/support")
+      router.push("/(common)/support")
       onClose()
     }
   }
 
   const navigateToDriverSection = () => {
-    router.push("/driverSection")
+    router.push("/(driver)/driverSection")
     onClose()
   }
 
   const navigateToNotifications = () => {
     if (role === "driver" && onLeaveDriverMode) {
-      onLeaveDriverMode("/notifications");
+      onLeaveDriverMode("/(common)/notifications");
     } else {
-      router.push("/notifications")
+      router.push("/(common)/notifications")
       onClose()
     }
   }
@@ -82,7 +82,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
   const handleChangeRole = async () => {
     if (!rideInProgress) {
       if (role === "driver" && onLeaveDriverMode) {
-        onLeaveDriverMode("/(tabs)");
+        onLeaveDriverMode("/(tabs)/");
         return;
       }
       const newRole = role === "driver" ? "passenger" : "driver";
@@ -93,7 +93,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
       if (newRole === "driver") {
         router.push("/(driver)");
       } else {
-        router.push("/(tabs)");
+        router.push("/(tabs)/");
       }
       onClose();
     } else {

@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, StatusBar, Alert, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, StatusBar, Alert, ActivityIndicator, ScrollView, Platform } from 'react-native';
 import { TextInput, Button } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
-import apiClient from '../utils/apiClient';
+import apiClient from '@/services/apiClient';
 import * as ImagePicker from 'expo-image-picker';
 import AppModal from '../../components/ui/AppModal';
 import Constants from 'expo-constants';
-import { useUserRole } from '../utils/userRoleManager';
+import { useUserRole, userRoleManager } from '@/services/userRoleManager';
+import webSocketService from '@/services/websocketService';
+import { logoutAndResetNavigation } from '../(auth)/login';
 
 const calculateDriverProfitLoss = async (): Promise<{
   profit: number;
@@ -210,6 +212,23 @@ const ProfileSettingsScreen = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSwitchRole = async () => {
+    const newRole = activeRole === 'driver' ? 'passenger' : 'driver';
+    await userRoleManager.setRole(newRole);
+    webSocketService.disconnect('driver');
+    webSocketService.disconnect('passenger');
+    webSocketService.disconnect('ride');
+    if (newRole === 'driver') {
+      router.push('/(driver)');
+    } else {
+      router.push('/(tabs)/');
+    }
+  };
+
+  const handleLogout = async () => {
+    await logoutAndResetNavigation(router);
   };
 
   const handleImageUpload = async () => {
@@ -479,6 +498,85 @@ const ProfileSettingsScreen = () => {
             </View>
           </View>
         )}
+
+        {/* Account & Quick Actions Section */}
+        <View style={{ paddingHorizontal: 16, marginTop: 20, marginBottom: 40 }}>
+          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#191C1D', marginBottom: 12 }}>
+            Account Management
+          </Text>
+
+          {/* Switch Role Option */}
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#F8F9FA',
+              padding: 16,
+              borderRadius: 14,
+              marginBottom: 10,
+              borderWidth: 1,
+              borderColor: '#EAEAEA',
+            }}
+            onPress={handleSwitchRole}
+            activeOpacity={0.8}
+          >
+            <Icon name="swap-horiz" size={22} color="#B7102A" style={{ marginRight: 14 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: '#191C1D' }}>
+                {activeRole === 'driver' ? 'Switch to Passenger Mode' : 'Switch to Driver Mode'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#757575', marginTop: 2 }}>
+                {activeRole === 'driver' ? 'Request rides as a passenger' : 'Accept rides and earn money'}
+              </Text>
+            </View>
+            <Icon name="chevron-right" size={22} color="#9E9E9E" />
+          </TouchableOpacity>
+
+          {/* Support Option */}
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#F8F9FA',
+              padding: 16,
+              borderRadius: 14,
+              marginBottom: 10,
+              borderWidth: 1,
+              borderColor: '#EAEAEA',
+            }}
+            onPress={() => router.push('/(common)/support')}
+            activeOpacity={0.8}
+          >
+            <Icon name="help-outline" size={22} color="#B7102A" style={{ marginRight: 14 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: '#191C1D' }}>Support & Help</Text>
+              <Text style={{ fontSize: 12, color: '#757575', marginTop: 2 }}>Contact us or view FAQs</Text>
+            </View>
+            <Icon name="chevron-right" size={22} color="#9E9E9E" />
+          </TouchableOpacity>
+
+          {/* Logout Option */}
+          <TouchableOpacity
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: '#FFF0F0',
+              padding: 16,
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: '#F8D7DA',
+            }}
+            onPress={handleLogout}
+            activeOpacity={0.8}
+          >
+            <Icon name="logout" size={22} color="#DC3545" style={{ marginRight: 14 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: '#DC3545' }}>Logout</Text>
+              <Text style={{ fontSize: 12, color: '#DC3545', opacity: 0.8, marginTop: 2 }}>Sign out of your account</Text>
+            </View>
+            <Icon name="chevron-right" size={22} color="#DC3545" />
+          </TouchableOpacity>
+        </View>
       </ScrollView>
 
       <AppModal
@@ -496,16 +594,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingTop: 40,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 44,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
-    marginTop: 25,
   },
   headerTitle: {
     fontSize: 20,

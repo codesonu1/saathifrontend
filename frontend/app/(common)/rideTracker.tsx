@@ -20,12 +20,12 @@ import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
-import { locationService } from '../utils/locationService';
-import webSocketService from '../utils/websocketService';
-import { rideService } from '../utils/rideService';
-import { getCurrentUserId } from '../utils/apiClient';
+import { locationService } from '@/services/locationService';
+import webSocketService from '@/services/websocketService';
+import { rideService } from '@/services/rideService';
+import { getCurrentUserId } from '@/services/apiClient';
 import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps';
-import { useUserRole } from '../utils/userRoleManager';
+import { useUserRole } from '@/services/userRoleManager';
 import { throttle } from 'lodash';
 import AppModal from '../../components/ui/AppModal';
 import * as Haptics from 'expo-haptics';
@@ -996,7 +996,7 @@ const RideTrackerScreen = () => {
                 if (isMounted.current) {
                   const role = userRole as string;
                   router.replace({
-                    pathname: '/rideRate',
+                    pathname: '/(tabs)/rideRate',
                     params: {
                       rideId,
                       userRole: role,
@@ -1346,7 +1346,7 @@ const RideTrackerScreen = () => {
                   setTimeout(() => {
                     const role = userRole as string;
                     router.replace({
-                      pathname: '/rideRate',
+                      pathname: '/(tabs)/rideRate',
                       params: {
                         rideId,
                         userRole: role,
@@ -1666,7 +1666,7 @@ const RideTrackerScreen = () => {
               if (isMounted.current) {
                 const role = userRole as string;
                 router.replace({
-                  pathname: '/rideRate',
+                  pathname: '/(tabs)/rideRate',
                   params: {
                     rideId,
                     userRole: role,
@@ -1730,7 +1730,7 @@ const RideTrackerScreen = () => {
           if (isMounted.current) {
             const role = userRole as string;
             router.replace({
-              pathname: '/rideRate',
+              pathname: '/(tabs)/rideRate',
               params: {
                 rideId,
                 userRole: role,
@@ -2060,7 +2060,7 @@ const RideTrackerScreen = () => {
         if (isMounted.current) {
           const role = userRole as string;
           router.replace({
-            pathname: '/rideRate',
+            pathname: '/(tabs)/rideRate',
             params: {
               rideId,
               userRole: role,
@@ -2162,7 +2162,7 @@ const RideTrackerScreen = () => {
           if (isMounted.current) {
             const role = userRole as string;
             router.replace({
-              pathname: '/rideRate',
+              pathname: '/(tabs)/rideRate',
               params: {
                 rideId,
                 userRole: role,
@@ -2749,7 +2749,7 @@ const RideTrackerScreen = () => {
                     setTimeout(() => {
                       const role = userRole as string;
                       router.replace({
-                        pathname: '/rideRate',
+                        pathname: '/(tabs)/rideRate',
                         params: {
                           rideId,
                           userRole: role,
@@ -2804,7 +2804,7 @@ const RideTrackerScreen = () => {
                       setTimeout(() => {
                         const role = userRole as string;
                         router.replace({
-                          pathname: '/rideRate',
+                          pathname: '/(tabs)/rideRate',
                           params: {
                             rideId,
                             userRole: role,
