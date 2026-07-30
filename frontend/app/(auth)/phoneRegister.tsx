@@ -3,7 +3,7 @@ import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator 
 import { Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/FontAwesome';
-import apiClient from '../utils/apiClient';
+import apiClient from '@/services/apiClient';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 

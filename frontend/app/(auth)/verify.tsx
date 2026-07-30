@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons, Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import apiClient, { setAccessToken } from '../utils/apiClient';
+import apiClient, { setAccessToken } from '@/services/apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';

@@ -23,11 +23,11 @@ import { MapPin, Navigation, Clock, User, Car, Map } from 'lucide-react-native';
 import ProfileImage from '../../components/ProfileImage';
 import SidePanel from '../(common)/sidepanel';
 import Toast from '../../components/ui/Toast';
-import { rideService, Ride } from '../utils/rideService';
-import { locationService } from '../utils/locationService';
-import apiClient, { getCurrentUserId } from '../utils/apiClient';
-import webSocketService from '../utils/websocketService';
-import { userRoleManager, useUserRole } from '../utils/userRoleManager';
+import { rideService, Ride } from '@/services/rideService';
+import { locationService } from '@/services/locationService';
+import apiClient, { getCurrentUserId } from '@/services/apiClient';
+import webSocketService from '@/services/websocketService';
+import { userRoleManager, useUserRole } from '@/services/userRoleManager';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import RaiseFareModal from '../../components/ui/RaiseFareModal';
@@ -1118,7 +1118,7 @@ const DriverSection = () => {
             </Text>
             <TouchableOpacity 
               style={styles.kycActionButton}
-              onPress={() => router.push('/registration')}
+              onPress={() => router.push('/(driver)/registration')}
               disabled={loading}
             >
               <Text style={styles.kycActionButtonText}>Start KYC</Text>

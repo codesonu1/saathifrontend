@@ -2,14 +2,14 @@ import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, StatusBar, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
-import apiClient, { setAccessToken, initializeApiClient } from '../utils/apiClient';
-import webSocketService from '../utils/websocketService';
+import apiClient, { setAccessToken, initializeApiClient } from '@/services/apiClient';
+import webSocketService from '@/services/websocketService';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import AppModal from '../../components/ui/AppModal';
 import Toast from '../../components/ui/Toast';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { userRoleManager } from '../utils/userRoleManager';
+import { userRoleManager } from '@/services/userRoleManager';
 
 const CODE_LENGTH = 6;
 
@@ -113,7 +113,7 @@ const AccountRestoration = () => {
           return;
         }
       } else {
-        showModal('error', 'Error', 'No user exists with this phone number. Please register a vehicle.', 'Register Vehicle', () => router.push('/registerVehicle'));
+        showModal('error', 'Error', 'No user exists with this phone number. Please register a vehicle.', 'Register Vehicle', () => router.push('/(driver)/registerVehicle'));
       }
     } catch (err: any) {
       showToast(err?.response?.data?.message || 'Failed to send OTP. Please try again.', 'error');

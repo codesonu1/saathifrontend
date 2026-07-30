@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import apiClient from '../utils/apiClient';
+import apiClient from '@/services/apiClient';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 

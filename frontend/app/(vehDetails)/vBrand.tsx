@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar, ScrollView, TextInput } from 'react-native';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { useDriverRegistration } from '../DriverRegistrationContext';
+import { useDriverRegistration } from '@/context/DriverRegistrationContext';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 
 const Brand = () => {

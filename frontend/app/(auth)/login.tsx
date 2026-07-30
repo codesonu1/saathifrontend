@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import apiClient, { clearAccessToken } from '../utils/apiClient';
+import apiClient, { clearAccessToken } from '@/services/apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../../components/ui/Toast';
 

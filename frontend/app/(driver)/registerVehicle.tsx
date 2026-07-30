@@ -12,8 +12,8 @@ import {
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ChevronRight} from 'lucide-react-native';
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useDriverRegistration } from '../DriverRegistrationContext';
-import apiClient from '../utils/apiClient';
+import { useDriverRegistration } from '@/context/DriverRegistrationContext';
+import apiClient from '@/services/apiClient';
 import AppModal from '../../components/ui/AppModal';
 
 type Vehicle = {

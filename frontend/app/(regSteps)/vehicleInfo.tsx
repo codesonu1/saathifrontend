@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Dimensions, StatusBar, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import apiClient from '../utils/apiClient';
-import { useDriverRegistration } from '../DriverRegistrationContext';
+import apiClient from '@/services/apiClient';
+import { useDriverRegistration } from '@/context/DriverRegistrationContext';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import AppModal from '../../components/ui/AppModal';
 

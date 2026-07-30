@@ -162,6 +162,10 @@ class RideService {
   }
 
   // Create a new ride request
+  async requestRide(rideData: RideRequest): Promise<Ride | null> {
+    return this.createRide(rideData);
+  }
+
   async createRide(rideData: RideRequest): Promise<Ride | null> {
     try {
       // Validate that pickup and dropoff locations are not the same
@@ -751,6 +755,10 @@ class RideService {
   }
 
   // Cancel ride - Use WebSocket instead of REST API
+  async cancelRideRequest(rideId: string, cancellationReason?: string): Promise<boolean> {
+    return this.cancelRide(rideId, cancellationReason);
+  }
+
   async cancelRide(rideId: string, cancellationReason?: string): Promise<boolean> {
     try {
       // Connect to WebSocket if not already connected
@@ -906,4 +914,5 @@ class RideService {
   }
 }
 
-export const rideService = new RideService(); 
+export const rideService = new RideService();
+export default rideService;

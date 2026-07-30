@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Dimensions, StatusBar, Image,
 import { useRouter } from 'expo-router';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import * as ImagePicker from 'expo-image-picker';
-import { useDriverRegistration } from '../DriverRegistrationContext';
+import { useDriverRegistration } from '@/context/DriverRegistrationContext';
 import AppModal from '../../components/ui/AppModal';
 
 const { width, height } = Dimensions.get('window');

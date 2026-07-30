@@ -4,7 +4,7 @@ import { TextInput, Button } from 'react-native-paper';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
-import { useDriverRegistration } from '../DriverRegistrationContext';
+import { useDriverRegistration } from '@/context/DriverRegistrationContext';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import AppModal from '../../components/ui/AppModal';
 

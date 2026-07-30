@@ -16,9 +16,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { Clock, BrushCleaning, Star, CarFront } from 'lucide-react-native';
 import SidePanel from '../(common)/sidepanel';
 import Toast from '../../components/ui/Toast';
-import apiClient from '../utils/apiClient';
-import { userRoleManager } from '../utils/userRoleManager';
-import webSocketService from '../utils/websocketService';
+import apiClient from '@/services/apiClient';
+import { userRoleManager } from '@/services/userRoleManager';
+import webSocketService from '@/services/websocketService';
 
 // Add the profit/loss calculation function
 const calculateDriverProfitLoss = async (): Promise<{
@@ -180,8 +180,8 @@ const DriverHomeScreen = () => {
     closeSidePanel();
   };
 
-  const handleDriverPress = () => router.push('/registerVehicle');
-  const handleAccountPress = () => router.push('/accountRestoration');
+  const handleDriverPress = () => router.push('/(driver)/registerVehicle');
+  const handleAccountPress = () => router.push('/(driver)/accountRestoration');
   const handlePassengerMode = () => router.push('/(tabs)');
 
   if (loading) return (

@@ -1,6 +1,6 @@
 import { Stack} from 'expo-router';
 import React from 'react';
-// import { DriverRegistrationProvider } from '../DriverRegistrationContext';
+// import { DriverRegistrationProvider } from '@/context/DriverRegistrationContext';
 
 export default function RegLayout() {
   return (
