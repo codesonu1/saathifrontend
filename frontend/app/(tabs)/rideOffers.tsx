@@ -13,16 +13,17 @@ import {
   Easing,
   Platform,
   SafeAreaView,
+  ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 
-import { rideService, RideOffer } from '../utils/rideService';
-import webSocketService from '../utils/websocketService';
-import { useUserRole } from '../utils/userRoleManager';
-import { userRoleManager } from '../utils/userRoleManager';
+import { rideService, RideOffer } from '@/services/rideService';
+import webSocketService from '@/services/websocketService';
+import { useUserRole } from '@/services/userRoleManager';
+import { userRoleManager } from '@/services/userRoleManager';
 import ProfileImage from '../../components/ProfileImage';
 import * as Haptics from 'expo-haptics';
 
@@ -123,7 +124,7 @@ const RideOffersScreen = () => {
   useEffect(() => {
     if (!rideId) {
       showToast('No ride ID provided', 'error');
-      router.push('/(tabs)');
+      router.push('/(tabs)/');
       return;
     }
     loadOffers();
@@ -235,11 +236,15 @@ const RideOffersScreen = () => {
     showToast('Cancelling ride request...', 'info');
 
     try {
-      await rideService.cancelRideRequest(rideId);
+      if (rideService.cancelRide) {
+        await rideService.cancelRide(rideId);
+      } else if (rideService.cancelRideRequest) {
+        await rideService.cancelRideRequest(rideId);
+      }
       setRideCancelled(true);
       showToast('Ride request cancelled', 'info');
       setTimeout(() => {
-        router.push('/(tabs)');
+        router.push('/(tabs)/');
       }, 1000);
     } catch (error: any) {
       showToast(error.message || 'Failed to cancel ride request', 'error');
@@ -292,7 +297,7 @@ const RideOffersScreen = () => {
           if (cancelledRideId === rideId) {
             showToast('Ride request has been cancelled', 'info');
             setTimeout(() => {
-              router.push('/(tabs)');
+              router.push('/(tabs)/');
             }, 1500);
           }
         }
@@ -537,7 +542,7 @@ const RideOffersScreen = () => {
       <View style={styles.bottomTabBar}>
         <TouchableOpacity
           style={styles.activeTabItem}
-          onPress={() => router.push('/(tabs)')}
+          onPress={() => router.push('/(tabs)/')}
         >
           <Ionicons name="home" size={18} color="#FFFFFF" />
           <Text style={styles.activeTabText}>Home</Text>
@@ -553,10 +558,10 @@ const RideOffersScreen = () => {
 
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => router.push('/(common)/support')}
+          onPress={() => router.push('/(common)/notifications')}
         >
-          <Ionicons name="help-circle-outline" size={20} color="#5B403F" />
-          <Text style={styles.tabText}>Support</Text>
+          <Ionicons name="notifications-outline" size={20} color="#5B403F" />
+          <Text style={styles.tabText}>Notifications</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -595,13 +600,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FA',
   },
   header: {
-    paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight || 20 : 12,
-    height: 60,
-    backgroundColor: '#F8F9FA',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 44,
+    paddingBottom: 12,
+    backgroundColor: '#F8F9FA',
   },
   headerIconButton: {
     width: 36,
@@ -616,9 +621,10 @@ const styles = StyleSheet.create({
     color: '#191C1D',
   },
   scrollContent: {
+    flexGrow: 1,
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 80,
+    paddingTop: 8,
+    paddingBottom: 120,
   },
   searchingHeroCard: {
     backgroundColor: '#FFFFFF',
@@ -949,12 +955,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 64,
+    height: Platform.OS === 'ios' ? 78 : 70,
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     paddingHorizontal: 12,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
     borderTopWidth: 1,
     borderTopColor: '#EFEFEF',
     zIndex: 1000,

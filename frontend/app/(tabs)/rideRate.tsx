@@ -4,8 +4,8 @@ import React, { useState, useEffect } from "react"
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, TextInput, StatusBar, SafeAreaView, Animated, KeyboardAvoidingView, Platform, ScrollView } from "react-native"
 import Icon from "react-native-vector-icons/MaterialIcons"
 import { useRouter, useLocalSearchParams } from "expo-router"
-import { rideService } from '../utils/rideService'
-import webSocketService from '../utils/websocketService'
+import { rideService } from '@/services/rideService'
+import webSocketService from '@/services/websocketService'
 
 const { width, height } = Dimensions.get("window")
 
