@@ -13,9 +13,9 @@ import LocationSearch from "../../components/LocationSearch"
 import RaiseFareModal from "../../components/ui/RaiseFareModal"
 import ProfileImage from "../../components/ProfileImage"
 import PostLoginLoadingScreen from "../../components/ui/PostLoginLoadingScreen"
-import { locationService, LocationData, GoogleMapsPlace } from "../utils/locationService"
-import { rideService, VehicleType, RideRequest } from "../utils/rideService"
-import { userRoleManager, useUserRole } from "../utils/userRoleManager"
+import { locationService, LocationData, GoogleMapsPlace } from '@/services/locationService'
+import { rideService, VehicleType, RideRequest } from '@/services/rideService'
+import { userRoleManager, useUserRole } from '@/services/userRoleManager'
 import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps'
 
 const { width, height } = Dimensions.get("window")
@@ -220,14 +220,45 @@ const PassengerHomeScreen = () => {
     }
   };
 
+  const extractCoordinates = (place: any): { lat: number; lng: number } | null => {
+    if (!place) return null;
+    let lat: number | undefined;
+    let lng: number | undefined;
+
+    if (place.location && typeof place.location.lat === 'number' && typeof place.location.lng === 'number') {
+      lat = place.location.lat;
+      lng = place.location.lng;
+    } else if (place.location && typeof place.location.latitude === 'number' && typeof place.location.longitude === 'number') {
+      lat = place.location.latitude;
+      lng = place.location.longitude;
+    } else if (typeof place.latitude === 'number' && typeof place.longitude === 'number') {
+      lat = place.latitude;
+      lng = place.longitude;
+    } else if (typeof place.lat === 'number' && typeof place.lng === 'number') {
+      lat = place.lat;
+      lng = place.lng;
+    }
+
+    if (lat !== undefined && lng !== undefined && !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+    return null;
+  };
+
   const handlePickupLocationSelect = (place: GoogleMapsPlace) => {
-    setPickupLocation(place.name);
-    setPickupCoords({ lat: place.latitude, lng: place.longitude });
+    setPickupLocation(place.name || place.address || 'Kathmandu');
+    const coords = extractCoordinates(place);
+    if (coords) {
+      setPickupCoords(coords);
+    }
   };
 
   const handleDestinationLocationSelect = (place: GoogleMapsPlace) => {
-    setDestinationLocation(place.name);
-    setDestinationCoords({ lat: place.latitude, lng: place.longitude });
+    setDestinationLocation(place.name || place.address || 'Destination');
+    const coords = extractCoordinates(place);
+    if (coords) {
+      setDestinationCoords(coords);
+    }
   };
 
   const [routePolyline, setRoutePolyline] = useState<{ latitude: number; longitude: number }[]>([]);
@@ -271,13 +302,42 @@ const PassengerHomeScreen = () => {
     }
     setLoading(true);
     try {
-      const pLat = pickupCoords ? pickupCoords.lat : (currentLocation?.latitude || 27.7172);
-      const pLng = pickupCoords ? pickupCoords.lng : (currentLocation?.longitude || 85.324);
-      const dLat = destinationCoords ? destinationCoords.lat : 27.7172;
-      const dLng = destinationCoords ? destinationCoords.lng : 85.324;
+      // Resolve valid Mongo ObjectId for vehicleType to pass DTO validation
+      let vtId = selectedVehicleType?._id;
+      if (!vtId || vtId === 'bike' || vtId === 'car') {
+        const types = vehicleTypes.length > 0 ? vehicleTypes : await rideService.getVehicleTypes();
+        const matchedVt = getVehicleTypeByCategory(selectedCategory, types);
+        if (matchedVt) {
+          vtId = matchedVt._id;
+          setSelectedVehicleType(matchedVt);
+        }
+      }
+
+      if (!vtId) {
+        showToast('Please select a vehicle type', 'error');
+        setLoading(false);
+        return;
+      }
+
+      let pLat = pickupCoords ? Number(pickupCoords.lat) : (currentLocation?.latitude || 27.7172);
+      let pLng = pickupCoords ? Number(pickupCoords.lng) : (currentLocation?.longitude || 85.324);
+      let dLat = destinationCoords ? Number(destinationCoords.lat) : (pLat + 0.03);
+      let dLng = destinationCoords ? Number(destinationCoords.lng) : (pLng + 0.03);
+
+      // Validate numeric boundaries for DTO (-90 to 90 for lat, -180 to 180 for lng)
+      if (typeof pLat !== 'number' || isNaN(pLat) || pLat < -90 || pLat > 90) pLat = 27.7172;
+      if (typeof pLng !== 'number' || isNaN(pLng) || pLng < -180 || pLng > 180) pLng = 85.324;
+      if (typeof dLat !== 'number' || isNaN(dLat) || dLat < -90 || dLat > 90) dLat = pLat + 0.03;
+      if (typeof dLng !== 'number' || isNaN(dLng) || dLng < -180 || dLng > 180) dLng = pLng + 0.03;
+
+      if (pickupLocation.trim().toLowerCase() === destinationLocation.trim().toLowerCase()) {
+        showToast('Pickup and destination cannot be the same', 'error');
+        setLoading(false);
+        return;
+      }
 
       const rideRequest: RideRequest = {
-        vehicleType: selectedVehicleType?._id || 'bike',
+        vehicleType: vtId,
         pickUpLocation: pickupLocation,
         pickUpLat: pLat,
         pickUpLng: pLng,
@@ -288,7 +348,12 @@ const PassengerHomeScreen = () => {
         comments: '',
       };
 
-      const rideData = await rideService.requestRide(rideRequest);
+      const rideData = await rideService.createRide(rideRequest);
+      if (!rideData || !rideData._id) {
+        showToast('Failed to create ride request', 'error');
+        setLoading(false);
+        return;
+      }
 
       router.push({
         pathname: '/(tabs)/rideOffers',
@@ -339,15 +404,9 @@ const PassengerHomeScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      {/* Top Header Bar (White Header matching Stitch Reference) */}
+      {/* Top Header Bar (Clean Header matching Stitch Reference) */}
       <View style={styles.topHeaderBar}>
-        <TouchableOpacity
-          style={styles.headerIconButton}
-          onPress={() => setSidePanelVisible(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="menu" size={24} color="#191C1D" />
-        </TouchableOpacity>
+        <View style={{ width: 38 }} />
 
         <Text style={styles.headerBrandTitle}>Saathi</Text>
 
@@ -689,10 +748,10 @@ const PassengerHomeScreen = () => {
 
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => router.push('/(common)/support')}
+          onPress={() => router.push('/(common)/notifications')}
         >
-          <Ionicons name="help-circle-outline" size={20} color="#5B403F" />
-          <Text style={styles.tabText}>Support</Text>
+          <Ionicons name="notifications-outline" size={20} color="#5B403F" />
+          <Text style={styles.tabText}>Notifications</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -1123,12 +1182,13 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 64,
+    height: Platform.OS === 'ios' ? 78 : 70,
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     paddingHorizontal: 12,
+    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
     borderTopWidth: 1,
     borderTopColor: '#EFEFEF',
     zIndex: 1000,

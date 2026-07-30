@@ -10,7 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { locationService, GoogleMapsPlace } from '../app/utils/locationService';
+import { locationService, GoogleMapsPlace } from '@/services/locationService';
 import Toast from './ui/Toast';
 
 interface LocationSearchProps {
