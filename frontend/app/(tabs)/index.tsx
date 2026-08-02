@@ -42,8 +42,8 @@ const PassengerHomeScreen = () => {
   const [carFare, setCarFare] = useState<number | null>(null)
   const [autoAccept, setAutoAccept] = useState<boolean>(true)
 
-  // Sliding bottom sheet state and animation
-  const collapsedVal = height * 0.42;
+  // Sliding bottom sheet state and animation (Collapsed: ~40% anchored at bottom, Expanded: ~70% upward over map)
+  const collapsedVal = height * 0.30;
   const expandedVal = 0;
   const sheetY = useRef(new Animated.Value(collapsedVal)).current;
   const [isExpanded, setIsExpanded] = useState(false);
@@ -67,18 +67,18 @@ const PassengerHomeScreen = () => {
       onPanResponderMove: (evt, gestureState) => {
         const startVal = isExpanded ? expandedVal : collapsedVal;
         const newVal = startVal + gestureState.dy;
-        const clampedVal = Math.max(0, Math.min(height * 0.6, newVal));
+        const clampedVal = Math.max(expandedVal, Math.min(collapsedVal, newVal));
         sheetY.setValue(clampedVal);
       },
       onPanResponderRelease: (evt, gestureState) => {
-        if (gestureState.vy < -0.5) {
+        if (gestureState.vy < -0.3 || gestureState.dy < -50) {
           toggleExpand(true);
-        } else if (gestureState.vy > 0.5) {
+        } else if (gestureState.vy > 0.3 || gestureState.dy > 50) {
           toggleExpand(false);
         } else {
           const currentY = (isExpanded ? expandedVal : collapsedVal) + gestureState.dy;
-          const halfway = collapsedVal / 2;
-          if (currentY < halfway) {
+          const midpoint = (collapsedVal + expandedVal) / 2;
+          if (currentY < midpoint) {
             toggleExpand(true);
           } else {
             toggleExpand(false);
@@ -253,6 +253,13 @@ const PassengerHomeScreen = () => {
     }
   };
 
+  const handleDestinationChangeText = (text: string) => {
+    setDestinationLocation(text);
+    if (!text || text.trim() === '') {
+      setDestinationCoords(null);
+    }
+  };
+
   const handleDestinationLocationSelect = (place: GoogleMapsPlace) => {
     setDestinationLocation(place.name || place.address || 'Destination');
     const coords = extractCoordinates(place);
@@ -396,6 +403,15 @@ const PassengerHomeScreen = () => {
     })
   }
 
+  // Determine whether destination has been selected (Triggers ONLY when a place is selected with valid coordinates)
+  const isDestinationSelected = Boolean(
+    destinationCoords && 
+    typeof destinationCoords.lat === 'number' && 
+    !isNaN(destinationCoords.lat) && 
+    typeof destinationCoords.lng === 'number' && 
+    !isNaN(destinationCoords.lng)
+  );
+
   if (!currentLocation) {
     return <PostLoginLoadingScreen statusText="Finding your location..." />;
   }
@@ -470,39 +486,41 @@ const PassengerHomeScreen = () => {
           )}
         </MapView>
 
-        {/* Floating Top Search Card (Floating Over Map) */}
-        <View style={styles.topSearchCard}>
-          <View style={styles.searchRow}>
-            <Ionicons name="radio-button-off" size={20} color="#B7102A" style={{ marginRight: 10 }} />
-            <View style={{ flex: 1 }}>
-              <LocationSearch
-                placeholder="Kathmandu"
-                value={pickupLocation}
-                onChangeText={setPickupLocation}
-                onLocationSelect={handlePickupLocationSelect}
-                iconColor="#B7102A"
-                disabled={loading}
-                boundingBox={KATHMANDU_BOUNDING_BOX}
-              />
+        {/* STATE 2: Floating Top Search Card (ONLY shown when destination is selected) */}
+        {isDestinationSelected && (
+          <View style={styles.topSearchCard}>
+            <View style={styles.searchRow}>
+              <Ionicons name="radio-button-off" size={20} color="#B7102A" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <LocationSearch
+                  placeholder="Kathmandu"
+                  value={pickupLocation}
+                  onChangeText={setPickupLocation}
+                  onLocationSelect={handlePickupLocationSelect}
+                  iconColor="#B7102A"
+                  disabled={loading}
+                  boundingBox={KATHMANDU_BOUNDING_BOX}
+                />
+              </View>
             </View>
-          </View>
 
-          <View style={[styles.searchRow, styles.destinationSearchRow]}>
-            <Ionicons name="location" size={20} color="#B7102A" style={{ marginRight: 10 }} />
-            <View style={{ flex: 1 }}>
-              <LocationSearch
-                placeholder="To (Destination)"
-                value={destinationLocation}
-                onChangeText={setDestinationLocation}
-                onLocationSelect={handleDestinationLocationSelect}
-                iconColor="#B7102A"
-                disabled={loading}
-                boundingBox={KATHMANDU_BOUNDING_BOX}
-              />
+            <View style={[styles.searchRow, styles.destinationSearchRow]}>
+              <Ionicons name="location" size={20} color="#B7102A" style={{ marginRight: 10 }} />
+              <View style={{ flex: 1 }}>
+                <LocationSearch
+                  placeholder="To (Destination)"
+                  value={destinationLocation}
+                  onChangeText={handleDestinationChangeText}
+                  onLocationSelect={handleDestinationLocationSelect}
+                  iconColor="#B7102A"
+                  disabled={loading}
+                  boundingBox={KATHMANDU_BOUNDING_BOX}
+                />
+              </View>
+              <Ionicons name="search" size={20} color="#8F6F6E" style={{ marginLeft: 6 }} />
             </View>
-            <Ionicons name="search" size={20} color="#8F6F6E" style={{ marginLeft: 6 }} />
           </View>
-        </View>
+        )}
       </View>
 
       {/* Sliding Bottom Sheet */}
@@ -533,6 +551,41 @@ const PassengerHomeScreen = () => {
             keyboardShouldPersistTaps="handled"
             pointerEvents="auto"
           >
+            {/* Location Section inside Bottom Panel (Layout-stable before and after destination selection) */}
+            {!isDestinationSelected ? (
+              <View style={styles.bottomLocationPanel}>
+                <View style={styles.searchRow}>
+                  <Ionicons name="radio-button-off" size={20} color="#B7102A" style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <LocationSearch
+                      placeholder="Kathmandu"
+                      value={pickupLocation}
+                      onChangeText={setPickupLocation}
+                      onLocationSelect={handlePickupLocationSelect}
+                      iconColor="#B7102A"
+                      disabled={loading}
+                      boundingBox={KATHMANDU_BOUNDING_BOX}
+                    />
+                  </View>
+                </View>
+
+                <View style={[styles.searchRow, styles.destinationSearchRow]}>
+                  <Ionicons name="location" size={20} color="#B7102A" style={{ marginRight: 10 }} />
+                  <View style={{ flex: 1 }}>
+                    <LocationSearch
+                      placeholder="To (Destination)"
+                      value={destinationLocation}
+                      onChangeText={handleDestinationChangeText}
+                      onLocationSelect={handleDestinationLocationSelect}
+                      iconColor="#B7102A"
+                      disabled={loading}
+                      boundingBox={KATHMANDU_BOUNDING_BOX}
+                    />
+                  </View>
+                  <Ionicons name="search" size={20} color="#8F6F6E" style={{ marginLeft: 6 }} />
+                </View>
+              </View>
+            ) : null}
             {/* Segmented Category Pill Switcher (Bike / Car) */}
             <View style={styles.categoryTabContainer}>
               <TouchableOpacity
@@ -798,7 +851,7 @@ const styles = StyleSheet.create({
   },
   topHeaderBar: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? StatusBar.currentHeight || 28 : 44,
+    top: Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 44,
     left: 0,
     right: 0,
     height: 56,
@@ -838,7 +891,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 64,
+    bottom: 70,
+    zIndex: 1,
   },
   map: {
     flex: 1,
@@ -846,7 +900,7 @@ const styles = StyleSheet.create({
   },
   topSearchCard: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 64 : 108,
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 64 : 108,
     left: 16,
     right: 16,
     backgroundColor: '#FFFFFF',
@@ -857,6 +911,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 12,
     elevation: 6,
+    zIndex: 10,
   },
   searchRow: {
     flexDirection: 'row',
@@ -870,6 +925,14 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderWidth: 1,
     borderColor: '#E4BEBC',
+  },
+  bottomLocationPanel: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#EAEAEA',
   },
   userMarker: {
     width: 36,
@@ -886,10 +949,10 @@ const styles = StyleSheet.create({
   },
   bottomSheetWrapper: {
     position: 'absolute',
-    bottom: 64,
+    bottom: 70,
     left: 0,
     right: 0,
-    height: height * 0.52,
+    height: height * 0.70,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
@@ -898,7 +961,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
-    zIndex: 2,
+    zIndex: 20,
   },
   dragHandleContainer: {
     alignItems: 'center',

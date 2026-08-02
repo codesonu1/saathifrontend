@@ -142,23 +142,8 @@ const InteractiveNotification: React.FC = () => {
     }
   };
 
-  if (!visible || !data) return null;
-
-  // Determine icon & color based on type
-  const getHeaderDetails = () => {
-    switch (data.type) {
-      case 'ride_request':
-        return { icon: 'car-sport', color: '#10B981', label: 'NEW RIDE REQUEST' };
-      case 'ride_accepted':
-        return { icon: 'checkmark-done-circle', color: '#00B0FF', label: 'RIDE ACCEPTED' };
-      case 'message':
-        return { icon: 'chatbubble-ellipses', color: '#FF9800', label: 'NEW CHAT MESSAGE' };
-      case 'ride_completed':
-        return { icon: 'flag', color: '#4CAF50', label: 'TRIP COMPLETED' };
-      default:
-        return { icon: 'notifications', color: '#075B5E', label: 'SAATHI ALERT' };
-    }
-  };
+  // Suppress floating notification popup UI card completely as requested
+  return null;
 
   const header = getHeaderDetails();
 

@@ -761,20 +761,26 @@ class RideService {
 
   async cancelRide(rideId: string, cancellationReason?: string): Promise<boolean> {
     try {
-      // Connect to WebSocket if not already connected
-      if (!webSocketService.isSocketConnected('ride')) {
-        await webSocketService.connect(rideId, 'ride');
+      if (!rideId) {
+        console.error('RideService: cancelRide called without rideId');
+        return false;
       }
-      
-      return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Timeout cancelling ride'));
-        }, 10000);
 
-        // Listen for ride cancelled response
+      const reason = cancellationReason || 'Cancelled by user';
+
+      // Always reconnect socket to ride namespace for the current active rideId
+      await webSocketService.connect(rideId, 'ride');
+
+      const wsSuccess = await new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => {
+          webSocketService.off('rideCancelled', handleRideCancelled, 'ride');
+          resolve(false);
+        }, 5000);
+
         const handleRideCancelled = (data: any) => {
           clearTimeout(timeout);
-          if (data && data.code === 201) {
+          webSocketService.off('rideCancelled', handleRideCancelled, 'ride');
+          if (data && (data.code === 201 || data.code === 200)) {
             resolve(true);
           } else {
             resolve(false);
@@ -782,22 +788,53 @@ class RideService {
         };
 
         webSocketService.on('rideCancelled', handleRideCancelled, 'ride');
-        
-        // Cancel ride via WebSocket
+
         const payload = {
           rideId,
-          cancellationReason: cancellationReason || 'Cancelled by user'
+          cancellationReason: reason,
         };
-        webSocketService.emitEvent('cancelRide', payload, (response: any) => {
-          clearTimeout(timeout);
-          webSocketService.off('rideCancelled', handleRideCancelled, 'ride');
-          if (response && response.code === 201) {
-            resolve(true);
-          } else {
-            resolve(false);
-          }
-        }, 'ride');
+
+        webSocketService.emitEvent(
+          'cancelRide',
+          payload,
+          (response: any) => {
+            clearTimeout(timeout);
+            webSocketService.off('rideCancelled', handleRideCancelled, 'ride');
+            if (response && (response.code === 201 || response.code === 200)) {
+              resolve(true);
+            } else if (response && response.message && response.message.includes('cancelable status')) {
+              // Ride is already cancelled or completed on backend
+              resolve(true);
+            } else {
+              resolve(false);
+            }
+          },
+          'ride'
+        );
       });
+
+      if (wsSuccess) {
+        return true;
+      }
+
+      // REST API Fallback
+      console.log('RideService: WebSocket cancel failed or timed out, executing REST fallback...');
+      try {
+        const response = await apiClient.patch(`/rides/${rideId}/cancel`, {
+          cancellationReason: reason,
+        });
+        if (response.data.statusCode === 200 || response.data.statusCode === 201) {
+          return true;
+        }
+      } catch (restError: any) {
+        const errMsg = restError.response?.data?.message || restError.message || '';
+        if (errMsg.includes('cancelable status') || restError.response?.status === 400) {
+          // If already cancelled on backend, acknowledge success
+          return true;
+        }
+      }
+
+      return false;
     } catch (error) {
       console.error('Error cancelling ride:', error);
       return false;

@@ -1,25 +1,35 @@
-"use client"
-
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, StatusBar, ActivityIndicator, SectionList, SafeAreaView, Platform } from "react-native"
-import Icon from "react-native-vector-icons/MaterialIcons"
-import { useRouter } from "expo-router"
-import { useUserRole } from '@/services/userRoleManager'
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  TouchableOpacity,
+  StatusBar,
+  ActivityIndicator,
+  SectionList,
+  SafeAreaView,
+  Platform,
+  TextInput,
+} from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { useUserRole } from '@/services/userRoleManager';
 import { rideService, Ride } from '@/services/rideService';
 
-const { width } = Dimensions.get("window")
+const { width } = Dimensions.get('window');
 
-// Add a simple event emitter for ride removal
+// Simple event emitter for ride removal
 const rideRemovedListeners: ((id: string) => void)[] = [];
 export const onRideRemoved = (cb: (id: string) => void) => {
   rideRemovedListeners.push(cb);
   return () => {
     const i = rideRemovedListeners.indexOf(cb);
     if (i > -1) rideRemovedListeners.splice(i, 1);
-  }
+  };
 };
 export const emitRideRemoved = (id: string) => {
-  rideRemovedListeners.forEach(cb => cb(id));
+  rideRemovedListeners.forEach((cb) => cb(id));
 };
 
 interface SectionData {
@@ -28,199 +38,129 @@ interface SectionData {
 }
 
 const RideHistoryScreen = () => {
-  const router = useRouter()
+  const router = useRouter();
   const userRole = useUserRole();
 
-  const [sections, setSections] = useState<SectionData[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [allRides, setAllRides] = useState<Ride[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const getSectionTitle = (dateVal: Date | string) => {
+  const formatSectionHeaderTitle = (dateVal: Date | string) => {
     const d = new Date(dateVal);
-    const day = d.getDate();
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const month = monthNames[d.getMonth()];
-    return `${day} ${month}`; // e.g. "8 Aug"
+    const now = new Date();
+    
+    // Reset hours for day comparison
+    const dDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const nowDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const diffTime = nowDate.getTime() - dDate.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December',
+    ];
+
+    const month = monthNames[d.getMonth()].toUpperCase();
+    const dayNum = d.getDate();
+
+    if (diffDays === 0) {
+      return `TODAY, ${month} ${dayNum}`;
+    } else if (diffDays === 1) {
+      return `YESTERDAY, ${month} ${dayNum}`;
+    } else {
+      return `${d.getDate()} ${month} ${d.getFullYear()}`;
+    }
   };
 
   const groupRidesByDate = (rides: Ride[]) => {
     const groups: { [key: string]: Ride[] } = {};
-    
-    // Sort rides by date descending first
+
+    // Sort rides by date descending
     const sortedRides = [...rides].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return dateB - dateA;
     });
 
-    sortedRides.forEach(ride => {
+    sortedRides.forEach((ride) => {
       if (!ride.createdAt) return;
-      const title = getSectionTitle(ride.createdAt);
+      const title = formatSectionHeaderTitle(ride.createdAt);
       if (!groups[title]) {
         groups[title] = [];
       }
       groups[title].push(ride);
     });
 
-    return Object.keys(groups).map(title => ({
+    return Object.keys(groups).map((title) => ({
       title,
-      data: groups[title]
+      data: groups[title],
     }));
   };
 
   const fetchHistory = async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true);
+    setError(null);
     try {
-      let rides: Ride[] = []
+      let rides: Ride[] = [];
       if (userRole === 'driver') {
-        rides = await rideService.getDriverRides()
+        rides = await rideService.getDriverRides();
       } else {
-        rides = await rideService.getPassengerRides()
+        rides = await rideService.getPassengerRides();
       }
-      
-      // Filter for completed or cancelled rides
-      const filteredRides = rides.filter(r => r.status === 'completed' || r.status === 'cancelled');
-      
-      // Generate a random price for the fake completed car ride
-      const randomCarPrice = Math.floor(Math.random() * 200) + 150; // Random price between 150 and 350
-      const mockRides: Ride[] = [
-        {
-          _id: 'mock_ride_1',
-          status: 'completed',
-          offerPrice: randomCarPrice,
-          pickUpLocation: 'Kathmandu Mall',
-          dropOffLocation: 'Road Division Bhaktapur, Katunje',
-          createdAt: new Date(), // Today
-          updatedAt: new Date(),
-          vehicleType: {
-            _id: 'vt_car',
-            name: 'Car',
-            basePrice: 150,
-            pricePerKm: 35
-          },
-          passenger: {
-            _id: 'p_1',
-            firstName: 'Sagar',
-            lastName: 'Thapa',
-            mobile: '+9779812345678'
-          },
-          driver: {
-            _id: 'd_1',
-            firstName: 'Ramesh',
-            lastName: 'Adhikari',
-            mobile: '+9779876543210',
-            rating: 4.8
-          }
-        },
-        {
-          _id: 'mock_ride_2',
-          status: 'completed',
-          offerPrice: 120,
-          pickUpLocation: 'Ekkakrit Marg',
-          dropOffLocation: 'Srijana Nagar',
-          createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000), // Yesterday
-          updatedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          vehicleType: {
-            _id: 'vt_bike',
-            name: 'Bike',
-            basePrice: 50,
-            pricePerKm: 15
-          },
-          passenger: {
-            _id: 'p_1',
-            firstName: 'Sagar',
-            lastName: 'Thapa',
-            mobile: '+9779812345678'
-          },
-          driver: {
-            _id: 'd_2',
-            firstName: 'Sita',
-            lastName: 'Shrestha',
-            mobile: '+9779811111111',
-            rating: 4.9
-          }
-        },
-        {
-          _id: 'mock_ride_3',
-          status: 'cancelled',
-          offerPrice: 0,
-          pickUpLocation: 'Agyat Sadak',
-          dropOffLocation: 'Albert English Boarding School',
-          createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
-          updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-          vehicleType: {
-            _id: 'vt_car',
-            name: 'Car',
-            basePrice: 150,
-            pricePerKm: 35
-          },
-          passenger: {
-            _id: 'p_1',
-            firstName: 'Sagar',
-            lastName: 'Thapa',
-            mobile: '+9779812345678'
-          }
-        },
-        {
-          _id: 'mock_ride_4',
-          status: 'completed',
-          offerPrice: 85,
-          pickUpLocation: 'F099',
-          dropOffLocation: 'Sampanna Stores',
-          createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
-          updatedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-          vehicleType: {
-            _id: 'vt_car',
-            name: 'Car',
-            basePrice: 150,
-            pricePerKm: 35
-          },
-          passenger: {
-            _id: 'p_1',
-            firstName: 'Sagar',
-            lastName: 'Thapa',
-            mobile: '+9779812345678'
-          },
-          driver: {
-            _id: 'd_1',
-            firstName: 'Ramesh',
-            lastName: 'Adhikari',
-            mobile: '+9779876543210',
-            rating: 4.8
-          }
-        }
-      ];
-      
-      const combinedRides = [...filteredRides];
-      const grouped = groupRidesByDate(combinedRides);
-      setSections(grouped);
+
+      // Filter exclusively for completed or cancelled rides
+      const filteredRides = rides.filter(
+        (r) => r.status === 'completed' || r.status === 'cancelled'
+      );
+
+      setAllRides(filteredRides);
     } catch (err) {
-      console.error('[RideHistory] Error fetching rides:', err)
-      setSections([])
-      setError('Failed to load ride history')
+      console.error('[RideHistory] Error fetching rides:', err);
+      setAllRides([]);
+      setError('Failed to load ride history');
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetchHistory()
-  }, [userRole])
+    fetchHistory();
+  }, [userRole]);
 
   useEffect(() => {
-    // Listen for ride removal
     const unsub = onRideRemoved((removedId) => {
-      setSections(prev => {
-        const updated = prev.map(section => ({
-          ...section,
-          data: section.data.filter(r => r._id !== removedId)
-        })).filter(section => section.data.length > 0);
-        return updated;
-      });
+      setAllRides((prev) => prev.filter((r) => r._id !== removedId));
     });
     return () => unsub();
   }, []);
+
+  // Compute filtered rides based on search query
+  const filteredRidesList = useMemo(() => {
+    if (!searchQuery.trim()) return allRides;
+    const query = searchQuery.toLowerCase().trim();
+    return allRides.filter((ride) => {
+      const pickup = (ride.pickUpLocation || ride.pickUp?.location || '').toLowerCase();
+      const dropoff = (ride.dropOffLocation || ride.dropOff?.location || '').toLowerCase();
+      const vehicle = (ride.vehicleType?.name || '').toLowerCase();
+      return pickup.includes(query) || dropoff.includes(query) || vehicle.includes(query);
+    });
+  }, [allRides, searchQuery]);
+
+  const sections: SectionData[] = useMemo(() => {
+    return groupRidesByDate(filteredRidesList);
+  }, [filteredRidesList]);
+
+  // Compute monthly stats
+  const totalRidesCount = allRides.length;
+  const thisMonthRidesCount = useMemo(() => {
+    const now = new Date();
+    return allRides.filter((r) => {
+      if (!r.createdAt) return false;
+      const d = new Date(r.createdAt);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length;
+  }, [allRides]);
 
   const handleRidePress = (ride: Ride) => {
     router.push({
@@ -228,9 +168,13 @@ const RideHistoryScreen = () => {
       params: {
         rideId: ride._id,
         userRole: userRole,
-        driverName: ride.driver ? `${ride.driver.firstName} ${ride.driver.lastName}` : 'Driver Not Assigned',
+        driverName: ride.driver
+          ? `${ride.driver.firstName} ${ride.driver.lastName}`
+          : 'Driver Not Assigned',
         driverRating: ride.driver?.rating?.toString() || 'N/A',
-        passengerName: ride.passenger ? `${ride.passenger.firstName} ${ride.passenger.lastName}` : 'Unknown Passenger',
+        passengerName: ride.passenger
+          ? `${ride.passenger.firstName} ${ride.passenger.lastName}`
+          : 'Unknown Passenger',
         from: ride.pickUpLocation || ride.pickUp?.location || 'Unknown Location',
         to: ride.dropOffLocation || ride.dropOff?.location || 'Unknown Location',
         vehicle: ride.vehicleType?.name || 'Unknown Vehicle',
@@ -243,39 +187,62 @@ const RideHistoryScreen = () => {
         date: ride.createdAt ? new Date(ride.createdAt).toLocaleDateString() : '',
         pickupTime: '',
         dropoffTime: '',
-        distance: calculateDistance(ride.pickUpLat || 0, ride.pickUpLng || 0, ride.dropOffLat || 0, ride.dropOffLng || 0),
+        distance: calculateDistance(
+          ride.pickUpLat || 0,
+          ride.pickUpLng || 0,
+          ride.dropOffLat || 0,
+          ride.dropOffLng || 0
+        ),
         duration: calculateDuration(ride.createdAt, ride.updatedAt),
-        pickupLat: ride.pickUpLat?.toString() || ride.pickUp?.coords?.coordinates?.[1]?.toString() || '',
-        pickupLng: ride.pickUpLng?.toString() || ride.pickUp?.coords?.coordinates?.[0]?.toString() || '',
-        dropoffLat: ride.dropOffLat?.toString() || ride.dropOff?.coords?.coordinates?.[1]?.toString() || '',
-        dropoffLng: ride.dropOffLng?.toString() || ride.dropOff?.coords?.coordinates?.[0]?.toString() || '',
+        pickupLat:
+          ride.pickUpLat?.toString() ||
+          ride.pickUp?.coords?.coordinates?.[1]?.toString() ||
+          '',
+        pickupLng:
+          ride.pickUpLng?.toString() ||
+          ride.pickUp?.coords?.coordinates?.[0]?.toString() ||
+          '',
+        dropoffLat:
+          ride.dropOffLat?.toString() ||
+          ride.dropOff?.coords?.coordinates?.[1]?.toString() ||
+          '',
+        dropoffLng:
+          ride.dropOffLng?.toString() ||
+          ride.dropOff?.coords?.coordinates?.[0]?.toString() ||
+          '',
       },
     });
-  }
+  };
 
-  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): string => {
-    if (!lat1 || !lng1 || !lat2 || !lng2) return "Unknown";
-    
+  const calculateDistance = (
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number
+  ): string => {
+    if (!lat1 || !lng1 || !lat2 || !lng2) return 'Unknown';
     const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLng/2) * Math.sin(dLng/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     const distance = R * c;
-    
+
     return distance < 1 ? `${(distance * 1000).toFixed(0)} m` : `${distance.toFixed(1)} km`;
-  }
+  };
 
   const calculateDuration = (startTime: Date, endTime: Date): string => {
-    if (!startTime || !endTime) return "Unknown";
-    
+    if (!startTime || !endTime) return 'Unknown';
     const start = new Date(startTime);
     const end = new Date(endTime);
     const diffMs = end.getTime() - start.getTime();
     const diffMins = Math.round(diffMs / 60000);
-    
+
     if (diffMins < 60) {
       return `${diffMins} min`;
     } else {
@@ -283,10 +250,6 @@ const RideHistoryScreen = () => {
       const mins = diffMins % 60;
       return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
     }
-  }
-
-  const handleBackPress = () => {
-    router.back();
   };
 
   const formatTime = (dateVal: Date | string) => {
@@ -303,43 +266,103 @@ const RideHistoryScreen = () => {
 
   const getVehicleIcon = (name: string = '') => {
     const lowerName = name.toLowerCase();
-    if (lowerName.includes('bike') || lowerName.includes('moto') || lowerName.includes('motorcycle')) {
-      return 'motorcycle';
+    if (
+      lowerName.includes('bike') ||
+      lowerName.includes('moto') ||
+      lowerName.includes('motorcycle')
+    ) {
+      return 'two-wheeler';
     }
     return 'directions-car';
   };
 
   const renderRideItem = ({ item: ride }: { item: Ride }) => {
     const isCancelled = ride.status === 'cancelled';
+    const rideCode = ride._id ? `#TRP-${ride._id.slice(-4).toUpperCase()}` : '#TRP-8821';
+    const vehicleTypeName = ride.vehicleType?.name || 'Car';
+    const tierName = vehicleTypeName.toLowerCase().includes('bike') ? 'Lite' : 'Pro';
+
     return (
-      <TouchableOpacity style={styles.card} onPress={() => handleRidePress(ride)}>
-        <View style={styles.iconContainer}>
-          <Icon name={getVehicleIcon(ride.vehicleType?.name)} size={28} color="#fff" />
-        </View>
-        <View style={styles.detailsContainer}>
-          <View style={styles.routeContainer}>
-            <Text style={styles.routeText} numberOfLines={1}>
-              {ride.pickUpLocation || ride.pickUp?.location || 'Unknown pickup'}
-            </Text>
-            <Icon name="arrow-forward" size={16} color="#666" style={styles.arrowIcon} />
-            <Text style={styles.routeText} numberOfLines={1}>
-              {ride.dropOffLocation || ride.dropOff?.location || 'Unknown destination'}
-            </Text>
+      <TouchableOpacity
+        style={[
+          styles.rideCard,
+          isCancelled ? styles.rideCardCancelledBorder : styles.rideCardCompletedBorder,
+        ]}
+        onPress={() => handleRidePress(ride)}
+        activeOpacity={0.88}
+      >
+        {/* Card Header Row */}
+        <View style={styles.cardHeader}>
+          <View style={styles.vehicleBadgeRow}>
+            <View style={styles.vehicleIconCircle}>
+              <MaterialIcons
+                name={getVehicleIcon(vehicleTypeName)}
+                size={20}
+                color="#B7102A"
+              />
+            </View>
+            <View>
+              <Text style={styles.vehicleTitle}>
+                {vehicleTypeName} • Saathi {tierName}
+              </Text>
+              <Text style={styles.timeAndCodeText}>
+                {ride.createdAt ? formatTime(ride.createdAt) : '9:45 AM'} • {rideCode}
+              </Text>
+            </View>
           </View>
-          <View style={styles.metaRow}>
-            <Text style={styles.timeText}>
-              {ride.createdAt ? formatTime(ride.createdAt) : ''}
-            </Text>
-            <Text style={styles.bulletSeparator}>•</Text>
-            <Text style={[styles.statusText, isCancelled ? styles.cancelledStatusText : styles.completedStatusText]}>
+
+          {/* Status Badge */}
+          <View
+            style={[
+              styles.statusPill,
+              isCancelled ? styles.statusPillCancelled : styles.statusPillCompleted,
+            ]}
+          >
+            <Text
+              style={[
+                styles.statusPillText,
+                isCancelled ? styles.statusTextCancelled : styles.statusTextCompleted,
+              ]}
+            >
               {isCancelled ? 'Cancelled' : 'Successful'}
             </Text>
           </View>
         </View>
-        <View style={styles.priceContainer}>
-          <Text style={styles.priceText}>
-            NPR {isCancelled ? '0.00' : (ride.offerPrice || 0).toFixed(2)}
-          </Text>
+
+        {/* Timeline Locations & Fare Row */}
+        <View style={styles.cardBodyRow}>
+          {/* Left Timeline */}
+          <View style={styles.timelineContainer}>
+            {/* Pickup */}
+            <View style={styles.locationPointRow}>
+              <View style={styles.pickupCircle} />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {ride.pickUpLocation || ride.pickUp?.location || 'Kathmandu Durbar Square'}
+              </Text>
+            </View>
+
+            {/* Connecting Vertical Line */}
+            <View style={styles.timelineLine} />
+
+            {/* Dropoff */}
+            <View style={styles.locationPointRow}>
+              <View style={styles.dropoffSquare} />
+              <Text style={styles.locationText} numberOfLines={1}>
+                {ride.dropOffLocation || ride.dropOff?.location || 'Labim Mall, Lalitpur'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Right Fare Container */}
+          <View style={styles.fareContainer}>
+            <Text style={styles.fareLabel}>NPR</Text>
+            <Text style={styles.fareAmount}>
+              {isCancelled ? '0' : Math.round(ride.offerPrice || 0)}
+            </Text>
+            <Text style={styles.paymentMethodText}>
+              {ride.paymentMethod || 'Cash Payment'}
+            </Text>
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -347,26 +370,73 @@ const RideHistoryScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" translucent />
+      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" translucent={false} />
+
       <SafeAreaView style={{ flex: 1 }}>
+        {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-            <Icon name="arrow-back" size={24} color="#333" />
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={styles.backButton}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="arrow-back" size={22} color="#191C1D" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Trip history</Text>
-          <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>{userRole === 'driver' ? 'Driver' : 'Passenger'}</Text>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.headerTitle}>History</Text>
+            <Text style={styles.headerSubtitle}>Review your past travels and receipts.</Text>
           </View>
         </View>
 
+        {/* Stats Banner Cards */}
+        <View style={styles.statsBannerRow}>
+          {/* Card 1: Total Rides (Primary Energetic Red) */}
+          <View style={styles.statCardRed}>
+            <MaterialIcons name="verified-user" size={24} color="#FFFFFF" style={{ marginBottom: 12 }} />
+            <Text style={styles.statLabelRed}>Total Rides</Text>
+            <Text style={styles.statValueRed}>{totalRidesCount}</Text>
+          </View>
+
+          {/* Card 2: This Month (Light Container) */}
+          <View style={styles.statCardGray}>
+            <MaterialIcons name="bar-chart" size={24} color="#B7102A" style={{ marginBottom: 12 }} />
+            <Text style={styles.statLabelGray}>This Month</Text>
+            <Text style={styles.statValueGray}>{thisMonthRidesCount} Rides</Text>
+          </View>
+        </View>
+
+        {/* Search & Filter Bar */}
+        <View style={styles.searchBarRow}>
+          <View style={styles.searchInputContainer}>
+            <MaterialIcons name="search" size={22} color="#8F6F6E" style={{ marginRight: 8 }} />
+            <TextInput
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search by destination"
+              placeholderTextColor="#8F6F6E"
+              style={styles.searchInput}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <MaterialIcons name="close" size={18} color="#8F6F6E" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <TouchableOpacity style={styles.filterButton} activeOpacity={0.8}>
+            <MaterialIcons name="tune" size={20} color="#191C1D" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Main List */}
         {loading ? (
           <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#075B5E" />
+            <ActivityIndicator size="large" color="#B7102A" />
             <Text style={styles.loadingText}>Loading your trips...</Text>
           </View>
         ) : error ? (
           <View style={styles.centerContainer}>
-            <Icon name="error-outline" size={48} color="#F44336" />
+            <MaterialIcons name="error-outline" size={48} color="#BA1A1A" />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity style={styles.retryButton} onPress={fetchHistory}>
               <Text style={styles.retryButtonText}>Retry</Text>
@@ -378,180 +448,344 @@ const RideHistoryScreen = () => {
             keyExtractor={(item, index) => item._id || index.toString()}
             renderItem={renderRideItem}
             renderSectionHeader={({ section: { title } }) => (
-              <Text style={styles.sectionHeader}>{title}</Text>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionHeaderLine} />
+                <Text style={styles.sectionHeaderTitle}>{title}</Text>
+                <View style={styles.sectionHeaderLine} />
+              </View>
             )}
             contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
             ListEmptyComponent={
-              <View style={styles.centerContainer}>
-                <Icon name="history" size={64} color="#ccc" />
-                <Text style={styles.emptyText}>No trips found</Text>
-                <Text style={styles.emptySubtext}>Your trip history will appear here</Text>
+              <View style={styles.emptyContainer}>
+                <View style={styles.emptyIconCircle}>
+                  <MaterialIcons name="history" size={40} color="#B7102A" />
+                </View>
+                <Text style={styles.emptyTitle}>No trips yet</Text>
+                <Text style={styles.emptySubtext}>
+                  {searchQuery ? 'No rides match your search query.' : 'Your completed and past rides will appear here.'}
+                </Text>
               </View>
             }
           />
         )}
       </SafeAreaView>
     </View>
-  )
-}
+  );
+};
+
+export default RideHistoryScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F9FA",
+    backgroundColor: '#F8F9FA',
   },
   header: {
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 44,
-    paddingBottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E9ECEF",
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
-    flex: 1,
-    marginLeft: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 12,
+    paddingBottom: 14,
+    backgroundColor: '#F8F9FA',
   },
   backButton: {
-    padding: 4,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F3F4F5',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  roleBadge: {
-    backgroundColor: "#E6F2F2",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#075B5E",
+  headerTitle: {
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#191C1D',
   },
-  roleText: {
-    fontSize: 12,
-    color: "#075B5E",
-    fontWeight: "600",
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#5B403F',
+    marginTop: 2,
   },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 40,
+  statsBannerRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    gap: 14,
+    marginBottom: 16,
   },
-  sectionHeader: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#333",
-    marginTop: 20,
-    marginBottom: 10,
-    paddingLeft: 4,
-  },
-  card: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 12,
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#E9ECEF",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    backgroundColor: "#0A0A0A", // Keep icon box black as in mockup
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  detailsContainer: {
+  statCardRed: {
     flex: 1,
-    paddingLeft: 14,
-    justifyContent: "center",
+    backgroundColor: '#B7102A',
+    borderRadius: 16,
+    padding: 16,
+    elevation: 3,
+    shadowColor: '#B7102A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
   },
-  pickupText: {
-    fontSize: 12,
-    color: "#666",
-    marginBottom: 2,
-  },
-  cancelledText: {
-    fontSize: 12,
-    color: "#EA2F14",
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  destinationText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
+  statLabelRed: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    opacity: 0.9,
     marginBottom: 4,
   },
-  timeText: {
+  statValueRed: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  statCardGray: {
+    flex: 1,
+    backgroundColor: '#F3F4F5',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#EDEEEF',
+  },
+  statLabelGray: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5B403F',
+    marginBottom: 4,
+  },
+  statValueGray: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#191C1D',
+  },
+  searchBarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    gap: 10,
+    marginBottom: 16,
+  },
+  searchInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F5',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 46,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    color: '#191C1D',
+  },
+  filterButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#F3F4F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  listContent: {
+    paddingHorizontal: 20,
+    paddingBottom: 40,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 14,
+  },
+  sectionHeaderLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#EDEEEF',
+  },
+  sectionHeaderTitle: {
     fontSize: 12,
-    color: "#999",
+    fontWeight: '700',
+    color: '#5B403F',
+    letterSpacing: 0.8,
+    marginHorizontal: 10,
   },
-  priceContainer: {
-    justifyContent: "center",
-    alignItems: "flex-end",
-    paddingLeft: 8,
+  rideCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EDEEEF',
+    borderLeftWidth: 4,
   },
-  priceText: {
+  rideCardCompletedBorder: {
+    borderLeftColor: '#B7102A',
+  },
+  rideCardCancelledBorder: {
+    borderLeftColor: '#8F6F6E',
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  vehicleBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  vehicleIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#FFDAD8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+  },
+  vehicleTitle: {
     fontSize: 15,
-    fontWeight: "700",
-    color: "#333",
+    fontWeight: '700',
+    color: '#191C1D',
+  },
+  timeAndCodeText: {
+    fontSize: 12,
+    color: '#5B403F',
+    marginTop: 2,
+  },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 9999,
+  },
+  statusPillCompleted: {
+    backgroundColor: '#FFDAD8',
+  },
+  statusPillCancelled: {
+    backgroundColor: '#E7E8E9',
+  },
+  statusPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  statusTextCompleted: {
+    color: '#B7102A',
+  },
+  statusTextCancelled: {
+    color: '#5B403F',
+  },
+  cardBodyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  timelineContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
+  locationPointRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pickupCircle: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 2,
+    borderColor: '#B7102A',
+    backgroundColor: '#FFFFFF',
+    marginRight: 10,
+  },
+  dropoffSquare: {
+    width: 9,
+    height: 9,
+    backgroundColor: '#B7102A',
+    marginRight: 10.5,
+  },
+  timelineLine: {
+    width: 2,
+    height: 14,
+    backgroundColor: '#EDEEEF',
+    marginLeft: 4,
+    marginVertical: 2,
+  },
+  locationText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#191C1D',
+  },
+  fareContainer: {
+    alignItems: 'flex-end',
+  },
+  fareLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#191C1D',
+  },
+  fareAmount: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#191C1D',
+    lineHeight: 26,
+  },
+  paymentMethodText: {
+    fontSize: 11,
+    color: '#5B403F',
+    marginTop: 2,
   },
   centerContainer: {
     flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingTop: 100,
-    paddingHorizontal: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
   },
   loadingText: {
-    fontSize: 16,
-    color: "#666",
+    fontSize: 15,
+    color: '#5B403F',
     marginTop: 12,
   },
   errorText: {
-    fontSize: 16,
-    color: "#EA2F14",
-    textAlign: "center",
-    marginTop: 12,
+    fontSize: 15,
+    color: '#BA1A1A',
+    textAlign: 'center',
+    marginVertical: 12,
   },
   retryButton: {
-    backgroundColor: "#075B5E",
+    backgroundColor: '#B7102A',
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
-    marginTop: 16,
   },
   retryButtonText: {
-    color: "#fff",
+    color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: '600',
   },
-  emptyText: {
-    fontSize: 18,
-    color: "#333",
-    fontWeight: "600",
-    marginTop: 16,
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#FFDAD8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#191C1D',
+    marginBottom: 6,
   },
   emptySubtext: {
     fontSize: 14,
-    color: "#666",
-    textAlign: "center",
-    marginTop: 4,
-  },
-  routeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
   },
   routeText: {
     fontSize: 14,

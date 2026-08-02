@@ -211,6 +211,14 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
     </TouchableOpacity>
   );
 
+  const handleClear = () => {
+    onChangeText('');
+    setSearchResults([]);
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+  };
+
   const displayValue = value === 'Current Location' ? '' : value;
 
   return (
@@ -252,6 +260,15 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
                 onChangeText={handleSearch}
                 autoFocus
               />
+              {displayValue && displayValue.trim().length > 0 ? (
+                <TouchableOpacity
+                  onPress={handleClear}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  style={styles.clearIconButton}
+                >
+                  <MaterialIcons name="close" size={20} color="#8F6F6E" />
+                </TouchableOpacity>
+              ) : null}
               {loading && <ActivityIndicator size="small" color="#075B5E" />}
             </View>
           </View>
@@ -321,6 +338,12 @@ const styles = StyleSheet.create({
   },
   searchIcon: {
     marginRight: 12,
+  },
+  clearIconButton: {
+    padding: 4,
+    marginLeft: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   inputText: {
     flex: 1,

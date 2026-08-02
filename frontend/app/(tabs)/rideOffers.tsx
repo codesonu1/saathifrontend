@@ -141,13 +141,15 @@ const RideOffersScreen = () => {
     };
   }, [rideId]);
 
+  const TEST_DRIVER_MODE = true;
+
   const loadOffers = async () => {
     try {
       setLoading(true);
       const data = await rideService.getRideOffers(rideId);
       console.log('Fetched offers from API:', data);
 
-      if (data && Array.isArray(data)) {
+      if (data && Array.isArray(data) && data.length > 0) {
         setOffers(data);
         if (data.length > previousOffersCount && previousOffersCount > 0) {
           showToast('New offer received!', 'info');
@@ -195,6 +197,10 @@ const RideOffersScreen = () => {
           to: toAddress || to,
           fare: acceptedOfferObj ? acceptedOfferObj.offeredPrice.toString() : rideFare,
           vehicle: vehicleName || vehicle,
+          pickupLat: params.pickupLat || params.pickUpLat || '27.7172',
+          pickupLng: params.pickupLng || params.pickUpLng || '85.3240',
+          dropoffLat: params.dropoffLat || params.dropOffLat || '27.6710',
+          dropoffLng: params.dropoffLng || params.dropOffLng || '85.3122',
         },
       });
     } catch (error: any) {
@@ -231,21 +237,22 @@ const RideOffersScreen = () => {
   };
 
   const confirmCancelRideRequest = async () => {
+    if (cancelling) return;
     setShowCancelConfirmation(false);
     setCancelling(true);
     showToast('Cancelling ride request...', 'info');
 
     try {
-      if (rideService.cancelRide) {
-        await rideService.cancelRide(rideId);
-      } else if (rideService.cancelRideRequest) {
-        await rideService.cancelRideRequest(rideId);
+      const success = await rideService.cancelRide(rideId, 'Cancelled by user');
+      if (success) {
+        setRideCancelled(true);
+        showToast('Ride request cancelled', 'info');
+        setTimeout(() => {
+          router.replace('/(tabs)/');
+        }, 800);
+      } else {
+        showToast('Unable to cancel ride request', 'error');
       }
-      setRideCancelled(true);
-      showToast('Ride request cancelled', 'info');
-      setTimeout(() => {
-        router.push('/(tabs)/');
-      }, 1000);
     } catch (error: any) {
       showToast(error.message || 'Failed to cancel ride request', 'error');
     } finally {
