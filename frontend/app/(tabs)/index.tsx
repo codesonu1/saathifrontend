@@ -7,6 +7,7 @@ import Icon from "react-native-vector-icons/MaterialIcons"
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { useRouter, useLocalSearchParams } from "expo-router"
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import SidePanel from "../(common)/sidepanel"
 import Toast from "../../components/ui/Toast"
 import LocationSearch from "../../components/LocationSearch"
@@ -21,6 +22,9 @@ import MapView, { Marker, PROVIDER_GOOGLE, Polyline } from 'react-native-maps'
 const { width, height } = Dimensions.get("window")
 
 const PassengerHomeScreen = () => {
+  const insets = useSafeAreaInsets()
+  const topHeaderPos = insets.top > 0 ? insets.top + 2 : (Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 36)
+  const bottomInset = insets.bottom > 0 ? insets.bottom : 10
   const { rideInProgress, driverName, from, to, fare, vehicle, progress: initialProgress, pickupLat, pickupLng, dropoffLat, dropoffLng } = useLocalSearchParams()
   const getString = (val: string | string[] | undefined) => (Array.isArray(val) ? (val[0] ?? "") : (val ?? ""))
 
@@ -421,7 +425,7 @@ const PassengerHomeScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       {/* Top Header Bar (Clean Header matching Stitch Reference) */}
-      <View style={styles.topHeaderBar}>
+      <View style={[styles.topHeaderBar, { top: topHeaderPos }]}>
         <View style={{ width: 38 }} />
 
         <Text style={styles.headerBrandTitle}>Saathi</Text>
@@ -851,10 +855,9 @@ const styles = StyleSheet.create({
   },
   topHeaderBar: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? StatusBar.currentHeight || 24 : 44,
     left: 0,
     right: 0,
-    height: 56,
+    height: 54,
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',

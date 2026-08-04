@@ -9,6 +9,8 @@ export default function DriverLayout() {
       <Stack.Screen name="accountRestoration" options={{ headerShown: false }} />
       <Stack.Screen name="registration" options={{ headerShown: false }} />
       <Stack.Screen name="driverSection" options={{ headerShown: false }} />
+      <Stack.Screen name="driverProfile" options={{ headerShown: false }} />
+      <Stack.Screen name="earnings" options={{ headerShown: false }} />
     </Stack>
     );
 }

@@ -18,10 +18,12 @@ import {
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useRouter, usePathname, useLocalSearchParams } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { MapPin, Navigation, Clock, User, Car, Map } from 'lucide-react-native';
 import ProfileImage from '../../components/ProfileImage';
 import SidePanel from '../(common)/sidepanel';
+import DriverBottomNav from '@/components/DriverBottomNav';
 import Toast from '../../components/ui/Toast';
 import { rideService, Ride } from '@/services/rideService';
 import { locationService } from '@/services/locationService';
@@ -44,8 +46,9 @@ const DriverSection = () => {
   const [rideInProgress, setRideInProgress] = useState(false);
   
   // Get current user role from global manager
-  const userRole = useUserRole();
-  
+  const insets = useSafeAreaInsets();
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+
   // Driver mode states
   const [isOnline, setIsOnline] = useState(false);
   const onlineTargetRef = React.useRef(isOnline);
@@ -879,7 +882,7 @@ const DriverSection = () => {
         onPress={() => handleRaiseFare(item)}
         disabled={loading || pendingOfferRideId === item._id}
       >
-        <MaterialIcons name="trending-up" size={18} color={pendingOfferRideId === item._id ? "#ccc" : "#075B5E"} />
+        <MaterialIcons name="trending-up" size={18} color={pendingOfferRideId === item._id ? "#ccc" : "#BC001F"} />
         <Text style={[
           styles.raiseFareButtonText,
           pendingOfferRideId === item._id && styles.raiseFareButtonTextDisabled
@@ -1093,10 +1096,10 @@ const DriverSection = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
+        <StatusBar barStyle="light-content" backgroundColor="#BC001F" />
         
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: topPadding, height: 60 + topPadding, marginTop: 0 }]}>
           <View style={styles.headerLeft}>
             <TouchableOpacity onPress={openSidePanel} style={styles.backButton}>
               <MaterialIcons name="menu" size={24} color="#fff" />
@@ -1155,7 +1158,7 @@ const DriverSection = () => {
                 description="Driver's current position"
               >
                 <View style={styles.driverMarker}>
-                  <MaterialIcons name="location-on" size={24} color="#075B5E" />
+                  <MaterialIcons name="location-on" size={24} color="#BC001F" />
                 </View>
               </Marker>
 
@@ -1220,13 +1223,13 @@ const DriverSection = () => {
             <View style={styles.ridesHeader}>
               <Text style={styles.ridesTitle}>Available Rides ({availableRides.length})</Text>
               <TouchableOpacity onPress={onRefresh} style={styles.refreshButton}>
-                <MaterialIcons name="refresh" size={20} color="#075B5E" />
+                <MaterialIcons name="refresh" size={20} color="#BC001F" />
               </TouchableOpacity>
             </View>
             
             {loading ? (
               <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#075B5E" />
+                <ActivityIndicator size="large" color="#BC001F" />
                 <Text style={styles.loadingText}>Loading rides...</Text>
               </View>
             ) : availableRides.length > 0 ? (
@@ -1240,8 +1243,8 @@ const DriverSection = () => {
                   <RefreshControl
                     refreshing={refreshing}
                     onRefresh={onRefresh}
-                    colors={['#075B5E']}
-                    tintColor="#075B5E"
+                    colors={['#BC001F']}
+                    tintColor="#BC001F"
                   />
                 }
               />
@@ -1291,7 +1294,7 @@ const DriverSection = () => {
         {pendingOffers.map(ride => (
           <View key={ride._id} style={{ padding: 16, margin: 8, backgroundColor: '#fff', borderRadius: 8, alignItems: 'center' }}>
             <Text style={{ fontWeight: 'bold', marginBottom: 8 }}>Waiting for passenger to accept...</Text>
-            <ActivityIndicator size="small" color="#075B5E" />
+            <ActivityIndicator size="small" color="#BC001F" />
             <Text style={{ marginTop: 8 }}>{ride.pickUp?.location} → {ride.dropOff?.location}</Text>
           </View>
         ))}
@@ -1353,6 +1356,8 @@ const DriverSection = () => {
           isDriver={true}
           loading={raiseFareLoading}
         />
+
+        <DriverBottomNav activeTab="home" />
       </SafeAreaView>
   );
 };
@@ -1375,7 +1380,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   backButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     borderRadius: 20,
     width: 40,
     height: 40,
@@ -1401,7 +1406,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     opacity: 0.1,
     zIndex: -1,
   },
@@ -1409,7 +1414,7 @@ const styles = StyleSheet.create({
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     opacity: 0.1,
   },
   menuButton: {
@@ -1456,7 +1461,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 4,
     borderWidth: 3,
-    borderColor: '#075B5E',
+    borderColor: '#BC001F',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -1513,7 +1518,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   toggleButtonActive: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
   },
   toggleThumb: {
     width: 20,
@@ -1551,7 +1556,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   simulateButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -1647,7 +1652,7 @@ const styles = StyleSheet.create({
   ridePrice: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#075B5E',
+    color: '#BC001F',
   },
   rideDetails: {
     marginBottom: 12,
@@ -1685,7 +1690,7 @@ const styles = StyleSheet.create({
   },
   acceptButton: {
     flex: 1,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
@@ -1703,7 +1708,7 @@ const styles = StyleSheet.create({
   raiseFareButton: {
     flex: 1,
     backgroundColor: '#fff',
-    borderColor: '#075B5E',
+    borderColor: '#BC001F',
     borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 14,
@@ -1713,14 +1718,14 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   raiseFareButtonText: {
-    color: '#075B5E',
+    color: '#BC001F',
     fontSize: 15,
     fontWeight: '600',
     marginLeft: 6,
   },
     raiseFareButtonFull: {
     backgroundColor: '#fff',
-    borderColor: '#075B5E',
+    borderColor: '#BC001F',
     borderWidth: 1,
     borderRadius: 10,
     paddingVertical: 14,
@@ -1751,7 +1756,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#075B5E',
+    borderColor: '#BC001F',
   },
   currentRideText: {
     fontSize: 14,

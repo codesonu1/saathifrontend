@@ -34,45 +34,34 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
   }, [visible, slideAnim])
 
   const navigateToProfile = () => {
-    if (role === "driver" && onLeaveDriverMode) {
-      onLeaveDriverMode("/(common)/profile");
+    if (role === "driver") {
+      router.push("/(driver)/driverProfile" as any);
+      onClose();
     } else {
-      router.push("/(common)/profile")
-      onClose()
+      router.push("/(common)/profile");
+      onClose();
     }
-  }
+  };
 
   const navigateToRideHistory = () => {
-    if (role === "driver" && onLeaveDriverMode) {
-      onLeaveDriverMode("/(common)/rideHistory");
-    } else {
-      router.push("/(common)/rideHistory")
-      onClose()
-    }
-  }
+    router.push("/(common)/rideHistory" as any);
+    onClose();
+  };
 
   const navigateToSupport = () => {
-    if (role === "driver" && onLeaveDriverMode) {
-      onLeaveDriverMode("/(common)/support");
-    } else {
-      router.push("/(common)/support")
-      onClose()
-    }
-  }
+    router.push("/(common)/support" as any);
+    onClose();
+  };
 
   const navigateToDriverSection = () => {
-    router.push("/(driver)/driverSection")
-    onClose()
-  }
+    router.push("/(driver)/driverSection" as any);
+    onClose();
+  };
 
   const navigateToNotifications = () => {
-    if (role === "driver" && onLeaveDriverMode) {
-      onLeaveDriverMode("/(common)/notifications");
-    } else {
-      router.push("/(common)/notifications")
-      onClose()
-    }
-  }
+    router.push("/(common)/notifications" as any);
+    onClose();
+  };
 
   const handleLogout = async () => {
     await logoutAndResetNavigation(router);

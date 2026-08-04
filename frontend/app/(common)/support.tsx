@@ -1,8 +1,9 @@
 "use client"
 
-import { View, Text, TouchableOpacity, StyleSheet, Linking, SafeAreaView, StatusBar, ScrollView, Platform } from "react-native"
+import { View, Text, TouchableOpacity, StyleSheet, Linking, StatusBar, ScrollView, Platform } from "react-native"
 import Icon from "react-native-vector-icons/MaterialIcons"
 import { useRouter } from "expo-router"
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
 
 const SUPPORT_PHONE = Constants.expoConfig?.extra?.SUPPORT_PHONE;
@@ -14,6 +15,9 @@ const WEBSITE_URL = Constants.expoConfig?.extra?.WEBSITE_URL;
 
 export default function Support() {
   const router = useRouter()
+  const insets = useSafeAreaInsets();
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+  const bottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 10);
   const appVersion = Constants.expoConfig?.version || '1.0.0';
 
   const handleLinkPress = (url: string) => {
@@ -28,7 +32,6 @@ export default function Support() {
     facebook: FACEBOOK_URL,
     instagram: INSTAGRAM_URL,
     gmail: `mailto:${SUPPORT_EMAIL}`,
-    twitter: TWITTER_URL,
     website: WEBSITE_URL,
   }
 
@@ -36,45 +39,57 @@ export default function Support() {
     {
       id: "call",
       title: "Call Support",
-      subtitle: "Speak directly with our support team",
+      description: "Speak directly with our customer care team",
       icon: "phone",
-      color: "#4CAF50",
       action: handleCallSupport,
+      color: "#4CAF50",
     },
     {
-      id: "email",
-      title: "Email Support",
-      subtitle: "Send us your questions via email",
-      icon: "email",
-      color: "#FF5722",
-      action: () => handleLinkPress(socialLinks.gmail),
+      id: "faq",
+      title: "Frequently Asked Questions",
+      description: "Find quick answers to common questions",
+      icon: "help-outline",
+      action: () => handleLinkPress(`${WEBSITE_URL}/faq`),
+      color: "#2196F3",
+    },
+    {
+      id: "safety",
+      title: "Safety Guidelines",
+      description: "Learn about our commitment to your safety",
+      icon: "shield",
+      action: () => handleLinkPress(`${WEBSITE_URL}/safety`),
+      color: "#FF9800",
+    },
+    {
+      id: "terms",
+      title: "Terms & Privacy",
+      description: "Read our terms of service and privacy policy",
+      icon: "description",
+      action: () => handleLinkPress(`${WEBSITE_URL}/terms`),
+      color: "#9C27B0",
     },
   ]
 
-  const socialMedia = [
+  const socialPlatforms = [
     {
-      id: "facebook",
       name: "Facebook",
       icon: "facebook",
       color: "#1877F2",
       url: socialLinks.facebook,
     },
     {
-      id: "instagram",
       name: "Instagram",
       icon: "camera-alt",
       color: "#E4405F",
       url: socialLinks.instagram,
     },
     {
-      id: "twitter",
-      name: "Twitter",
-      icon: "alternate-email",
-      color: "#1DA1F2",
-      url: socialLinks.twitter,
+      name: "Email",
+      icon: "email",
+      color: "#EA4335",
+      url: socialLinks.gmail,
     },
     {
-      id: "website",
       name: "Website",
       icon: "language",
       color: "#075B5E",
@@ -83,11 +98,11 @@ export default function Support() {
   ]
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topPadding, height: 60 + topPadding }]}>
       <TouchableOpacity onPress={() => router.back()}  style={{
           backgroundColor: '#075B5E',
           borderRadius: 20,
@@ -100,7 +115,7 @@ export default function Support() {
           shadowOffset: { width: 0, height: 2 },
           shadowOpacity: 0.1,
           shadowRadius: 4,
-          marginTop: 27,
+          marginTop: 0,
         }}>
           <Icon name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
@@ -132,7 +147,7 @@ export default function Support() {
                 </View>
                 <View style={styles.optionContent}>
                   <Text style={styles.optionTitle}>{option.title}</Text>
-                  <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
+                  <Text style={styles.optionSubtitle}>{option.description}</Text>
                 </View>
                 <Icon name="chevron-right" size={20} color="#ccc" />
               </TouchableOpacity>
@@ -160,8 +175,8 @@ export default function Support() {
           <Text style={styles.sectionTitle}>Follow Us</Text>
           <Text style={styles.sectionSubtitle}>Stay connected with us on social media.</Text>
           <View style={styles.socialGrid}>
-            {socialMedia.map((social) => (
-              <TouchableOpacity key={social.id} style={styles.socialCard} onPress={() => handleLinkPress(social.url)}>
+            {socialPlatforms.map((social) => (
+              <TouchableOpacity key={social.name} style={styles.socialCard} onPress={() => handleLinkPress(social.url)}>
                 <View style={[styles.socialIcon, { backgroundColor: `${social.color}15` }]}>
                   <Icon name={social.icon} size={24} color={social.color} />
                 </View>
@@ -191,7 +206,7 @@ export default function Support() {
           </Text>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   )
 }
 

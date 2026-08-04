@@ -13,6 +13,7 @@ console.error = (...args) => {
   originalError(...args);
 };
 
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -54,20 +55,22 @@ export default function RootLayout() {
   }
 
   return (
-    <DriverRegistrationProvider>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack initialRouteName="(auth)">
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(common)" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="(driver)" options={{ headerShown: false }} />
-          <Stack.Screen name="(regSteps)" options={{ headerShown: false }} />
-          <Stack.Screen name="(vehDetails)" options={{ headerShown: false }} />  
-          <Stack.Screen name="+not-found" />
-        </Stack>
-        <StatusBar style="auto" />
-        <InteractiveNotification />
-      </ThemeProvider>
-    </DriverRegistrationProvider>
+    <SafeAreaProvider>
+      <DriverRegistrationProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <Stack initialRouteName="(auth)">
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(common)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="(driver)" options={{ headerShown: false }} />
+            <Stack.Screen name="(regSteps)" options={{ headerShown: false }} />
+            <Stack.Screen name="(vehDetails)" options={{ headerShown: false }} />  
+            <Stack.Screen name="+not-found" />
+          </Stack>
+          <StatusBar style="auto" />
+          <InteractiveNotification />
+        </ThemeProvider>
+      </DriverRegistrationProvider>
+    </SafeAreaProvider>
   );
 }

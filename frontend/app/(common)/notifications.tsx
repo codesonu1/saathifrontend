@@ -7,9 +7,11 @@ import {
   StatusBar,
   FlatList,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import websocketService from '@/services/websocketService';
 import apiClient from '@/services/apiClient';
 import Toast from '../../components/ui/Toast';
@@ -302,7 +304,7 @@ const Notifications = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding, marginTop: 0 }]}>
         <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
           <Icon name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
@@ -335,7 +337,7 @@ const Notifications = () => {
             data={notifications}
             renderItem={renderNotificationItem}
             keyExtractor={item => item.id}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: bottomPadding }]}
             ListEmptyComponent={renderEmptyState}
           />
         </View>

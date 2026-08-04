@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserRole } from '@/services/userRoleManager';
 import { rideService, Ride } from '@/services/rideService';
 
@@ -39,6 +40,9 @@ interface SectionData {
 
 const RideHistoryScreen = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+  const bottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 10);
   const userRole = useUserRole();
 
   const [allRides, setAllRides] = useState<Ride[]>([]);
@@ -276,11 +280,110 @@ const RideHistoryScreen = () => {
     return 'directions-car';
   };
 
+  // Compute driver total earnings
+  const totalDriverEarnings = useMemo(() => {
+    return allRides.reduce((acc, r) => {
+      if (r.status === 'completed') {
+        const fare = r.acceptedOffer?.offerAmount || r.offerPrice || 0;
+        return acc + fare;
+      }
+      return acc;
+    }, 0);
+  }, [allRides]);
+
   const renderRideItem = ({ item: ride }: { item: Ride }) => {
     const isCancelled = ride.status === 'cancelled';
     const rideCode = ride._id ? `#TRP-${ride._id.slice(-4).toUpperCase()}` : '#TRP-8821';
     const vehicleTypeName = ride.vehicleType?.name || 'Car';
     const tierName = vehicleTypeName.toLowerCase().includes('bike') ? 'Lite' : 'Pro';
+
+    if (userRole === 'driver') {
+      const passengerName = ride.passenger
+        ? `${ride.passenger.firstName} ${ride.passenger.lastName}`.trim()
+        : 'Passenger';
+      const fareAmount = Math.round(ride.acceptedOffer?.offerAmount || ride.offerPrice || 0);
+
+      return (
+        <TouchableOpacity
+          style={[
+            styles.rideCard,
+            isCancelled ? styles.rideCardCancelledBorder : styles.rideCardCompletedBorder,
+          ]}
+          onPress={() => handleRidePress(ride)}
+          activeOpacity={0.88}
+        >
+          {/* Driver Card Header */}
+          <View style={styles.cardHeader}>
+            <View style={styles.vehicleBadgeRow}>
+              <View style={styles.vehicleIconCircle}>
+                <MaterialIcons name="person" size={20} color="#B7102A" />
+              </View>
+              <View style={{ flex: 1, marginRight: 6 }}>
+                <Text style={styles.vehicleTitle} numberOfLines={1} ellipsizeMode="tail">
+                  Passenger: {passengerName}
+                </Text>
+                <Text style={styles.timeAndCodeText} numberOfLines={1}>
+                  {ride.createdAt ? formatTime(ride.createdAt) : ''} • {rideCode}
+                </Text>
+              </View>
+            </View>
+
+            {/* Status Badge */}
+            <View
+              style={[
+                styles.statusPill,
+                isCancelled ? styles.statusPillCancelled : styles.statusPillCompleted,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusPillText,
+                  isCancelled ? styles.statusTextCancelled : styles.statusTextCompleted,
+                ]}
+              >
+                {isCancelled ? 'Cancelled' : 'Completed'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Timeline Locations & Driver Earnings Row */}
+          <View style={styles.cardBodyRow}>
+            {/* Left Timeline */}
+            <View style={styles.timelineContainer}>
+              {/* Pickup */}
+              <View style={styles.locationPointRow}>
+                <View style={styles.pickupCircle} />
+                <Text style={styles.locationText} numberOfLines={1}>
+                  {ride.pickUpLocation || ride.pickUp?.location || 'Pickup Location'}
+                </Text>
+              </View>
+
+              {/* Connecting Vertical Line */}
+              <View style={styles.timelineLine} />
+
+              {/* Dropoff */}
+              <View style={styles.locationPointRow}>
+                <View style={styles.dropoffSquare} />
+                <Text style={styles.locationText} numberOfLines={1}>
+                  {ride.dropOffLocation || ride.dropOff?.location || 'Dropoff Location'}
+                </Text>
+              </View>
+            </View>
+
+            {/* Right Driver Earnings Container */}
+            <View style={styles.fareContainer}>
+              <Text style={styles.fareLabel}>EARNED</Text>
+              <Text style={[styles.fareAmount, { color: isCancelled ? '#8F6F6E' : '#16A34A' }]}>
+                {isCancelled ? 'NPR 0' : `NPR ${fareAmount}`}
+              </Text>
+              <Text style={styles.paymentMethodText}>
+                {ride.paymentMethod || 'Cash Payment'}
+              </Text>
+            </View>
+          </View>
+        </TouchableOpacity>
+      );
+    }
 
     return (
       <TouchableOpacity
@@ -301,11 +404,11 @@ const RideHistoryScreen = () => {
                 color="#B7102A"
               />
             </View>
-            <View>
-              <Text style={styles.vehicleTitle}>
+            <View style={{ flex: 1, marginRight: 6 }}>
+              <Text style={styles.vehicleTitle} numberOfLines={1} ellipsizeMode="tail">
                 {vehicleTypeName} • Saathi {tierName}
               </Text>
-              <Text style={styles.timeAndCodeText}>
+              <Text style={styles.timeAndCodeText} numberOfLines={1}>
                 {ride.createdAt ? formatTime(ride.createdAt) : '9:45 AM'} • {rideCode}
               </Text>
             </View>
@@ -372,9 +475,9 @@ const RideHistoryScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" translucent={false} />
 
-      <SafeAreaView style={{ flex: 1 }}>
+      <View style={{ flex: 1 }}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: topPadding, height: 60 + topPadding }]}>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.backButton}
@@ -383,49 +486,45 @@ const RideHistoryScreen = () => {
             <MaterialIcons name="arrow-back" size={22} color="#191C1D" />
           </TouchableOpacity>
           <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.headerTitle}>History</Text>
-            <Text style={styles.headerSubtitle}>Review your past travels and receipts.</Text>
+            <Text style={styles.headerTitle}>
+              {userRole === 'driver' ? 'Driver Trip Activity' : 'History'}
+            </Text>
+            <Text style={styles.headerSubtitle}>
+              {userRole === 'driver'
+                ? 'Review your completed driver trips & trip earnings.'
+                : 'Review your past travels and receipts.'}
+            </Text>
           </View>
         </View>
 
         {/* Stats Banner Cards */}
         <View style={styles.statsBannerRow}>
-          {/* Card 1: Total Rides (Primary Energetic Red) */}
+          {/* Card 1: Total Rides / Completed Trips */}
           <View style={styles.statCardRed}>
             <MaterialIcons name="verified-user" size={24} color="#FFFFFF" style={{ marginBottom: 12 }} />
-            <Text style={styles.statLabelRed}>Total Rides</Text>
+            <Text style={styles.statLabelRed}>
+              {userRole === 'driver' ? 'Completed Trips' : 'Total Rides'}
+            </Text>
             <Text style={styles.statValueRed}>{totalRidesCount}</Text>
           </View>
 
-          {/* Card 2: This Month (Light Container) */}
+          {/* Card 2: This Month / Total Earnings */}
           <View style={styles.statCardGray}>
-            <MaterialIcons name="bar-chart" size={24} color="#B7102A" style={{ marginBottom: 12 }} />
-            <Text style={styles.statLabelGray}>This Month</Text>
-            <Text style={styles.statValueGray}>{thisMonthRidesCount} Rides</Text>
-          </View>
-        </View>
-
-        {/* Search & Filter Bar */}
-        <View style={styles.searchBarRow}>
-          <View style={styles.searchInputContainer}>
-            <MaterialIcons name="search" size={22} color="#8F6F6E" style={{ marginRight: 8 }} />
-            <TextInput
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholder="Search by destination"
-              placeholderTextColor="#8F6F6E"
-              style={styles.searchInput}
+            <MaterialIcons
+              name={userRole === 'driver' ? 'account-balance-wallet' : 'bar-chart'}
+              size={24}
+              color="#B7102A"
+              style={{ marginBottom: 12 }}
             />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <MaterialIcons name="close" size={18} color="#8F6F6E" />
-              </TouchableOpacity>
-            )}
+            <Text style={styles.statLabelGray}>
+              {userRole === 'driver' ? 'Trip Earnings' : 'This Month'}
+            </Text>
+            <Text style={styles.statValueGray}>
+              {userRole === 'driver'
+                ? `NPR ${totalDriverEarnings}`
+                : `${thisMonthRidesCount} Rides`}
+            </Text>
           </View>
-
-          <TouchableOpacity style={styles.filterButton} activeOpacity={0.8}>
-            <MaterialIcons name="tune" size={20} color="#191C1D" />
-          </TouchableOpacity>
         </View>
 
         {/* Main List */}
@@ -469,7 +568,7 @@ const RideHistoryScreen = () => {
             }
           />
         )}
-      </SafeAreaView>
+      </View>
     </View>
   );
 };
@@ -633,8 +732,10 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   vehicleBadgeRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    marginRight: 8,
   },
   vehicleIconCircle: {
     width: 36,

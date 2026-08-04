@@ -32,9 +32,10 @@ class WebSocketService {
   private sockets: { [key: string]: Socket | null } = {};
   private isConnected: { [key: string]: boolean } = {};
   private connectionPromises: { [key: string]: Promise<void> | null } = {};
-  private baseUrl: string = Platform.OS === 'web'
-    ? 'http://localhost:9000'
-    : (Constants.expoConfig?.extra?.WEBSOCKET_URL || 'http://10.0.2.2:9000');
+  private baseUrl: string =
+    process.env.EXPO_PUBLIC_WEBSOCKET_URL ||
+    Constants.expoConfig?.extra?.WEBSOCKET_URL ||
+    'https://ride-share-api-umog.onrender.com';
 
   async connect(rideId?: string, namespace: 'driver' | 'passenger' | 'ride' = 'driver'): Promise<void> {
     try {
@@ -73,7 +74,7 @@ class WebSocketService {
         extraHeaders: {
           Authorization: `Bearer ${token}`
         },
-        transports: ['websocket'],
+        transports: ['websocket', 'polling'],
         timeout: 20000,
         forceNew: true,
       });

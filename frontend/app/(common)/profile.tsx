@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import apiClient, { initializeApiClient, getAccessToken } from '@/services/apiClient';
 import * as ImagePicker from 'expo-image-picker';
 import AppModal from '../../components/ui/AppModal';
@@ -23,11 +24,15 @@ import webSocketService from '@/services/websocketService';
 import { logoutAndResetNavigation } from '../(auth)/login';
 
 const { width } = Dimensions.get('window');
-const ASSET_BASE_URL = Constants.expoConfig?.extra?.PUBLIC_ASSET_URL || 'http://192.168.1.71:9000';
-const DEFAULT_BASE_URL = Constants.expoConfig?.extra?.DEFAULT_BASE_URL || 'http://localhost:3000';
+const ASSET_BASE_URL = process.env.EXPO_PUBLIC_ASSET_URL || Constants.expoConfig?.extra?.PUBLIC_ASSET_URL || 'https://ride-share-api-umog.onrender.com';
+const DEFAULT_BASE_URL = Constants.expoConfig?.extra?.DEFAULT_BASE_URL || 'https://ride-share-api-umog.onrender.com';
 
 const ProfileSettingsScreen = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+  const bottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 10);
+
   const activeRole = useUserRole();
   const [name, setName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -321,7 +326,7 @@ const ProfileSettingsScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" translucent={false} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -333,7 +338,7 @@ const ProfileSettingsScreen = () => {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPadding }]} showsVerticalScrollIndicator={false}>
         <View style={styles.heroSection}>
           <View style={styles.avatarWrapper}>
             <Image style={styles.avatarImage} source={{ uri: imageUri }} />

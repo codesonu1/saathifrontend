@@ -4,9 +4,10 @@ import webSocketService from './websocketService';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
-const API_URL = Platform.OS === 'web'
-  ? 'http://localhost:9000/api/v1'
-  : (Constants.expoConfig?.extra?.API_URL || 'http://10.0.2.2:9000/api/v1');
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  Constants.expoConfig?.extra?.API_URL ||
+  'https://ride-share-api-umog.onrender.com/api/v1';
 
 const apiClient = axios.create({
   baseURL: API_URL,
