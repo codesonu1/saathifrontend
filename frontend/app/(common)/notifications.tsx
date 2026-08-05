@@ -118,6 +118,9 @@ const DRIVER_MOCK_NOTIFICATIONS: NotificationItem[] = [
 
 const Notifications = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+  const bottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 10);
   const userRole = useUserRole();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

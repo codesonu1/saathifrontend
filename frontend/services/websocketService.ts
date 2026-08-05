@@ -38,140 +38,146 @@ class WebSocketService {
     'https://ride-share-api-umog.onrender.com';
 
   async connect(rideId?: string, namespace: 'driver' | 'passenger' | 'ride' = 'driver'): Promise<void> {
-    try {
-      // Check if already connected to this namespace
-      if (this.sockets[namespace]?.connected) {
-        console.log(`WebSocket: Already connected to ${namespace} namespace`);
-        return;
-      }
+    // Check if already connected to this namespace
+    if (this.sockets[namespace]?.connected) {
+      console.log(`WebSocket: Already connected to ${namespace} namespace`);
+      return;
+    }
 
-      // Get token from storage
-      const token = await getAccessToken();
-      console.log('WebSocket: Using token:', token);
-      if (!token) {
-        throw new Error('No authentication token found');
-      }
+    // Reuse in-flight connection promise if connection is already being established
+    if (this.connectionPromises[namespace]) {
+      console.log(`WebSocket: Connection to ${namespace} already in progress, awaiting existing promise...`);
+      return this.connectionPromises[namespace]!;
+    }
 
-      // Build namespace path
-      let namespacePath: string;
-      let queryParams: any = {};
-      
-      if (namespace === 'ride') {
-        namespacePath = 'io/v1/ride';
-        queryParams = { rideId };
-      } else {
-        namespacePath = `io/v1/${namespace}`;
-      }
-
-      const url = `${this.baseUrl}/${namespacePath}`;
-      console.log(`WebSocket: Connecting to ${namespace} namespace for ride ${rideId || 'N/A'}`);
-      console.log('WebSocket: Connecting to URL:', url);
-
-      // Create socket connection
-      this.sockets[namespace] = io(url, {
-        auth: { token },
-        query: queryParams,
-        extraHeaders: {
-          Authorization: `Bearer ${token}`
-        },
-        transports: ['websocket', 'polling'],
-        timeout: 20000,
-        forceNew: true,
-      });
-
-      const socket = this.sockets[namespace];
-
-      // Add global event logger for debugging (development only)
-      if (process.env.NODE_ENV === 'development' && socket && typeof socket.onAny === 'function') {
-        socket.onAny((event: string, ...args: any[]) => {
-          console.log(`[WebSocket][onAny][${namespace}] Event:`, event, 'Args:', args);
-        });
-      }
-
-      // Setup connection handlers
-      socket.on('connect', () => {
-        console.log(`WebSocket: Connected to ${namespace} namespace`);
-        this.isConnected[namespace] = true;
-        // Join the ride room after connecting to the 'ride' namespace
-        if (namespace === 'ride' && rideId) {
-          const room = `ride_${rideId}`;
-          socket.emit('join', room);
-          console.log(`WebSocket: Emitted join for room: ${room}`);
+    this.connectionPromises[namespace] = (async () => {
+      try {
+        // Get token from storage
+        const token = await getAccessToken();
+        console.log('WebSocket: Using token:', token);
+        if (!token) {
+          throw new Error('No authentication token found');
         }
-      });
 
-      socket.on('disconnect', (reason) => {
-        console.log(`WebSocket: Disconnected from ${namespace} namespace:`, reason);
-        this.isConnected[namespace] = false;
-        this.connectionPromises[namespace] = null;
-      });
-
-      socket.on('connect_error', (error) => {
-        // Suppress connection timeout errors from logs
-        const errorMessage = error.message || '';
-        if (errorMessage.includes('WebSocket connection timeout') || errorMessage.includes('timeout')) {
-          console.log(`WebSocket: Connection timeout to ${namespace} namespace (suppressed from error logs)`);
-        } else {
-          console.error(`WebSocket: Connection error to ${namespace} namespace:`, error);
-        }
-        this.isConnected[namespace] = false;
+        // Build namespace path
+        let namespacePath: string;
+        let queryParams: any = {};
         
-        // Handle specific errors for ride namespace
         if (namespace === 'ride') {
-          if (errorMessage.includes('Ride is no longer active') || errorMessage.includes('Ride is not in cancelable status')) {
-            console.log(`WebSocket: Ride is cancelled, suppressing connection error`);
-            // Don't throw this error, just log it
-            return;
-          }
+          namespacePath = 'io/v1/ride';
+          queryParams = { rideId };
+        } else {
+          namespacePath = `io/v1/${namespace}`;
         }
-      });
 
-      socket.on('error', (error) => {
-        console.error(`WebSocket: Error in ${namespace} namespace:`, error);
-      });
+        const url = `${this.baseUrl}/${namespacePath}`;
+        console.log(`WebSocket: Connecting to ${namespace} namespace for ride ${rideId || 'N/A'}`);
+        console.log('WebSocket: Connecting to URL:', url);
 
-      // Setup event listeners for this namespace
-      this.setupEventListeners(socket, namespace);
-
-      // Wait for connection
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('WebSocket connection timeout'));
-        }, 10000);
-
-        socket.once('connect', () => {
-          clearTimeout(timeout);
-          resolve(true);
+        // Create socket connection
+        this.sockets[namespace] = io(url, {
+          auth: { token },
+          query: queryParams,
+          extraHeaders: {
+            Authorization: `Bearer ${token}`
+          },
+          transports: ['websocket', 'polling'],
+          timeout: 25000,
+          forceNew: true,
         });
 
-        socket.once('connect_error', (error) => {
-          clearTimeout(timeout);
+        const socket = this.sockets[namespace]!;
+
+        // Add global event logger for debugging (development only)
+        if (process.env.NODE_ENV === 'development' && socket && typeof socket.onAny === 'function') {
+          socket.onAny((event: string, ...args: any[]) => {
+            console.log(`[WebSocket][onAny][${namespace}] Event:`, event, 'Args:', args);
+          });
+        }
+
+        // Setup connection handlers
+        socket.on('connect', () => {
+          console.log(`WebSocket: Connected to ${namespace} namespace`);
+          this.isConnected[namespace] = true;
+          // Join the ride room after connecting to the 'ride' namespace
+          if (namespace === 'ride' && rideId) {
+            const room = `ride_${rideId}`;
+            socket.emit('join', room);
+            console.log(`WebSocket: Emitted join for room: ${room}`);
+          }
+        });
+
+        socket.on('disconnect', (reason) => {
+          console.log(`WebSocket: Disconnected from ${namespace} namespace:`, reason);
+          this.isConnected[namespace] = false;
+        });
+
+        socket.on('connect_error', (error) => {
+          const errorMessage = error.message || '';
+          if (errorMessage.includes('WebSocket connection timeout') || errorMessage.includes('timeout')) {
+            console.log(`WebSocket: Connection timeout to ${namespace} namespace (suppressed from error logs)`);
+          } else {
+            console.error(`WebSocket: Connection error to ${namespace} namespace:`, error);
+          }
+          this.isConnected[namespace] = false;
           
-          // Handle specific errors for ride namespace
           if (namespace === 'ride') {
-            const errorMessage = error.message || '';
             if (errorMessage.includes('Ride is no longer active') || errorMessage.includes('Ride is not in cancelable status')) {
-              console.log(`WebSocket: Ride is cancelled, rejecting with specific error`);
-              reject(new Error('Ride is no longer active'));
+              console.log(`WebSocket: Ride is cancelled, suppressing connection error`);
               return;
             }
           }
-          
-          reject(error);
         });
-      });
 
-    } catch (error) {
-      // Suppress connection timeout errors from logs
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      if (errorMessage.includes('WebSocket connection timeout')) {
-        console.log(`WebSocket: Connection timeout to ${namespace} namespace (suppressed from error logs)`);
-      } else {
-        console.error(`WebSocket: Connection failed to ${namespace} namespace:`, error);
+        socket.on('error', (error) => {
+          console.error(`WebSocket: Error in ${namespace} namespace:`, error);
+        });
+
+        // Setup event listeners for this namespace
+        this.setupEventListeners(socket, namespace);
+
+        // Wait for connection with extended timeout for backend cold starts
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error('WebSocket connection timeout'));
+          }, 25000);
+
+          socket.once('connect', () => {
+            clearTimeout(timeout);
+            resolve(true);
+          });
+
+          socket.once('connect_error', (error) => {
+            clearTimeout(timeout);
+            
+            if (namespace === 'ride') {
+              const errorMessage = error.message || '';
+              if (errorMessage.includes('Ride is no longer active') || errorMessage.includes('Ride is not in cancelable status')) {
+                console.log(`WebSocket: Ride is cancelled, rejecting with specific error`);
+                reject(new Error('Ride is no longer active'));
+                return;
+              }
+            }
+            
+            reject(error);
+          });
+        });
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('WebSocket connection timeout')) {
+          console.log(`WebSocket: Connection timeout to ${namespace} namespace (suppressed from error logs)`);
+        } else {
+          console.error(`WebSocket: Connection failed to ${namespace} namespace:`, error);
+        }
+        this.isConnected[namespace] = false;
+        throw error;
+      } finally {
+        this.connectionPromises[namespace] = null;
       }
-      this.isConnected[namespace] = false;
-      throw error;
-    }
+    })();
+
+    return this.connectionPromises[namespace]!;
   }
 
   private setupEventListeners(socket: Socket, namespace: string) {
@@ -524,12 +530,19 @@ class WebSocketService {
   }
 
   // Emit event to specific namespace
-  emit(event: string, data?: any, namespace: 'driver' | 'passenger' | 'ride' = 'driver') {
+  async emit(event: string, data?: any, namespace: 'driver' | 'passenger' | 'ride' = 'driver') {
+    if (this.connectionPromises[namespace]) {
+      try {
+        await this.connectionPromises[namespace];
+      } catch (err) {
+        // Connection failed, cannot emit
+      }
+    }
     const socket = this.sockets[namespace];
     if (socket && socket.connected) {
       socket.emit(event, data);
     } else {
-      console.error(`WebSocket: Cannot emit event to ${namespace} namespace, socket not connected`);
+      console.log(`WebSocket: Cannot emit event to ${namespace} namespace, socket not connected`);
     }
   }
 
@@ -554,7 +567,14 @@ class WebSocketService {
   }
 
   // Emit event with callback (for request-response pattern)
-  emitEvent(event: string, data?: any, callback?: (response: any) => void, namespace: 'driver' | 'passenger' | 'ride' = 'driver'): void {
+  async emitEvent(event: string, data?: any, callback?: (response: any) => void, namespace: 'driver' | 'passenger' | 'ride' = 'driver'): Promise<void> {
+    if (this.connectionPromises[namespace]) {
+      try {
+        await this.connectionPromises[namespace];
+      } catch (err) {
+        // Connection failed
+      }
+    }
     const socket = this.sockets[namespace];
     if (socket && socket.connected) {
       // Validate data for critical events
@@ -580,7 +600,7 @@ class WebSocketService {
         socket.emit(event, data);
       }
     } else {
-      console.error(`WebSocket: Cannot emit event to ${namespace} namespace, socket not connected`);
+      console.log(`WebSocket: Cannot emit event ${event} to ${namespace} namespace, socket not connected`);
       // Call callback with error if provided, so the calling code can handle the disconnection
       if (callback) {
         callback({ code: 500, message: `Cannot emit event to ${namespace} namespace, socket not connected` });

@@ -67,8 +67,8 @@ export const refreshAccessToken = async () => {
       }
     }
     return false;
-  } catch (error) {
-    console.error('Token refresh failed:', error);
+  } catch (error: any) {
+    console.warn('Token refresh notice:', error?.message || error);
     return false;
   }
 };

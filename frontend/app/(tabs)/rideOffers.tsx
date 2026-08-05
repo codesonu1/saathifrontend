@@ -264,12 +264,15 @@ const RideOffersScreen = () => {
     setShowCancelConfirmation(false);
   };
 
-  const setupWebSocket = () => {
+  const setupWebSocket = async () => {
     try {
-      webSocketService.connect();
+      await webSocketService.connect(rideId, 'passenger');
+      await webSocketService.connect(rideId, 'ride');
 
       const newOfferListener = (data: any) => {
-        if (data && data.rideId === rideId) {
+        const incomingRideId = data?.rideId || data?.data?.rideId || data?.data?.rideOffer?.rideId || data?.offer?.rideId;
+        console.log('[RideOffers] New offer event received:', data, 'incomingRideId:', incomingRideId);
+        if (!incomingRideId || incomingRideId === rideId) {
           showToast('New offer received!', 'info');
           loadOffers();
         }

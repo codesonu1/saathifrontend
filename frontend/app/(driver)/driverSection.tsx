@@ -205,11 +205,12 @@ const DriverSection = () => {
       
       // Listen for new ride requests (driver namespace)
       newRideRequestListener = (event: any) => {
-        
-        if (event && event.code === 200 && event.data) {
+        const rideData = event?.data || (event?.code === 200 ? event.data : event);
+        if (rideData && (rideData._id || rideData.id)) {
+          const rideId = rideData._id || rideData.id;
           setAvailableRides(prev => {
-            if (prev.some(ride => ride._id === event.data._id)) return prev;
-            return [...prev, event.data];
+            if (prev.some(ride => ride._id === rideId)) return prev;
+            return [...prev, { ...rideData, _id: rideId }];
           });
           showToast('New ride request received!', 'info');
         }
@@ -1539,7 +1540,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   ridesListContainer: {
-    paddingBottom: 20,
+    paddingBottom: 140,
   },
   ridesHeader: {
     flexDirection: 'row',

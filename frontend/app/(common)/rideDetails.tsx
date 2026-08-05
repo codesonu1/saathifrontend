@@ -14,6 +14,7 @@ import * as Sharing from 'expo-sharing';
 import Toast from '../../components/ui/Toast';
 import { emitRideRemoved } from './rideHistory';
 import { userRoleManager } from '@/services/userRoleManager';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { locationService } from '@/services/locationService';
 
 const { width, height } = Dimensions.get("window")
@@ -94,6 +95,8 @@ interface RideDetails {
 const RideDetailsScreen = () => {
   const router = useRouter()
   const params = useLocalSearchParams()
+  const insets = useSafeAreaInsets()
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24)
   const rideId = params.rideId as string
   const userRole = useUserRole()
 
@@ -511,13 +514,13 @@ const RideDetailsScreen = () => {
   };
 
   // Show loading state
-  if (loading) {
+  if (loading && !rideDetails) {
     return (
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBackPress} style={{
-            backgroundColor: '#075B5E',
+            backgroundColor: '#BC001F',
             borderRadius: 20,
             width: 40,
             height: 40,
@@ -537,7 +540,7 @@ const RideDetailsScreen = () => {
           </View>
         </View>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#075B5E" />
+          <ActivityIndicator size="large" color="#BC001F" />
           <Text style={styles.loadingText}>Loading ride details...</Text>
         </View>
       </View>

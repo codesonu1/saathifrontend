@@ -636,13 +636,14 @@ class LocationService {
       const data = await response.json();
 
       if (data.status !== 'OK' || !data.results[0]) {
-        throw new Error(`Geocoding API error: ${data.status}`);
+        console.warn(`Geocoding API notice (${data.status}), using default address fallback.`);
+        return 'Kathmandu, Nepal';
       }
 
       return data.results[0].formatted_address;
     } catch (error) {
-      console.error('Error getting address:', error);
-      throw error;
+      console.warn('Geocoding request unfulfilled, using fallback location address.');
+      return 'Current Location';
     }
   }
 

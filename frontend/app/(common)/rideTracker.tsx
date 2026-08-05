@@ -14,6 +14,7 @@ import {
   BackHandler,
   Modal,
   ScrollView,
+  Platform,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
@@ -454,6 +455,8 @@ const RideTrackerScreen = () => {
 
   const [pickupLocation, setPickupLocation] = useState<{ lat: number; lng: number } | null>(initialPickup);
   const [dropoffLocation, setDropoffLocation] = useState<{ lat: number; lng: number } | null>(initialDropoff);
+  const [driverLocation, setDriverLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [driverArrived, setDriverArrived] = useState(false);
   const [rideDetails, setRideDetails] = useState<Ride | null>(null);
   const [loading, setLoading] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -1444,9 +1447,9 @@ const RideTrackerScreen = () => {
         if (isMounted.current && details) {
           setRideDetails(details);
           
-          // Check if ride is cancelled or in searching status in the backend
-          if (details?.status === 'cancelled' || details?.status === 'searching') {
-            console.log('[setupWebSocketAndFetch] Ride is cancelled or searching in backend:', details?.status);
+          // Check if ride is cancelled in the backend
+          if (details?.status === 'cancelled') {
+            console.log('[setupWebSocketAndFetch] Ride is cancelled in backend:', details?.status);
             setRideStatus('cancelled');
             setIsLoadingDetails(false);
             showToast('This ride has been cancelled', 'info');
@@ -1499,6 +1502,12 @@ const RideTrackerScreen = () => {
           } else if (details?.status === 'completed') {
             setRideStatus('completed');
             console.log('[setupWebSocketAndFetch] Set rideStatus to completed');
+          } else if (details?.status === 'searching') {
+            setRideStatus('searching');
+            console.log('[setupWebSocketAndFetch] Set rideStatus to searching');
+          } else if (details?.status === 'accepted') {
+            setRideStatus('accepted');
+            console.log('[setupWebSocketAndFetch] Set rideStatus to accepted');
           }
           if (details?.currLocation) {
             const initialLocation = {
@@ -1702,18 +1711,7 @@ const RideTrackerScreen = () => {
               }
             }, 2000);
           } else if (newStatus === 'searching') {
-            // If ride goes back to searching, it means it was cancelled/reset
-            setRideStatus('cancelled');
-            showToast('Ride has been cancelled', 'info');
-            setTimeout(() => {
-              if (isMounted.current) {
-                if (userRole === 'passenger') {
-                  router.push('/(tabs)');
-                } else {
-                  router.push({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
-                }
-              }
-            }, 2000);
+            setRideStatus('searching');
           } else if (newStatus === 'ongoing') {
             setRideStatus('in-progress');
             rideStartedConfirmedRef.current = true;
@@ -2273,8 +2271,8 @@ const RideTrackerScreen = () => {
       // First check if ride is already cancelled or in searching status via REST API
       try {
         const rideDetailsResponse = await rideService.getRideDetails(rideId);
-        if (rideDetailsResponse?.status === 'cancelled' || rideDetailsResponse?.status === 'searching') {
-          console.log('[handleConfirmCancelRide] Ride is already cancelled or searching in backend:', rideDetailsResponse?.status);
+        if (rideDetailsResponse?.status === 'cancelled') {
+          console.log('[handleConfirmCancelRide] Ride is already cancelled in backend:', rideDetailsResponse?.status);
           setRideStatus('cancelled');
           showToast('Ride is already cancelled', 'info');
           setIsCancellationModalVisible(false);
@@ -2615,10 +2613,10 @@ const RideTrackerScreen = () => {
     );
   }
 
-  if (isLoadingDetails) {
+  if (isLoadingDetails && !rideDetails) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#075B5E" />
+        <ActivityIndicator size="large" color="#BC001F" />
         <Text style={{ marginTop: 16 }}>Loading ride details...</Text>
       </View>
     );
@@ -2886,12 +2884,12 @@ const RideTrackerScreen = () => {
                 latitude: pickupLocation.lat,
                 longitude: pickupLocation.lng,
               }}
-              title="Pickup Location"
-              description="Pickup point"
-              pinColor="#075B5E"
+              title={driverArrived ? "Driver Arrived at Pickup" : "Pickup Location"}
+              description={driverArrived ? "Driver is at pickup point" : "Pickup point"}
+              pinColor={driverArrived ? "#BC001F" : "#4CAF50"}
             >
-              <View style={{ backgroundColor: '#4CAF50', borderRadius: 20, padding: 8, borderWidth: 2, borderColor: '#fff' }}>
-                <MaterialIcons name="location-on" size={20} color="#fff" />
+              <View style={{ backgroundColor: driverArrived ? '#BC001F' : '#4CAF50', borderRadius: 20, padding: 8, borderWidth: 2, borderColor: '#fff' }}>
+                <MaterialIcons name={driverArrived ? "check-circle" : "location-on"} size={20} color="#fff" />
               </View>
             </Marker>
           )}
@@ -2978,6 +2976,26 @@ const RideTrackerScreen = () => {
         {(!mainRoutePolyline.length || !driverLocation || !pickupLocation || !dropoffLocation) && (
           <View style={styles.routeNotAvailableOverlay}>
             <Text style={styles.routeNotAvailableText}>Route not available</Text>
+          </View>
+        )}
+
+        {/* Floating Navigate Action for Driver */}
+        {userRole === 'driver' && (
+          <View style={styles.floatingNavigateContainer}>
+            <TouchableOpacity
+              style={styles.floatingNavigateButton}
+              onPress={() => {
+                const targetLoc = driverArrived ? dropoffLocation : pickupLocation;
+                if (targetLoc) {
+                  const url = `https://www.google.com/maps/dir/?api=1&destination=${targetLoc.lat},${targetLoc.lng}`;
+                  Linking.openURL(url).catch(() => showToast('Could not open map navigation', 'error'));
+                }
+              }}
+              activeOpacity={0.9}
+            >
+              <MaterialIcons name="near-me" size={20} color="#BC001F" style={{ marginRight: 6 }} />
+              <Text style={styles.floatingNavigateText}>Navigate</Text>
+            </TouchableOpacity>
           </View>
         )}
       </View>
@@ -3112,18 +3130,95 @@ const RideTrackerScreen = () => {
           </ScrollView>
         ) : (
           <ScrollView
+            style={styles.passengerSheetScroll}
+            contentContainerStyle={styles.passengerSheetContent}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flexGrow: 1 }}
           >
-            <View style={styles.progressContainer}>
-              <View style={styles.progressHeader}>
-                <Text style={styles.progressTitle}>Ride Progress</Text>
-                <Text style={[styles.statusText, { color: getStatusColor() }]}>{getStatusText()}</Text>
+            {/* Drag Handle Pill */}
+            <View style={styles.sheetDragHandle} />
+
+            {/* Passenger Info & Fare Header Card */}
+            <View style={styles.driverPassengerCard}>
+              <View style={styles.vvAvatarContainer}>
+                <MaterialIcons name="person" size={32} color="#485F84" />
+                <View style={styles.vvVerifiedBadge}>
+                  <MaterialIcons name="check-circle" size={14} color="#BC001F" />
+                </View>
               </View>
-              <View style={styles.progressBar}>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={styles.driverPassengerName}>{otherUserName || 'Purna Shah'}</Text>
+                  <Text style={styles.driverFareText}>NPR {parseFloat(actualFare).toFixed(0)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+                  <View style={styles.driverRatingRow}>
+                    <MaterialIcons name="star" size={14} color="#5F5E5E" />
+                    <Text style={styles.driverRatingText}>4.9 • 124 Rides</Text>
+                  </View>
+                  <View style={styles.driverCategoryBadge}>
+                    <Text style={styles.driverCategoryBadgeText}>{vehicle || 'Taxi Economy'}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Driver Arrived Status Card (Arrival Confirmation UI) */}
+            {driverArrived && (
+              <View style={styles.arrivedStatusCard}>
+                <View style={styles.arrivedIconContainer}>
+                  <MaterialIcons name="check-circle" size={24} color="#BC001F" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.arrivedStatusTitle}>Driver Arrived at Pickup</Text>
+                  <Text style={styles.arrivedStatusSubtext}>
+                    Waiting for passenger to board. Press Start Ride when ready.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Divider */}
+            <View style={styles.sheetDivider} />
+
+            {/* Route Details Timeline */}
+            <View style={styles.vvRouteContainer}>
+              <View style={styles.vvRouteItem}>
+                <View style={styles.pickupDotOuter}>
+                  <View style={styles.pickupDotInner} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.routeHeaderLabel}>PICKUP</Text>
+                  <Text style={styles.vvRouteAddress} numberOfLines={1}>
+                    {from || 'Kathmandu, Nepal'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.routeConnectorDashed} />
+
+              <View style={styles.vvRouteItem}>
+                <View style={styles.dropoffSquareOuter}>
+                  <View style={styles.dropoffSquareInner} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12 }}>
+                  <Text style={styles.routeHeaderLabel}>DROP-OFF</Text>
+                  <Text style={styles.vvRouteAddress} numberOfLines={1}>
+                    {to || 'Lalitpur, Nepal'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Ride Progress Bar */}
+            <View style={{ marginVertical: 12 }}>
+              <View style={styles.vvHeaderRow}>
+                <Text style={styles.routeHeaderLabel}>RIDE PROGRESS</Text>
+                <Text style={styles.vvHeaderPercent}>{Math.round(progress)}%</Text>
+              </View>
+              <View style={styles.vvProgressTrack}>
                 <Animated.View
                   style={[
-                    styles.progressFill,
+                    styles.vvProgressFill,
                     {
                       width: progressAnimation.interpolate({
                         inputRange: [0, 100],
@@ -3133,115 +3228,84 @@ const RideTrackerScreen = () => {
                   ]}
                 />
               </View>
-              <Text style={styles.progressText}>{Math.round(progress)}%</Text>
             </View>
-            <View style={styles.detailsContainer}>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <MaterialIcons name="location-on" size={20} color="#4CAF50" />
-                  <Text style={styles.detailText}>From: {from}</Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <MaterialIcons name="location-on" size={20} color="#F44336" />
-                  <Text style={styles.detailText}>To: {to}</Text>
-                </View>
-              </View>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <MaterialIcons name="person" size={20} color="#075B5E" />
-                  <Text style={styles.detailText}>
-                    {otherUserRole.charAt(0).toUpperCase() + otherUserRole.slice(1)}: {otherUserName}
-                  </Text>
-                </View>
-                <View style={styles.detailItem}>
-                  <MaterialIcons name="payment" size={20} color="#d6ab1e" />
-                  <Text style={styles.detailText}>Fare: रू {parseFloat(actualFare).toFixed(0)}</Text>
-                </View>
-              </View>
-              <View style={styles.detailRow}>
-                <View style={styles.detailItem}>
-                  <MaterialIcons name="directions-car" size={20} color="#075B5E" />
-                  <Text style={styles.detailText}>Vehicle: {vehicle}</Text>
-                </View>
-              </View>
-            </View>
-            <View style={styles.buttonContainer}>
-              {userRole === 'driver' && rideStatus === 'accepted' && !driverArrived && (
-                <TouchableOpacity
-                  style={[styles.button, { backgroundColor: '#FF9800' }]}
-                  onPress={handleDriverArrivedAction}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.buttonText}>Arrived at Pickup</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-              {userRole === 'driver' && rideStatus === 'accepted' && driverArrived && (
-                <TouchableOpacity
-                  style={[styles.button, { backgroundColor: '#075B5E' }]}
-                  onPress={handleStartRide}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.buttonText}>Start Ride</Text>
-                  )}
-                </TouchableOpacity>
-              )}
-              {userRole === 'driver' && rideStatus === 'in-progress' && (
-                <TouchableOpacity
-                  style={[styles.button, { backgroundColor: '#4CAF50' }]}
-                  onPress={handleCompleteRideAction}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#fff" />
-                  ) : (
-                    <Text style={styles.buttonText}>Complete Ride</Text>
-                  )}
-                </TouchableOpacity>
-              )}
+
+            {/* Communication Actions (Call / Message) */}
+            <View style={styles.driverCommRow}>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: '#F44336' }]}
-                onPress={handleCancelRide}
-                disabled={cancelling}
+                style={styles.driverCommButton}
+                onPress={handleCallPress}
+                activeOpacity={0.85}
               >
-                <Text style={styles.buttonText}>Cancel Ride</Text>
+                <MaterialIcons name="call" size={20} color="#1A1B1F" style={{ marginRight: 8 }} />
+                <Text style={styles.driverCommButtonText}>Call</Text>
               </TouchableOpacity>
 
-              <View style={styles.contactButtons}>
-                <TouchableOpacity
-                  style={[styles.contactButton, { backgroundColor: '#4CAF50' }]}
-                  onPress={handleCallOtherUser}
-                >
-                  <MaterialIcons name="phone" size={18} color="#fff" />
-                  <Text style={styles.contactButtonText}>Call</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.contactButton, { backgroundColor: '#2196F3' }]}
-                  onPress={handleMessageOtherUser}
-                >
-                  <View style={{ position: 'relative' }}>
-                    <MaterialIcons name="message" size={18} color="#fff" />
-                    {hasUnreadMessages && (
-                      <Animated.View
-                        style={[
-                          styles.unreadBadge,
-                          {
-                            transform: [{ scale: unreadBadgeAnimation }]
-                          }
-                        ]}
-                      />
-                    )}
-                  </View>
-                  <Text style={styles.contactButtonText}>Message</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={styles.driverCommButton}
+                onPress={handleMessageOtherUser}
+                activeOpacity={0.85}
+              >
+                <MaterialIcons name="chat" size={20} color="#1A1B1F" style={{ marginRight: 8 }} />
+                <Text style={styles.driverCommButtonText}>Message</Text>
+              </TouchableOpacity>
             </View>
+
+            {/* Primary Action Buttons (Arrived / Start / Complete) */}
+            {rideStatus === 'accepted' && !driverArrived && (
+              <TouchableOpacity
+                style={styles.primaryRedCTA}
+                onPress={handleDriverArrivedAction}
+                disabled={loading}
+                activeOpacity={0.9}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryRedCTAText}>Arrived at Pickup</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {rideStatus === 'accepted' && driverArrived && (
+              <TouchableOpacity
+                style={styles.primaryRedCTA}
+                onPress={handleStartRide}
+                disabled={loading}
+                activeOpacity={0.9}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryRedCTAText}>Start Ride</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {rideStatus === 'in-progress' && (
+              <TouchableOpacity
+                style={styles.primaryRedCTA}
+                onPress={handleCompleteRideAction}
+                disabled={loading}
+                activeOpacity={0.9}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.primaryRedCTAText}>Complete Ride</Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Secondary Cancel Ride Action */}
+            <TouchableOpacity
+              style={styles.secondaryCancelCTA}
+              onPress={handleCancelRide}
+              disabled={cancelling}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.secondaryCancelCTAText}>Cancel Ride</Text>
+            </TouchableOpacity>
           </ScrollView>
         )}
       </View>
@@ -4247,6 +4311,209 @@ const styles = StyleSheet.create({
   devButtonText: {
     color: '#fff',
     fontSize: 11,
+    fontWeight: '700',
+  },
+  floatingNavigateContainer: {
+    position: 'absolute',
+    left: 16,
+    bottom: 16,
+    zIndex: 99,
+  },
+  floatingNavigateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1B1F',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  floatingNavigateText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  sheetDragHandle: {
+    width: 48,
+    height: 5,
+    backgroundColor: '#E3E2E7',
+    borderRadius: 3,
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  driverPassengerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FAF8FE',
+    borderRadius: 16,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#EFEDF3',
+    marginBottom: 12,
+  },
+  driverPassengerName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A1B1F',
+  },
+  driverFareText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#BC001F',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
+  },
+  driverRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  driverRatingText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5F5E5E',
+    marginLeft: 4,
+  },
+  driverCategoryBadge: {
+    backgroundColor: '#E9E7ED',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  driverCategoryBadgeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5F5E5E',
+  },
+  arrivedStatusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1.5,
+    borderColor: '#E6192E',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+  },
+  arrivedIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFDAD6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  arrivedStatusTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#BC001F',
+    marginBottom: 2,
+  },
+  arrivedStatusSubtext: {
+    fontSize: 13,
+    color: '#5D3F3D',
+    lineHeight: 18,
+  },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: '#E7BCB9',
+    opacity: 0.4,
+    marginVertical: 12,
+  },
+  routeHeaderLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#5F5E5E',
+    letterSpacing: 1,
+  },
+  pickupDotOuter: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: 'rgba(188, 0, 31, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickupDotInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#BC001F',
+  },
+  dropoffSquareOuter: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    backgroundColor: 'rgba(26, 27, 31, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropoffSquareInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    backgroundColor: '#1A1B1F',
+  },
+  routeConnectorDashed: {
+    width: 1.5,
+    height: 24,
+    backgroundColor: '#926E6C',
+    marginLeft: 7,
+    marginVertical: 2,
+    opacity: 0.4,
+  },
+  driverCommRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginVertical: 14,
+  },
+  driverCommButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E2DFDE',
+    paddingVertical: 14,
+    borderRadius: 12,
+  },
+  driverCommButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1A1B1F',
+  },
+  primaryRedCTA: {
+    backgroundColor: '#BC001F',
+    paddingVertical: 16,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 6,
+    shadowColor: '#BC001F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  primaryRedCTAText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  secondaryCancelCTA: {
+    backgroundColor: 'transparent',
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(188, 0, 31, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 6,
+  },
+  secondaryCancelCTAText: {
+    color: '#BC001F',
+    fontSize: 16,
     fontWeight: '700',
   },
 });

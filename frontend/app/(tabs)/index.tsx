@@ -200,13 +200,10 @@ const PassengerHomeScreen = () => {
       const location = await locationService.getCurrentLocation();
       setCurrentLocation(location);
 
-      if (!pickupLocation || pickupLocation === '') {
-        if (isInKathmandu(location.latitude, location.longitude)) {
-          const address = await locationService.getAddressFromCoordinates(location.latitude, location.longitude);
-          setPickupLocation(address);
-        } else {
-          setPickupLocation('Kathmandu');
-        }
+      if (!pickupLocation || pickupLocation === '' || pickupLocation === 'Kathmandu') {
+        setPickupCoords({ lat: location.latitude, lng: location.longitude });
+        const address = await locationService.getAddressFromCoordinates(location.latitude, location.longitude);
+        setPickupLocation(address || 'Current Location');
       }
 
       const types = await rideService.getVehicleTypes();

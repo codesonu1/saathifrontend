@@ -18,9 +18,9 @@ const ProfileImage: React.FC<ProfileImageProps> = ({
   size = 40,
   style,
   showBorder = false,
-  borderColor = '#075B5E',
+  borderColor = '#BC001F',
   fallbackIcon = 'person',
-  fallbackIconColor = '#075B5E',
+  fallbackIconColor = '#BC001F',
   fallbackIconSize,
 }) => {
   const [imageLoading, setImageLoading] = React.useState(false);

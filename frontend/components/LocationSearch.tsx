@@ -34,7 +34,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
   value,
   onChangeText,
   onLocationSelect,
-  iconColor = '#075B5E',
+  iconColor = '#BC001F',
   showSavedAddresses = true,
   disabled = false,
   boundingBox,

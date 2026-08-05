@@ -222,7 +222,7 @@ const RaiseFareModal: React.FC<RaiseFareModalProps> = ({
                   onPress={handleDecrement}
                   disabled={loading}
                 >
-                  <MaterialIcons name="remove" size={24} color="#075B5E" />
+                  <MaterialIcons name="remove" size={24} color="#BC001F" />
                 </TouchableOpacity>
                 
                 <TextInput
@@ -239,7 +239,7 @@ const RaiseFareModal: React.FC<RaiseFareModalProps> = ({
                   onPress={handleIncrement}
                   disabled={loading}
                 >
-                  <MaterialIcons name="add" size={24} color="#075B5E" />
+                  <MaterialIcons name="add" size={24} color="#BC001F" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
   fareInfoValue: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#075B5E',
+    color: '#BC001F',
     marginBottom: 4,
   },
   fareInfoSubtext: {
@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     alignItems: 'center',
   },
   sendButtonDisabled: {
