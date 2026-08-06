@@ -191,151 +191,197 @@ const RideRatingScreen = () => {
     const pName = passengerName || (tripDetails?.passenger?.firstName && tripDetails?.passenger?.lastName 
       ? `${tripDetails.passenger.firstName} ${tripDetails.passenger.lastName}`
       : tripDetails?.passenger?.firstName || 'Passenger');
-      
+    const pickupAddress = from || (tripDetails?.pickUp?.address || 'N/A');
+    const dropoffAddress = to || (tripDetails?.dropOff?.address || 'N/A');
+    const distanceVal = tripDetails?.distance || (tripDetails?.routeDetails?.distance ? (tripDetails.routeDetails.distance / 1000).toFixed(1) : null);
+    const durationVal = tripDetails?.duration || (tripDetails?.routeDetails?.duration ? Math.round(tripDetails.routeDetails.duration / 60) : null);
+
     return (
       <View style={styles.driverContent}>
-        {/* Header */}
+        {/* Modern Top Header */}
         <View style={styles.driverHeader}>
-          <View style={styles.placeholder} />
-          <Text style={styles.driverHeaderTitle}>Trip Summary</Text>
-          <View style={styles.placeholder} />
-        </View>
-
-        {/* Hero Earnings Card */}
-        <View style={styles.earningsHeroCard}>
-          <View style={styles.earningsHeader}>
-            <Icon name="monetization-on" size={24} color="#FFD700" />
-            <Text style={styles.earningsTitle}>Trip Completed Successfully!</Text>
-          </View>
-          <Text style={styles.earningsAmount}>रू{parseFloat(actualFare).toFixed(0)}</Text>
-          <Text style={styles.earningsSubtitle}>Total Earnings For This Trip</Text>
-          <View style={styles.earningsBanner}>
-            <Text style={styles.earningsBannerText}>Payment processed & added to your wallet balance</Text>
-          </View>
-        </View>
-
-        {/* Passenger Profile Info */}
-        <View style={styles.driverCard}>
-          <Text style={styles.sectionLabel}>Your Passenger</Text>
-          <View style={styles.driverPassengerInfo}>
-            <View style={styles.driverPassengerAvatar}>
-              <Icon name="person" size={28} color="#075B5E" />
-            </View>
-            <View style={styles.driverPassengerDetails}>
-              <Text style={styles.driverPassengerName}>{pName}</Text>
-              <Text style={styles.driverPassengerRole}>Saathi Passenger</Text>
-            </View>
-            <View style={styles.successBadge}>
-              <Icon name="verified" size={16} color="#075B5E" />
-              <Text style={styles.successBadgeText}>Verified</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Trip Timeline Info */}
-        <View style={styles.driverCard}>
-          <Text style={styles.sectionLabel}>Route Details</Text>
-          <View style={styles.timelineContainer}>
-            <View style={styles.timelineItem}>
-              <View style={styles.dotPickup} />
-              <View style={styles.timelineTextContainer}>
-                <Text style={styles.timelineLabel}>PICKUP</Text>
-                <Text style={styles.timelineValue} numberOfLines={1}>
-                  {from || (tripDetails?.pickUp?.address || 'Pickup Location')}
-                </Text>
-              </View>
-            </View>
-            <View style={styles.timelineLine} />
-            <View style={styles.timelineItem}>
-              <View style={styles.dotDropoff} />
-              <View style={styles.timelineTextContainer}>
-                <Text style={styles.timelineLabel}>DROPOFF</Text>
-                <Text style={styles.timelineValue} numberOfLines={1}>
-                  {to || (tripDetails?.dropOff?.address || 'Dropoff Location')}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* Rating Section */}
-        <View style={styles.driverCard}>
-          <Text style={styles.driverRatingTitle}>How was {pName.split(' ')[0]}?</Text>
-          <Text style={styles.driverRatingSubtitle}>{getRatingText()}</Text>
-
-          <View style={styles.starContainer}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity key={star} onPress={() => handleStarPress(star - 1)} style={styles.starButton}>
-                <Icon 
-                  name="star" 
-                  size={46} 
-                  color={rating >= star ? "#FFD700" : "#E0E0E0"} 
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          {/* Quick Feedback Tags */}
-          {rating > 0 && (
-            <View style={styles.tagsSection}>
-              <Text style={styles.tagsTitle}>Select matching tags:</Text>
-              <View style={styles.tagsList}>
-                {(rating >= 4 ? positiveTags : negativeTags).map((tag) => {
-                  const isSelected = selectedTags.includes(tag);
-                  return (
-                    <TouchableOpacity
-                      key={tag}
-                      onPress={() => toggleTag(tag)}
-                      style={[styles.tagChip, isSelected && styles.tagChipActive]}
-                    >
-                      <Text style={[styles.tagText, isSelected && styles.tagTextActive]}>
-                        {tag}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* Feedback Text Input */}
-        <View style={styles.driverCard}>
-          <Text style={styles.feedbackTitle}>Additional Comments (Optional)</Text>
-          <TextInput
-            style={styles.feedbackInput}
-            placeholder="Tell us about the passenger behavior, punctuality or helper experience..."
-            placeholderTextColor="#999"
-            value={feedback}
-            onChangeText={setFeedback}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-          />
-        </View>
-
-        {/* Submit / Skip Buttons */}
-        <View style={styles.driverActions}>
-          <TouchableOpacity
-            style={[styles.driverSubmitButton, (rating === 0 || submitting) && styles.driverSubmitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={rating === 0 || submitting}
-          >
-            <Text style={styles.driverSubmitButtonText}>
-              {submitting ? 'Submitting...' : 'Complete Trip Summary'}
-            </Text>
-            <Icon name="check" size={20} color="#fff" style={styles.submitIcon} />
-          </TouchableOpacity>
-
           <TouchableOpacity 
-            style={styles.driverSkipButton} 
-            onPress={() => {
-              router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
-            }}
+            style={styles.driverBackButton} 
+            onPress={() => router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } })}
           >
-            <Text style={styles.driverSkipButtonText}>Skip Feedback</Text>
+            <Icon name="menu" size={24} color="#BC001F" />
+          </TouchableOpacity>
+          <Text style={styles.driverHeaderTitle}>Saathi</Text>
+          <TouchableOpacity style={styles.driverNotificationButton}>
+            <Icon name="notifications" size={24} color="#BC001F" />
           </TouchableOpacity>
         </View>
+
+        <ScrollView 
+          contentContainerStyle={styles.driverScrollContainer} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Hero Earnings Card */}
+          <View style={styles.earningsHeroCard}>
+            <View style={styles.earningsHeaderRow}>
+              <Icon name="payments" size={22} color="#FFFFFF" />
+              <Text style={styles.earningsTitle}>Trip Completed Successfully!</Text>
+            </View>
+            
+            <View style={styles.earningsAmountRow}>
+              <Text style={styles.currencySymbol}>रू</Text>
+              <Text style={styles.earningsAmountText}>
+                {parseFloat(actualFare).toFixed(0)}
+              </Text>
+            </View>
+            <Text style={styles.earningsLabelText}>TOTAL EARNINGS FOR THIS TRIP</Text>
+
+            <View style={styles.earningsWalletBanner}>
+              <Text style={styles.earningsWalletText}>Payment processed & added to your wallet</Text>
+            </View>
+          </View>
+
+          {/* Passenger Information Card */}
+          <View style={styles.driverSectionWrapper}>
+            <Text style={styles.sectionHeaderLabel}>YOUR PASSENGER</Text>
+            <View style={styles.driverPassengerCard}>
+              <View style={styles.driverPassengerAvatarWrapper}>
+                <Icon name="person" size={28} color="#BC001F" />
+              </View>
+              <View style={styles.driverPassengerDetailsCol}>
+                <View style={styles.driverPassengerNameRow}>
+                  <Text style={styles.driverPassengerName}>{pName}</Text>
+                  <View style={styles.verifiedBadgeContainer}>
+                    <Icon name="verified" size={13} color="#BC001F" />
+                    <Text style={styles.verifiedBadgeText}>VERIFIED</Text>
+                  </View>
+                </View>
+                <Text style={styles.driverPassengerSubtext}>Saathi Passenger</Text>
+              </View>
+              <TouchableOpacity style={styles.chatIconButton} onPress={() => {}}>
+                <Icon name="chat-bubble-outline" size={22} color="#5F5E5E" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Route Details Card */}
+          <View style={styles.driverSectionWrapper}>
+            <Text style={styles.sectionHeaderLabel}>ROUTE DETAILS</Text>
+            <View style={styles.routeCardContainer}>
+              <View style={styles.timelineRowContainer}>
+                <View style={styles.timelineIndicatorsCol}>
+                  <View style={styles.pickupDotOuter}>
+                    <View style={styles.pickupDotInner} />
+                  </View>
+                  <View style={styles.timelineConnectorLine} />
+                  <View style={styles.dropoffSquareOuter}>
+                    <View style={styles.dropoffSquareInner} />
+                  </View>
+                </View>
+                <View style={styles.timelineAddressCol}>
+                  <View style={styles.addressBlock}>
+                    <Text style={styles.addressTypeLabel}>PICKUP</Text>
+                    <Text style={styles.addressText} numberOfLines={1}>{pickupAddress}</Text>
+                  </View>
+                  <View style={styles.addressBlock}>
+                    <Text style={styles.addressTypeLabel}>DROPOFF</Text>
+                    <Text style={styles.addressText} numberOfLines={1}>{dropoffAddress}</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.routeDivider} />
+
+              <View style={styles.routeMetaRow}>
+                <View style={styles.routeMetaItem}>
+                  <Icon name="straighten" size={18} color="#5F5E5E" />
+                  <Text style={styles.routeMetaText}>{distanceVal ? `${distanceVal} km` : 'N/A'}</Text>
+                </View>
+                <View style={styles.routeMetaItem}>
+                  <Icon name="schedule" size={18} color="#5F5E5E" />
+                  <Text style={styles.routeMetaText}>{durationVal ? `${durationVal} mins` : 'N/A'}</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+
+          {/* Passenger Rating Section */}
+          <View style={styles.ratingSectionWrapper}>
+            <Text style={styles.ratingSectionHeadline}>How was {pName.split(' ')[0]}?</Text>
+            <Text style={styles.ratingSectionSubtext}>Rate your experience to help us improve.</Text>
+
+            <View style={styles.starRowContainer}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <TouchableOpacity key={star} onPress={() => handleStarPress(star - 1)} activeOpacity={0.7} style={styles.starButton}>
+                  <Icon 
+                    name={rating >= star ? "star" : "star-border"} 
+                    size={40} 
+                    color={rating >= star ? "#BC001F" : "#E3E2E7"} 
+                  />
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Quick Feedback Tags */}
+            {rating > 0 && (
+              <View style={styles.tagsSection}>
+                <Text style={styles.tagsTitle}>Select matching tags:</Text>
+                <View style={styles.tagsList}>
+                  {(rating >= 4 ? positiveTags : negativeTags).map((tag) => {
+                    const isSelected = selectedTags.includes(tag);
+                    return (
+                      <TouchableOpacity
+                        key={tag}
+                        onPress={() => toggleTag(tag)}
+                        style={[styles.tagChip, isSelected && styles.tagChipActive]}
+                      >
+                        <Text style={[styles.tagText, isSelected && styles.tagTextActive]}>
+                          {tag}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+
+            {/* Optional Feedback Input */}
+            <View style={styles.commentsInputContainer}>
+              <Text style={styles.commentsLabel}>Additional Comments (Optional)</Text>
+              <TextInput
+                style={styles.commentsTextInput}
+                placeholder="Tell us more about the trip..."
+                placeholderTextColor="#926E6C"
+                value={feedback}
+                onChangeText={setFeedback}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+          </View>
+
+          {/* Action CTAs */}
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity
+              style={[styles.primaryRedSubmitCTA, (submitting) && styles.driverSubmitButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={submitting}
+              activeOpacity={0.9}
+            >
+              <Text style={styles.primaryRedSubmitCTAText}>
+                {submitting ? 'Submitting...' : 'Submit & New Ride'}
+              </Text>
+              <Icon name="arrow-forward" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={styles.secondaryDashboardCTA} 
+              onPress={() => {
+                router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } });
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.secondaryDashboardCTAText}>Back to Dashboard</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
       </View>
     );
   };
@@ -720,208 +766,299 @@ const styles = StyleSheet.create({
   // --- DRIVER SECTION STYLES ---
   driverContent: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#FAF8FE',
   },
   driverHeader: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#FAF8FE',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 18,
-    marginTop: 0,
-    paddingTop: Platform.OS === 'ios' ? 50 : 20,
-    borderBottomLeftRadius: 16,
-    borderBottomRightRadius: 16,
+    paddingVertical: 14,
+    paddingTop: Platform.OS === 'ios' ? 52 : 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
   },
   driverBackButton: {
-    padding: 6,
+    padding: 8,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#F4F3F8',
   },
   driverHeaderTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#fff',
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#BC001F',
+    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-medium',
+  },
+  driverNotificationButton: {
+    padding: 8,
+    borderRadius: 20,
+    backgroundColor: '#F4F3F8',
+  },
+  driverScrollContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 40,
   },
   earningsHeroCard: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#E6192E',
     borderRadius: 20,
     padding: 24,
-    marginHorizontal: 16,
-    marginTop: 16,
-    marginBottom: 16,
     alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    marginBottom: 24,
+    shadowColor: '#BC001F',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  earningsHeader: {
+  earningsHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 12,
   },
   earningsTitle: {
-    fontSize: 15,
-    color: '#E6F4EA',
-    fontWeight: '600',
+    fontSize: 16,
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
-  earningsAmount: {
-    fontSize: 38,
+  earningsAmountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginVertical: 4,
+  },
+  currencySymbol: {
+    fontSize: 32,
     fontWeight: '800',
-    color: '#FFF',
-    marginBottom: 4,
+    color: '#FFFFFF',
+    marginRight: 4,
+    opacity: 0.9,
   },
-  earningsSubtitle: {
-    fontSize: 13,
-    color: '#A3D3D4',
-    fontWeight: '500',
-    letterSpacing: 0.5,
+  earningsAmountText: {
+    fontSize: 56,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: -1,
   },
-  earningsBanner: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  earningsLabelText: {
+    fontSize: 11,
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    marginTop: 2,
+    marginBottom: 16,
+  },
+  earningsWalletBanner: {
+    backgroundColor: 'rgba(0, 0, 0, 0.12)',
     borderRadius: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    marginTop: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     width: '100%',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
-  earningsBannerText: {
-    color: '#E6F4EA',
-    fontSize: 11,
+  earningsWalletText: {
+    color: 'rgba(255, 255, 255, 0.95)',
+    fontSize: 13,
     fontWeight: '500',
     textAlign: 'center',
   },
-  driverCard: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginHorizontal: 16,
-    marginBottom: 14,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 6,
+  driverSectionWrapper: {
+    marginBottom: 20,
   },
-  sectionLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#666',
-    textTransform: 'uppercase',
+  sectionHeaderLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#5F5E5E',
     letterSpacing: 1,
-    marginBottom: 14,
+    marginBottom: 8,
+    paddingLeft: 4,
   },
-  driverPassengerInfo: {
+  driverPassengerCard: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#EFEDF3',
   },
-  driverPassengerAvatar: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#E6F2F2',
+  driverPassengerAvatarWrapper: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FFDAD7',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,
   },
-  driverPassengerDetails: {
+  driverPassengerDetailsCol: {
     flex: 1,
+  },
+  driverPassengerNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   driverPassengerName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#111',
+    color: '#1A1B1F',
   },
-  driverPassengerRole: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
-  successBadge: {
+  verifiedBadgeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#E6F2F2',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    backgroundColor: '#FFDAD6',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 12,
-    gap: 4,
+    gap: 3,
   },
-  successBadgeText: {
-    fontSize: 11,
-    color: '#075B5E',
-    fontWeight: '700',
-  },
-  timelineContainer: {
-    marginTop: 4,
-  },
-  timelineItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  dotPickup: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#075B5E',
-    marginHorizontal: 4,
-  },
-  dotDropoff: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#EA2F14',
-    marginHorizontal: 4,
-  },
-  timelineLine: {
-    width: 2,
-    height: 16,
-    backgroundColor: '#E5E7EB',
-    marginLeft: 8,
-    marginVertical: 2,
-  },
-  timelineTextContainer: {
-    marginLeft: 14,
-    flex: 1,
-  },
-  timelineLabel: {
+  verifiedBadgeText: {
     fontSize: 10,
-    fontWeight: '700',
-    color: '#9CA3AF',
+    color: '#BC001F',
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
-  timelineValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#374151',
-    marginTop: 1,
+  driverPassengerSubtext: {
+    fontSize: 13,
+    color: '#5F5E5E',
+    marginTop: 2,
   },
-  driverRatingTitle: {
-    fontSize: 19,
-    fontWeight: '700',
-    color: '#111',
-    textAlign: 'center',
-    marginBottom: 6,
+  chatIconButton: {
+    padding: 8,
   },
-  driverRatingSubtitle: {
+  routeCardContainer: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#EFEDF3',
+  },
+  timelineRowContainer: {
+    flexDirection: 'row',
+  },
+  timelineIndicatorsCol: {
+    alignItems: 'center',
+    width: 20,
+    marginRight: 12,
+    paddingTop: 4,
+  },
+  pickupDotOuter: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: 'rgba(188, 0, 31, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pickupDotInner: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#BC001F',
+  },
+  timelineConnectorLine: {
+    width: 1.5,
+    height: 36,
+    backgroundColor: '#E3E2E7',
+    marginVertical: 3,
+  },
+  dropoffSquareOuter: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+    backgroundColor: 'rgba(26, 27, 31, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dropoffSquareInner: {
+    width: 7,
+    height: 7,
+    borderRadius: 1.5,
+    backgroundColor: '#1A1B1F',
+  },
+  timelineAddressCol: {
+    flex: 1,
+    gap: 16,
+  },
+  addressBlock: {},
+  addressTypeLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#5F5E5E',
+    letterSpacing: 1,
+    marginBottom: 2,
+  },
+  addressText: {
     fontSize: 15,
-    color: '#075B5E',
     fontWeight: '600',
-    textAlign: 'center',
-    marginBottom: 20,
+    color: '#1A1B1F',
+  },
+  routeDivider: {
+    height: 1,
+    backgroundColor: '#E3E2E7',
+    marginVertical: 14,
+  },
+  routeMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  routeMetaItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  routeMetaText: {
+    fontSize: 14,
+    color: '#5F5E5E',
+    fontWeight: '500',
+  },
+  ratingSectionWrapper: {
+    alignItems: 'center',
+    marginVertical: 12,
+  },
+  ratingSectionHeadline: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1A1B1F',
+    marginBottom: 4,
+  },
+  ratingSectionSubtext: {
+    fontSize: 14,
+    color: '#5F5E5E',
+    marginBottom: 16,
+  },
+  starRowContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  starButton: {
+    padding: 4,
   },
   tagsSection: {
-    marginTop: 24,
+    marginTop: 12,
     width: '100%',
   },
   tagsTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#666',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#5F5E5E',
     marginBottom: 10,
   },
   tagsList: {
@@ -930,64 +1067,88 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   tagChip: {
-    backgroundColor: '#F3F4F6',
-    paddingHorizontal: 12,
+    backgroundColor: '#F4F3F8',
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: '#E3E2E7',
   },
   tagChipActive: {
-    backgroundColor: '#075B5E',
-    borderColor: '#075B5E',
+    backgroundColor: '#BC001F',
+    borderColor: '#BC001F',
   },
   tagText: {
     fontSize: 13,
-    color: '#374151',
+    color: '#1A1B1F',
     fontWeight: '500',
   },
   tagTextActive: {
-    color: '#fff',
-    fontWeight: '600',
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
-  driverActions: {
-    paddingHorizontal: 16,
-    paddingBottom: 40,
-    marginTop: 10,
+  commentsInputContainer: {
+    width: '100%',
+    marginTop: 16,
   },
-  driverSubmitButton: {
-    backgroundColor: '#075B5E',
+  commentsLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#5F5E5E',
+    letterSpacing: 1,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  commentsTextInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7BCB9',
     borderRadius: 16,
-    paddingVertical: 18,
+    padding: 14,
+    fontSize: 14,
+    color: '#1A1B1F',
+    minHeight: 80,
+  },
+  actionButtonsContainer: {
+    marginTop: 20,
+    gap: 10,
+  },
+  primaryRedSubmitCTA: {
+    backgroundColor: '#BC001F',
+    paddingVertical: 16,
+    borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
+    gap: 8,
+    shadowColor: '#BC001F',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
     shadowRadius: 8,
+    elevation: 4,
+  },
+  primaryRedSubmitCTAText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
   },
   driverSubmitButtonDisabled: {
-    backgroundColor: '#ccc',
+    backgroundColor: '#C8C6C5',
     elevation: 0,
+    shadowOpacity: 0,
   },
-  driverSubmitButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700',
-    marginRight: 8,
-  },
-  driverSkipButton: {
-    paddingVertical: 16,
+  secondaryDashboardCTA: {
+    paddingVertical: 14,
+    borderRadius: 16,
     alignItems: 'center',
-    marginTop: 8,
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
-  driverSkipButtonText: {
-    color: '#6B7280',
+  secondaryDashboardCTAText: {
+    color: '#5F5E5E',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '700',
   },
-})
+});
 
-export default RideRatingScreen
+export default RideRatingScreen;

@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import apiClient from '@/services/apiClient';
 
 interface DriverBottomNavProps {
   activeTab: 'home' | 'activity' | 'earnings' | 'account';
@@ -14,9 +15,34 @@ const DriverBottomNav: React.FC<DriverBottomNavProps> = ({ activeTab, onEarnings
   const insets = useSafeAreaInsets();
   const bottomPadding = insets.bottom > 0 ? insets.bottom : 6;
   const navHeight = 56 + bottomPadding;
+  const [isDriverRegistered, setIsDriverRegistered] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkRegistrationStatus = async () => {
+      try {
+        const response = await apiClient.get('driver-profile');
+        if (isMounted) {
+          const hasProfile = Boolean(response?.data?.data && (response.data.data._id || response.data.data.id));
+          setIsDriverRegistered(hasProfile);
+        }
+      } catch (err) {
+        if (isMounted) setIsDriverRegistered(false);
+      }
+    };
+    checkRegistrationStatus();
+    return () => { isMounted = false; };
+  }, []);
 
   const handleTabPress = (tab: 'home' | 'activity' | 'earnings' | 'account') => {
     if (tab === activeTab) return;
+
+    // Block tab presses if driver registration is incomplete
+    if (isDriverRegistered === false) {
+      console.log('[DriverBottomNav] Driver registration incomplete. Blocking navigation to', tab);
+      router.push('/(driver)/registration' as any);
+      return;
+    }
 
     if (tab === 'home') {
       router.push('/(driver)/driverSection' as any);
