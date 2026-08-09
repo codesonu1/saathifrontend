@@ -209,13 +209,7 @@ const DriverEarningsScreen = () => {
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding }]}>
-        <TouchableOpacity
-          onPress={() => setSidePanelVisible(true)}
-          style={styles.headerIconButton}
-          activeOpacity={0.8}
-        >
-          <MaterialIcons name="menu" size={24} color="#BC001F" />
-        </TouchableOpacity>
+        <View style={{ width: 24 }} />
         <Text style={styles.headerTitle}>Earnings</Text>
         <TouchableOpacity
           onPress={() => router.push('/(common)/notifications' as any)}
@@ -379,19 +373,7 @@ const DriverEarningsScreen = () => {
       {/* Fixed Driver Bottom Navigation */}
       <DriverBottomNav activeTab="earnings" />
 
-      {/* Side Panel Drawer */}
-      <SidePanel
-        visible={sidePanelVisible}
-        onClose={() => setSidePanelVisible(false)}
-        role="driver"
-        rideInProgress={false}
-        onChangeRole={async (newRole) => {
-          setSidePanelVisible(false);
-          if (newRole === 'passenger') {
-            router.push('/(tabs)');
-          }
-        }}
-      />
+
 
       <AppModal
         visible={modal.visible}

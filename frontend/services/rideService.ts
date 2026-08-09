@@ -112,8 +112,12 @@ export interface VehicleType {
   _id: string;
   name: string;
   description?: string;
+  pricingBase: number;
+  pricingPerKm: number;
   basePrice: number;
   pricePerKm: number;
+  capacity?: number;
+  icon?: string;
   isActive: boolean;
 }
 
@@ -151,12 +155,42 @@ class RideService {
   async getVehicleTypes(): Promise<VehicleType[]> {
     try {
       const response = await apiClient.get('/vehicle-types');
-      if (response.data.statusCode === 200) {
-        return response.data.data;
+      console.log('GET /vehicle-types raw response:', response?.data);
+      
+      let rawItems: any[] = [];
+      if (response?.data) {
+        if (Array.isArray(response.data)) {
+          rawItems = response.data;
+        } else if (Array.isArray(response.data.data)) {
+          rawItems = response.data.data;
+        } else if (Array.isArray(response.data.data?.items)) {
+          rawItems = response.data.data.items;
+        } else if (Array.isArray(response.data.items)) {
+          rawItems = response.data.items;
+        }
       }
-      return [];
-    } catch (error) {
-      console.error('Error getting vehicle types:', error);
+
+      const normalized = rawItems.map((item: any) => {
+        const pricingBase = Number(item.pricingBase ?? item.basePrice ?? item.base_price ?? 0);
+        const pricingPerKm = Number(item.pricingPerKm ?? item.pricePerKm ?? item.price_per_km ?? 0);
+        return {
+          _id: String(item._id || item.id || ''),
+          name: String(item.name || 'Vehicle'),
+          description: String(item.description || ''),
+          pricingBase,
+          pricingPerKm,
+          basePrice: pricingBase,
+          pricePerKm: pricingPerKm,
+          capacity: Number(item.capacity || 1),
+          icon: String(item.icon || ''),
+          isActive: item.isActive !== false,
+        };
+      });
+
+      console.log('Normalized Vehicle Types:', normalized);
+      return normalized;
+    } catch (error: any) {
+      console.error('FAILED GET /vehicle-types API CALL:', error.response?.data || error.message || error);
       return [];
     }
   }

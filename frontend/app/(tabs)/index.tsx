@@ -37,6 +37,7 @@ const PassengerHomeScreen = () => {
   const [pickupCoords, setPickupCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [destinationLocation, setDestinationLocation] = useState<string>(getString(to))
   const [destinationCoords, setDestinationCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [recentDestinations, setRecentDestinations] = useState<Array<{ name: string; address: string; lat: number; lng: number }>>([])
   const [offerPrice, setOfferPrice] = useState<string>(getString(fare))
   const [loading, setLoading] = useState(false)
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([])
@@ -45,6 +46,30 @@ const PassengerHomeScreen = () => {
   const [bikeFare, setBikeFare] = useState<number | null>(null)
   const [carFare, setCarFare] = useState<number | null>(null)
   const [autoAccept, setAutoAccept] = useState<boolean>(true)
+  const [calculatedFares, setCalculatedFares] = useState<{ [key: string]: number }>({})
+
+  const handleSelectVehicle = (vt: VehicleType) => {
+    setSelectedVehicleType(vt);
+    const fareVal = calculatedFares[vt._id] || calculatedFares[vt.name.toLowerCase().trim()];
+    if (typeof fareVal === 'number' && fareVal > 0) {
+      setOfferPrice(fareVal.toFixed(0));
+    } else {
+      setOfferPrice('');
+    }
+  };
+
+  const handleSelectRecentDestination = (item: { name: string; address: string; lat: number; lng: number }) => {
+    setDestinationLocation(item.name || item.address);
+    setDestinationCoords({ lat: item.lat, lng: item.lng });
+    if (mapRef.current) {
+      mapRef.current.animateToRegion({
+        latitude: item.lat,
+        longitude: item.lng,
+        latitudeDelta: 0.015,
+        longitudeDelta: 0.0121,
+      }, 1000);
+    }
+  };
 
   // Sliding bottom sheet state and animation (Collapsed: ~40% anchored at bottom, Expanded: ~70% upward over map)
   const collapsedVal = height * 0.30;
@@ -94,28 +119,21 @@ const PassengerHomeScreen = () => {
 
   const getVehicleTypeByCategory = (category: 'bike' | 'car', typesList: VehicleType[]) => {
     if (typesList.length === 0) return null;
-    if (category === 'bike') {
-      const bikeType = typesList.find(t => 
-        t.name.toLowerCase().includes('bike') || 
-        t.name.toLowerCase().includes('moto') || 
-        t.name.toLowerCase().includes('motorcycle')
-      );
-      return bikeType || typesList[0];
-    } else {
-      const carType = typesList.find(t => 
-        t.name.toLowerCase().includes('car') || 
-        t.name.toLowerCase().includes('ride') || 
-        t.name.toLowerCase().includes('comfort') || 
-        t.name.toLowerCase().includes('taxi')
-      );
-      if (carType) return carType;
-      const nonBikeType = typesList.find(t => 
-        !t.name.toLowerCase().includes('bike') && 
-        !t.name.toLowerCase().includes('moto') && 
-        !t.name.toLowerCase().includes('motorcycle')
-      );
-      return nonBikeType || typesList[typesList.length - 1];
-    }
+    
+    const classify = (vt: VehicleType): 'bike' | 'car' | 'other' => {
+      const name = String(vt.name || '').toLowerCase().trim();
+      const isCar = name.includes('car') || name.includes('taxi') || name.includes('cab') || name.includes('sedan') || name.includes('suv') || name.includes('auto');
+      const isBike = name.includes('bike') || name.includes('moto') || name.includes('motorcycle') || name.includes('scooter') || name.includes('two_wheeler');
+
+      if (isCar) return 'car';
+      if (isBike) return 'bike';
+      return 'other';
+    };
+
+    const matched = typesList.find(t => classify(t) === category);
+    if (matched) return matched;
+    
+    return category === 'bike' ? typesList[0] : (typesList.length > 1 ? typesList[1] : typesList[0]);
   };
 
   const handleCategoryChange = (category: 'bike' | 'car') => {
@@ -125,23 +143,25 @@ const PassengerHomeScreen = () => {
       setSelectedVehicleType(vt);
     }
     if (category === 'bike') {
-      const fareVal = bikeFare !== null ? bikeFare : 256;
-      setOfferPrice(fareVal.toFixed(0));
+      const fareVal = bikeFare !== null ? bikeFare : null;
+      setOfferPrice(fareVal !== null ? fareVal.toFixed(0) : '');
     } else {
-      const fareVal = carFare !== null ? carFare : 420;
-      setOfferPrice(fareVal.toFixed(0));
+      const fareVal = carFare !== null ? carFare : null;
+      setOfferPrice(fareVal !== null ? fareVal.toFixed(0) : '');
     }
   };
 
   const handleIncrementPrice = () => {
-    const currentPrice = parseFloat(offerPrice) || 256;
+    const currentPrice = parseFloat(offerPrice);
+    if (isNaN(currentPrice)) return;
     const newPrice = currentPrice + 10;
     setOfferPrice(newPrice.toString());
   };
 
   const handleDecrementPrice = () => {
-    const currentPrice = parseFloat(offerPrice) || 256;
-    const minPrice = selectedVehicleType?.basePrice || 50;
+    const currentPrice = parseFloat(offerPrice);
+    if (isNaN(currentPrice)) return;
+    const minPrice = selectedVehicleType?.basePrice || selectedVehicleType?.pricingBase || 50;
     const newPrice = Math.max(minPrice, currentPrice - 10);
     setOfferPrice(newPrice.toString());
   };
@@ -200,10 +220,14 @@ const PassengerHomeScreen = () => {
       const location = await locationService.getCurrentLocation();
       setCurrentLocation(location);
 
-      if (!pickupLocation || pickupLocation === '' || pickupLocation === 'Kathmandu') {
+      if (!pickupLocation || pickupLocation === '' || pickupLocation === 'Kathmandu' || pickupLocation === 'Kathmandu, Nepal') {
         setPickupCoords({ lat: location.latitude, lng: location.longitude });
         const address = await locationService.getAddressFromCoordinates(location.latitude, location.longitude);
-        setPickupLocation(address || 'Current Location');
+        if (address && address !== 'Kathmandu, Nepal') {
+          setPickupLocation(address);
+        } else {
+          setPickupLocation('');
+        }
       }
 
       const types = await rideService.getVehicleTypes();
@@ -214,6 +238,30 @@ const PassengerHomeScreen = () => {
         if (defaultVt) {
           setSelectedVehicleType(defaultVt);
         }
+      }
+
+      // Safely fetch passenger ride history for recent destinations
+      try {
+        const historyRides = await rideService.getPassengerRides();
+        if (Array.isArray(historyRides) && historyRides.length > 0) {
+          const list: Array<{ name: string; address: string; lat: number; lng: number }> = [];
+          const seen = new Set<string>();
+          for (const r of historyRides) {
+            const locName = r.dropOffLocation || (r as any).dropOff?.location;
+            const lat = r.dropOffLat || (r as any).dropOff?.coords?.coordinates[1];
+            const lng = r.dropOffLng || (r as any).dropOff?.coords?.coordinates[0];
+            if (locName && typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
+              const key = `${locName.trim().toLowerCase()}-${lat.toFixed(4)}-${lng.toFixed(4)}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                list.push({ name: locName, address: locName, lat, lng });
+              }
+            }
+          }
+          setRecentDestinations(list.slice(0, 5));
+        }
+      } catch (err) {
+        console.log('No recent destinations loaded from history:', err);
       }
     } catch (error) {
       console.error('Failed to initialize app:', error);
@@ -275,25 +323,52 @@ const PassengerHomeScreen = () => {
     const calculateFare = async () => {
       if (!pickupCoords || !destinationCoords) return;
       try {
+        const types = vehicleTypes.length > 0 ? vehicleTypes : await rideService.getVehicleTypes();
+        if (types.length > 0 && vehicleTypes.length === 0) {
+          setVehicleTypes(types);
+        }
         const result = await locationService.getRouteWithFare(
           pickupCoords.lat,
           pickupCoords.lng,
           destinationCoords.lat,
-          destinationCoords.lng
+          destinationCoords.lng,
+          types
         );
         
         if (result && result.fares) {
-          setBikeFare(result.fares.bike);
-          setCarFare(result.fares.car);
-          const calculatedFare = selectedCategory === 'bike' ? result.fares.bike : result.fares.car;
-          setOfferPrice(calculatedFare.toFixed(0));
+          setCalculatedFares(result.fares);
+
+          const selVt = selectedVehicleType || (types.length > 0 ? types[0] : null);
+          let activeFare = 0;
+          if (selVt) {
+            activeFare = result.fares[selVt._id] || result.fares[selVt.name.toLowerCase().trim()] || 0;
+          }
+
+          if (!activeFare || activeFare <= 0) {
+            activeFare = (Object.values(result.fares).find(v => typeof v === 'number' && v > 0) as number) || 0;
+          }
+
+          if (activeFare > 0) {
+            setOfferPrice(activeFare.toFixed(0));
+          } else {
+            setOfferPrice('');
+          }
+        } else {
+          setOfferPrice('');
         }
 
-        if (result && result.polyline) {
+        if (result && result.polyline && result.polyline.length > 0) {
           setRoutePolyline(result.polyline);
+          if (mapRef.current) {
+            mapRef.current.fitToCoordinates(result.polyline, {
+              edgePadding: { top: 120, right: 50, bottom: 250, left: 50 },
+              animated: true,
+            });
+          }
         }
       } catch (error) {
         console.error('Failed to calculate fare:', error);
+        setOfferPrice('');
       }
     };
     calculateFare();
@@ -419,22 +494,7 @@ const PassengerHomeScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      {/* Top Header Bar (Clean Header matching Stitch Reference) */}
-      <View style={[styles.topHeaderBar, { top: topHeaderPos }]}>
-        <View style={{ width: 38 }} />
-
-        <Text style={styles.headerBrandTitle}>Saathi</Text>
-
-        <TouchableOpacity
-          style={styles.headerProfileButton}
-          onPress={() => router.push('/(common)/profile')}
-          activeOpacity={0.8}
-        >
-          <ProfileImage size={38} />
-        </TouchableOpacity>
-      </View>
+      <StatusBar barStyle="dark-content" backgroundColor="transparent" translucent />
 
       {/* Map View & Top Floating Search Card Overlay */}
       <View style={styles.mapAbsoluteContainer}>
@@ -552,210 +612,271 @@ const PassengerHomeScreen = () => {
             keyboardShouldPersistTaps="handled"
             pointerEvents="auto"
           >
-            {/* Location Section inside Bottom Panel (Layout-stable before and after destination selection) */}
             {!isDestinationSelected ? (
-              <View style={styles.bottomLocationPanel}>
-                <View style={styles.searchRow}>
-                  <Ionicons name="radio-button-off" size={20} color="#B7102A" style={{ marginRight: 10 }} />
-                  <View style={{ flex: 1 }}>
-                    <LocationSearch
-                      placeholder="Kathmandu"
-                      value={pickupLocation}
-                      onChangeText={setPickupLocation}
-                      onLocationSelect={handlePickupLocationSelect}
-                      iconColor="#B7102A"
-                      disabled={loading}
-                      boundingBox={KATHMANDU_BOUNDING_BOX}
+              <>
+                {/* 1. Segmented Category Pill Switcher (Bike / Car) */}
+                <View style={styles.categoryTabContainer}>
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryTab,
+                      selectedCategory === 'bike' && styles.activeCategoryTab
+                    ]}
+                    onPress={() => handleCategoryChange('bike')}
+                    disabled={loading}
+                    activeOpacity={0.85}
+                  >
+                    <FontAwesome5
+                      name="motorcycle"
+                      size={18}
+                      color={selectedCategory === 'bike' ? '#FFFFFF' : '#191C1D'}
                     />
-                  </View>
-                </View>
+                    <Text style={[
+                      styles.categoryTabText,
+                      selectedCategory === 'bike' && styles.activeCategoryTabText
+                    ]}>
+                      Bike
+                    </Text>
+                  </TouchableOpacity>
 
-                <View style={[styles.searchRow, styles.destinationSearchRow]}>
-                  <Ionicons name="location" size={20} color="#B7102A" style={{ marginRight: 10 }} />
-                  <View style={{ flex: 1 }}>
-                    <LocationSearch
-                      placeholder="To (Destination)"
-                      value={destinationLocation}
-                      onChangeText={handleDestinationChangeText}
-                      onLocationSelect={handleDestinationLocationSelect}
-                      iconColor="#B7102A"
-                      disabled={loading}
-                      boundingBox={KATHMANDU_BOUNDING_BOX}
+                  <TouchableOpacity
+                    style={[
+                      styles.categoryTab,
+                      selectedCategory === 'car' && styles.activeCategoryTab
+                    ]}
+                    onPress={() => handleCategoryChange('car')}
+                    disabled={loading}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons
+                      name="car"
+                      size={20}
+                      color={selectedCategory === 'car' ? '#FFFFFF' : '#191C1D'}
                     />
-                  </View>
-                  <Ionicons name="search" size={20} color="#8F6F6E" style={{ marginLeft: 6 }} />
-                </View>
-              </View>
-            ) : null}
-            {/* Segmented Category Pill Switcher (Bike / Car) */}
-            <View style={styles.categoryTabContainer}>
-              <TouchableOpacity
-                style={[
-                  styles.categoryTab,
-                  selectedCategory === 'bike' && styles.activeCategoryTab
-                ]}
-                onPress={() => handleCategoryChange('bike')}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
-                <FontAwesome5
-                  name="motorcycle"
-                  size={18}
-                  color={selectedCategory === 'bike' ? '#FFFFFF' : '#191C1D'}
-                />
-                <Text style={[
-                  styles.categoryTabText,
-                  selectedCategory === 'bike' && styles.activeCategoryTabText
-                ]}>
-                  Bike
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.categoryTab,
-                  selectedCategory === 'car' && styles.activeCategoryTab
-                ]}
-                onPress={() => handleCategoryChange('car')}
-                disabled={loading}
-                activeOpacity={0.85}
-              >
-                <Ionicons
-                  name="car"
-                  size={20}
-                  color={selectedCategory === 'car' ? '#FFFFFF' : '#191C1D'}
-                />
-                <Text style={[
-                  styles.categoryTabText,
-                  selectedCategory === 'car' && styles.activeCategoryTabText
-                ]}>
-                  Car
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Selected Vehicle Pricing Card (Moto / Ride Premium) */}
-            <View style={styles.fareSelectionCard}>
-              <View style={styles.activeVehicleHeader}>
-                <View style={styles.activeVehicleInfo}>
-                  <Text style={styles.activeVehicleTitle}>
-                    {selectedCategory === 'bike' ? 'Moto' : 'Ride Premium'}
-                  </Text>
-                  <View style={styles.activeVehicleMeta}>
-                    <Ionicons name="person" size={13} color="#5B403F" />
-                    <Text style={styles.activeVehicleCapacity}>
-                      {selectedCategory === 'bike' ? '1' : '4 passengers'}
+                    <Text style={[
+                      styles.categoryTabText,
+                      selectedCategory === 'car' && styles.activeCategoryTabText
+                    ]}>
+                      Car
                     </Text>
-                    <Text style={styles.activeVehicleDot}>•</Text>
-                    <Text style={styles.activeVehicleDesc}>
-                      {selectedCategory === 'bike' ? 'No traffic, faster arrival' : 'Comfortable'}
-                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* 2 & 3. Pickup and Destination Location Cards */}
+                <View style={styles.bottomLocationPanel}>
+                  <View style={styles.searchRow}>
+                    <Ionicons name="radio-button-off" size={20} color="#B7102A" style={{ marginRight: 10 }} />
+                    <View style={{ flex: 1 }}>
+                      <LocationSearch
+                        placeholder="Current location"
+                        value={pickupLocation}
+                        onChangeText={setPickupLocation}
+                        onLocationSelect={handlePickupLocationSelect}
+                        iconColor="#B7102A"
+                        disabled={loading}
+                        boundingBox={KATHMANDU_BOUNDING_BOX}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={[styles.searchRow, styles.destinationSearchRow]}>
+                    <Ionicons name="location" size={20} color="#B7102A" style={{ marginRight: 10 }} />
+                    <View style={{ flex: 1 }}>
+                      <LocationSearch
+                        placeholder="To (Destination)"
+                        value={destinationLocation}
+                        onChangeText={handleDestinationChangeText}
+                        onLocationSelect={handleDestinationLocationSelect}
+                        iconColor="#B7102A"
+                        disabled={loading}
+                        boundingBox={KATHMANDU_BOUNDING_BOX}
+                      />
+                    </View>
+                    <Ionicons name="search" size={20} color="#8F6F6E" style={{ marginLeft: 6 }} />
                   </View>
                 </View>
 
-                {/* Fare Price Display */}
-                <View style={styles.farePriceRight}>
-                  <Text style={styles.farePriceValue}>
-                    रू {offerPrice ? parseFloat(offerPrice).toFixed(0) : (selectedCategory === 'bike' ? '256' : '420')}
-                  </Text>
-                  <Text style={styles.farePriceLabel}>Estimated Fare</Text>
-                </View>
-              </View>
-
-              {/* Price Adjuster Buttons (- / +) */}
-              <View style={styles.priceAdjusterContainer}>
-                <TouchableOpacity
-                  style={styles.adjustPriceButton}
-                  onPress={handleDecrementPrice}
-                  disabled={loading}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="remove" size={22} color="#191C1D" />
-                </TouchableOpacity>
-
-                <View style={styles.priceAdjusterPill}>
-                  <Text style={styles.priceAdjusterValue}>
-                    रू {offerPrice ? parseFloat(offerPrice).toFixed(0) : (selectedCategory === 'bike' ? '256' : '420')}
-                  </Text>
-                </View>
-
-                <TouchableOpacity
-                  style={styles.adjustPriceButton}
-                  onPress={handleIncrementPrice}
-                  disabled={loading}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons name="add" size={22} color="#191C1D" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Auto-accept Offers Switch */}
-              <View style={styles.toggleRow}>
-                <View style={styles.toggleTextContainer}>
-                  <Ionicons name="flash" size={18} color="#B7102A" style={{ marginRight: 8 }} />
-                  <Text style={styles.toggleLabel}>Auto-accept offers</Text>
-                </View>
-                <Switch
-                  value={autoAccept}
-                  onValueChange={setAutoAccept}
-                  trackColor={{ false: '#E4BEBC', true: '#B7102A' }}
-                  thumbColor="#FFFFFF"
-                />
-              </View>
-            </View>
-
-            {/* Secondary Vehicle Row (Clicking switches category automatically) */}
-            {selectedCategory === 'bike' ? (
-              <TouchableOpacity
-                style={styles.secondaryVehicleCard}
-                onPress={() => handleCategoryChange('car')}
-                disabled={loading}
-                activeOpacity={0.7}
-              >
-                <View style={styles.secondaryLeft}>
-                  <Ionicons name="car-outline" size={24} color="#191C1D" style={{ marginRight: 12 }} />
-                  <View>
-                    <Text style={styles.secondaryTitle}>Ride Premium</Text>
-                    <Text style={styles.secondarySub}>4 passengers • Comfortable</Text>
+                {/* 4. Recent Destinations (Rendered ONLY if history exists) */}
+                {recentDestinations.length > 0 && (
+                  <View style={styles.recentDestinationsCard}>
+                    <Text style={styles.recentDestinationsHeader}>Recent destinations</Text>
+                    {recentDestinations.map((item, index) => (
+                      <TouchableOpacity
+                        key={index}
+                        style={styles.recentDestinationItemRow}
+                        onPress={() => handleSelectRecentDestination(item)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.recentIconBadge}>
+                          <Ionicons name="time-outline" size={18} color="#B7102A" />
+                        </View>
+                        <View style={styles.recentTextCol}>
+                          <Text style={styles.recentTitleText} numberOfLines={1}>{item.name}</Text>
+                          <Text style={styles.recentSubtextText} numberOfLines={1}>{item.address}</Text>
+                        </View>
+                        <Ionicons name="chevron-forward" size={16} color="#8F6F6E" />
+                      </TouchableOpacity>
+                    ))}
                   </View>
-                </View>
-                <Text style={styles.secondaryPrice}>
-                  ~ रू {carFare !== null ? carFare.toFixed(0) : '420'}
-                </Text>
-              </TouchableOpacity>
+                )}
+              </>
             ) : (
-              <TouchableOpacity
-                style={styles.secondaryVehicleCard}
-                onPress={() => handleCategoryChange('bike')}
-                disabled={loading}
-                activeOpacity={0.7}
-              >
-                <View style={styles.secondaryLeft}>
-                  <FontAwesome5 name="motorcycle" size={20} color="#191C1D" style={{ marginRight: 12 }} />
-                  <View>
-                    <Text style={styles.secondaryTitle}>Moto</Text>
-                    <Text style={styles.secondarySub}>1 passenger • No traffic, faster arrival</Text>
+              <>
+                {/* Segmented Dynamic Category Selector Tabs (Rendered for ALL active backend vehicle types) */}
+                <View style={styles.categoryTabContainer}>
+                  {vehicleTypes.map((vt) => {
+                    const isSelected = selectedVehicleType?._id === vt._id || selectedVehicleType?.name === vt.name;
+                    const nameLower = vt.name.toLowerCase().trim();
+                    const iconName = (nameLower.includes('bike') || nameLower.includes('moto') || nameLower.includes('motorcycle') || nameLower.includes('scooter'))
+                      ? 'motorcycle'
+                      : (nameLower.includes('ev') || nameLower.includes('electric') ? 'bolt' : 'car');
+
+                    return (
+                      <TouchableOpacity
+                        key={vt._id || vt.name}
+                        style={[
+                          styles.categoryTab,
+                          isSelected && styles.activeCategoryTab
+                        ]}
+                        onPress={() => handleSelectVehicle(vt)}
+                        disabled={loading}
+                        activeOpacity={0.85}
+                      >
+                        <FontAwesome5
+                          name={iconName}
+                          size={16}
+                          color={isSelected ? '#FFFFFF' : '#191C1D'}
+                        />
+                        <Text style={[
+                          styles.categoryTabText,
+                          isSelected && styles.activeCategoryTabText
+                        ]}>
+                          {vt.name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Selected Vehicle Pricing Card */}
+                <View style={styles.fareSelectionCard}>
+                  <View style={styles.activeVehicleHeader}>
+                    <View style={styles.activeVehicleInfo}>
+                      <Text style={styles.activeVehicleTitle}>
+                        {selectedVehicleType?.name || 'Vehicle'}
+                      </Text>
+                      <View style={styles.activeVehicleMeta}>
+                        <Ionicons name="person" size={13} color="#5B403F" />
+                        <Text style={styles.activeVehicleCapacity}>
+                          {selectedVehicleType?.capacity || 1} passenger{(selectedVehicleType?.capacity || 1) > 1 ? 's' : ''}
+                        </Text>
+                        <Text style={styles.activeVehicleDot}>•</Text>
+                        <Text style={styles.activeVehicleDesc}>
+                          {selectedVehicleType?.description || (selectedVehicleType?.name?.toLowerCase().includes('bike') ? 'Fast & economical' : 'Comfortable ride')}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* Fare Price Display */}
+                    <View style={styles.farePriceRight}>
+                      <Text style={styles.farePriceValue}>
+                        {offerPrice && !isNaN(parseFloat(offerPrice)) ? `रू ${parseFloat(offerPrice).toFixed(0)}` : 'Unable to calculate fare'}
+                      </Text>
+                      <Text style={styles.farePriceLabel}>Estimated Fare</Text>
+                    </View>
+                  </View>
+
+                  {/* Price Adjuster Buttons (- / +) */}
+                  <View style={styles.priceAdjusterContainer}>
+                    <TouchableOpacity
+                      style={styles.adjustPriceButton}
+                      onPress={handleDecrementPrice}
+                      disabled={loading}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="remove" size={22} color="#191C1D" />
+                    </TouchableOpacity>
+
+                    <View style={styles.priceAdjusterPill}>
+                      <Text style={styles.priceAdjusterValue}>
+                        {offerPrice && !isNaN(parseFloat(offerPrice)) ? `रू ${parseFloat(offerPrice).toFixed(0)}` : '--'}
+                      </Text>
+                    </View>
+
+                    <TouchableOpacity
+                      style={styles.adjustPriceButton}
+                      onPress={handleIncrementPrice}
+                      disabled={loading}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons name="add" size={22} color="#191C1D" />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Auto-accept Offers Switch */}
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleTextContainer}>
+                      <Ionicons name="flash" size={18} color="#B7102A" style={{ marginRight: 8 }} />
+                      <Text style={styles.toggleLabel}>Auto-accept offers</Text>
+                    </View>
+                    <Switch
+                      value={autoAccept}
+                      onValueChange={setAutoAccept}
+                      trackColor={{ false: '#E4BEBC', true: '#B7102A' }}
+                      thumbColor="#FFFFFF"
+                    />
                   </View>
                 </View>
-                <Text style={styles.secondaryPrice}>
-                  ~ रू {bikeFare !== null ? bikeFare.toFixed(0) : '256'}
-                </Text>
-              </TouchableOpacity>
-            )}
 
-            {/* Primary Action Button ("Find a driver") */}
-            <TouchableOpacity
-              style={[styles.findDriverButton, loading && styles.buttonDisabled]}
-              onPress={handleCreateRide}
-              disabled={loading}
-              activeOpacity={0.85}
-            >
-              {loading ? (
-                <ActivityIndicator color="#FFFFFF" size="small" />
-              ) : (
-                <Text style={styles.buttonText}>Find a driver</Text>
-              )}
-            </TouchableOpacity>
+                {/* Dynamic Remaining Vehicle Options */}
+                {vehicleTypes
+                  .filter((vt) => (vt._id && selectedVehicleType?._id) ? vt._id !== selectedVehicleType._id : vt.name !== selectedVehicleType?.name)
+                  .map((altVt) => {
+                    const altFare = calculatedFares[altVt._id] || calculatedFares[altVt.name.toLowerCase().trim()];
+                    const isBikeType = altVt.name.toLowerCase().includes('bike') || altVt.name.toLowerCase().includes('moto');
+
+                    return (
+                      <TouchableOpacity
+                        key={altVt._id || altVt.name}
+                        style={styles.secondaryVehicleCard}
+                        onPress={() => handleSelectVehicle(altVt)}
+                        disabled={loading}
+                        activeOpacity={0.7}
+                      >
+                        <View style={styles.secondaryLeft}>
+                          {isBikeType ? (
+                            <FontAwesome5 name="motorcycle" size={20} color="#191C1D" style={{ marginRight: 12 }} />
+                          ) : (
+                            <Ionicons name="car-outline" size={24} color="#191C1D" style={{ marginRight: 12 }} />
+                          )}
+                          <View>
+                            <Text style={styles.secondaryTitle}>{altVt.name}</Text>
+                            <Text style={styles.secondarySub}>
+                              {altVt.capacity || 1} passenger{(altVt.capacity || 1) > 1 ? 's' : ''} • {isBikeType ? 'Fast arrival' : 'Comfortable'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Text style={styles.secondaryPrice}>
+                          {altFare && altFare > 0 ? `~ रू ${altFare.toFixed(0)}` : '--'}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+
+                {/* Primary Action Button ("Find a driver") */}
+                <TouchableOpacity
+                  style={[styles.findDriverButton, loading && styles.buttonDisabled]}
+                  onPress={handleCreateRide}
+                  disabled={loading}
+                  activeOpacity={0.85}
+                >
+                  {loading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.buttonText}>Find a driver</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </Animated.View>
@@ -900,7 +1021,7 @@ const styles = StyleSheet.create({
   },
   topSearchCard: {
     position: 'absolute',
-    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 64 : 108,
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 54,
     left: 16,
     right: 16,
     backgroundColor: '#FFFFFF',
@@ -988,6 +1109,57 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 4,
     marginBottom: 16,
+  },
+  recentDestinationsCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 14,
+    marginTop: 14,
+    borderWidth: 1,
+    borderColor: '#EFEDF3',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  recentDestinationsHeader: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#191C1D',
+    marginBottom: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  recentDestinationItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F4F3F8',
+  },
+  recentIconBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFDAD8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  recentTextCol: {
+    flex: 1,
+    marginRight: 8,
+  },
+  recentTitleText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#191C1D',
+  },
+  recentSubtextText: {
+    fontSize: 12,
+    color: '#5B403F',
+    marginTop: 1,
   },
   categoryTab: {
     flex: 1,

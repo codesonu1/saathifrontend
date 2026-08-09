@@ -204,7 +204,7 @@ const RideRatingScreen = () => {
             style={styles.driverBackButton} 
             onPress={() => router.replace({ pathname: '/(driver)/driverSection', params: { fromRideComplete: 'true' } })}
           >
-            <Icon name="menu" size={24} color="#BC001F" />
+            <Icon name="arrow-back" size={24} color="#BC001F" />
           </TouchableOpacity>
           <Text style={styles.driverHeaderTitle}>Saathi</Text>
           <TouchableOpacity style={styles.driverNotificationButton}>

@@ -1102,9 +1102,6 @@ const DriverSection = () => {
         {/* Header */}
         <View style={[styles.header, { paddingTop: topPadding, height: 60 + topPadding, marginTop: 0 }]}>
           <View style={styles.headerLeft}>
-            <TouchableOpacity onPress={openSidePanel} style={styles.backButton}>
-              <MaterialIcons name="menu" size={24} color="#fff" />
-            </TouchableOpacity>
             <Text style={styles.headerTitle}>Driver Section</Text>
           </View>
           <View style={styles.headerBackground}>
@@ -1300,15 +1297,7 @@ const DriverSection = () => {
           </View>
         ))}
 
-        <SidePanel
-          visible={sidePanelVisible}
-          onClose={closeSidePanel}
-          role={role}
-          rideInProgress={rideInProgress}
-          onChangeRole={handleChangeRole}
-          activeItem="map"
-          onLeaveDriverMode={handleLeaveDriverMode}
-        />
+
 
         <Toast
           visible={toast.visible}

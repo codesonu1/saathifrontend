@@ -405,6 +405,193 @@ class LocationService {
     }
   }
 
+  // Get route details and dynamic fares using backend vehicle pricing data
+  async getRouteWithFare(
+    originLat: number,
+    originLng: number,
+    destLat: number,
+    destLng: number,
+    vehicleTypes: any[] = []
+  ): Promise<{
+    fares: { bike: number; car: number; [key: string]: number };
+    distanceKm: number;
+    durationMins: number;
+    polyline: Array<{ latitude: number; longitude: number }>;
+  } | null> {
+    try {
+      let oLat = Number(originLat);
+      let oLng = Number(originLng);
+      let dLat = Number(destLat);
+      let dLng = Number(destLng);
+
+      // Sanitize default Mountain View CA coordinates (37.42 / -122.08)
+      if (isNaN(oLat) || Math.abs(oLat - 37.42) < 1.0 || oLng < 0) {
+        oLat = 27.7172;
+        oLng = 85.324;
+      }
+      if (isNaN(dLat) || Math.abs(dLat - 37.42) < 1.0 || dLng < 0) {
+        dLat = 27.6710;
+        dLng = 85.3298;
+      }
+
+      let distanceKm = 0;
+      let durationMins = 0;
+      let polylinePoints: Array<{ latitude: number; longitude: number }> = [];
+
+      // 1. Fetch real road route & distance via Google Directions API
+      try {
+        const routeData = await this.getRouteBetweenPoints(
+          { lat: oLat, lng: oLng },
+          { lat: dLat, lng: dLng }
+        );
+
+        if (routeData && routeData.distance > 0) {
+          distanceKm = routeData.distance / 1000;
+          durationMins = Math.round(routeData.duration / 60);
+          if (routeData.polyline) {
+            polylinePoints = this.decodePolylineString(routeData.polyline);
+          }
+        }
+      } catch (err) {
+        console.warn('Google Directions API call unfulfilled, fallback to distance calculation:', err);
+      }
+
+      // Fallback distance if Directions API is unavailable
+      if (distanceKm <= 0) {
+        const distanceResult = await this.calculateDistance(
+          `${oLat},${oLng}`,
+          `${dLat},${dLng}`,
+          { lat: oLat, lng: oLng },
+          { lat: dLat, lng: dLng }
+        );
+
+        if (distanceResult && distanceResult.distance) {
+          distanceKm = distanceResult.distance.value / 1000;
+          durationMins = Math.round(distanceResult.duration.value / 60);
+        } else {
+          distanceKm = this.calculateDistanceHaversine(oLat, oLng, dLat, dLng);
+          durationMins = Math.round(distanceKm * 3);
+        }
+      }
+
+      if (polylinePoints.length === 0) {
+        polylinePoints = [
+          { latitude: oLat, longitude: oLng },
+          { latitude: dLat, longitude: dLng }
+        ];
+      }
+
+      // 2. Compute fares dynamically using backend Admin vehicle rates
+      const fares: { bike: number; car: number; [key: string]: number } = {
+        bike: 0,
+        car: 0,
+      };
+
+      console.log("ALL VEHICLES", vehicleTypes);
+
+      if (Array.isArray(vehicleTypes) && vehicleTypes.length > 0) {
+        let matchedBikeVehicle: any = null;
+        let matchedCarVehicle: any = null;
+
+        const classifyVehicle = (vt: any): 'bike' | 'car' | 'other' => {
+          const name = String(vt.name || '').toLowerCase().trim();
+          const isCar = name.includes('car') || name.includes('taxi') || name.includes('cab') || name.includes('sedan') || name.includes('suv') || name.includes('auto');
+          const isBike = name.includes('bike') || name.includes('moto') || name.includes('motorcycle') || name.includes('scooter') || name.includes('two_wheeler');
+
+          if (isCar) return 'car';
+          if (isBike) return 'bike';
+          return 'other';
+        };
+
+        vehicleTypes.forEach(vt => {
+          const pricingBase = Number(vt.pricingBase ?? vt.basePrice ?? 0);
+          const pricingPerKm = Number(vt.pricingPerKm ?? vt.pricePerKm ?? 0);
+          const calculatedFare = Math.round(pricingBase + (distanceKm * pricingPerKm));
+          
+          if (vt._id) fares[vt._id] = calculatedFare;
+          if (vt.name) fares[vt.name.toLowerCase().trim()] = calculatedFare;
+
+          const classification = classifyVehicle(vt);
+
+          if (classification === 'bike' && (!fares.bike || calculatedFare < fares.bike)) {
+            fares.bike = calculatedFare;
+            matchedBikeVehicle = vt;
+          }
+          if (classification === 'car' && (!fares.car || calculatedFare < fares.car)) {
+            fares.car = calculatedFare;
+            matchedCarVehicle = vt;
+          }
+        });
+
+        // Fallback: If no explicit bike or car string match was found, map first vehicle type to bike and second/last to car
+        if (!fares.bike && vehicleTypes.length > 0) {
+          const pricingBase = Number(vehicleTypes[0].pricingBase ?? vehicleTypes[0].basePrice ?? 0);
+          const pricingPerKm = Number(vehicleTypes[0].pricingPerKm ?? vehicleTypes[0].pricePerKm ?? 0);
+          fares.bike = Math.round(pricingBase + (distanceKm * pricingPerKm));
+          matchedBikeVehicle = vehicleTypes[0];
+        }
+        if (!fares.car && vehicleTypes.length > 0) {
+          const vtIndex = vehicleTypes.length > 1 ? 1 : 0;
+          const pricingBase = Number(vehicleTypes[vtIndex].pricingBase ?? vehicleTypes[vtIndex].basePrice ?? 0);
+          const pricingPerKm = Number(vehicleTypes[vtIndex].pricingPerKm ?? vehicleTypes[vtIndex].pricePerKm ?? 0);
+          fares.car = Math.round(pricingBase + (distanceKm * pricingPerKm));
+          matchedCarVehicle = vehicleTypes[vtIndex];
+        }
+
+        console.log("BIKE VEHICLE USED", matchedBikeVehicle);
+        console.log("CAR VEHICLE USED", matchedCarVehicle);
+      }
+
+      console.log("FINAL FARES", fares);
+
+      return {
+        fares,
+        distanceKm,
+        durationMins,
+        polyline: polylinePoints,
+      };
+    } catch (error) {
+      console.error('Error calculating route with fare:', error);
+      return null;
+    }
+  }
+
+  // Helper method to decode Google Encoded Polyline strings into coordinate arrays
+  private decodePolylineString(encoded: string): Array<{ latitude: number; longitude: number }> {
+    if (!encoded) return [];
+    const poly: Array<{ latitude: number; longitude: number }> = [];
+    let index = 0;
+    const len = encoded.length;
+    let lat = 0;
+    let lng = 0;
+
+    while (index < len) {
+      let b: number;
+      let shift = 0;
+      let result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+      lat += dlat;
+
+      shift = 0;
+      result = 0;
+      do {
+        b = encoded.charCodeAt(index++) - 63;
+        result |= (b & 0x1f) << shift;
+        shift += 5;
+      } while (b >= 0x20);
+      const dlng = (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+      lng += dlng;
+
+      poly.push({ latitude: lat / 1e5, longitude: lng / 1e5 });
+    }
+    return poly;
+  }
+
   // Get current cached location
   getCachedLocation(): LocationData | null {
     return this.currentLocation;

@@ -197,14 +197,7 @@ const DriverHomeScreen = () => {
     return (
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} scrollEnabled={!sidePanelVisible}>
-          <View style={styles.header}>
-            <TouchableOpacity style={styles.hamburgerButton} onPress={openSidePanel}>
-              <View style={styles.hamburgerLine} />
-              <View style={styles.hamburgerLine} />
-              <View style={styles.hamburgerLine} />
-            </TouchableOpacity>
-          </View>
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }} scrollEnabled={true}>
           <View style={styles.content}>
             <View style={styles.incomeCard}>
               <Text style={styles.incomeTitle}>
@@ -239,14 +232,6 @@ const DriverHomeScreen = () => {
             </View>
           </View>
 
-          <SidePanel
-            visible={sidePanelVisible}
-            onClose={closeSidePanel}
-            role={role}
-            rideInProgress={rideInProgress}
-            onChangeRole={handleChangeRole}
-          />
-
           <Toast
             visible={toast.visible}
             message={toast.message}
@@ -262,13 +247,6 @@ const DriverHomeScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.hamburgerButton} onPress={openSidePanel}>
-          <View style={styles.hamburgerLine} />
-          <View style={styles.hamburgerLine} />
-          <View style={styles.hamburgerLine} />
-        </TouchableOpacity>
-      </View>
       <View style={styles.content}>
         <View style={styles.incomeCard}>
           <Text style={styles.incomeTitle}>Tips for drivers</Text>
@@ -302,13 +280,6 @@ const DriverHomeScreen = () => {
           </TouchableOpacity>
         </View>
       </View>
-      <SidePanel
-        visible={sidePanelVisible}
-        onClose={closeSidePanel}
-        role={role}
-        rideInProgress={rideInProgress}
-        onChangeRole={handleChangeRole}
-      />
       {toast.visible && (
         <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />
       )}

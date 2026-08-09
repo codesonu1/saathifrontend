@@ -282,13 +282,14 @@ const RideHistoryScreen = () => {
 
   // Compute driver total earnings
   const totalDriverEarnings = useMemo(() => {
-    return allRides.reduce((acc, r) => {
+    const rawTotal = allRides.reduce((acc, r) => {
       if (r.status === 'completed') {
-        const fare = r.acceptedOffer?.offerAmount || r.offerPrice || 0;
-        return acc + fare;
+        const fare = Number(r.acceptedOffer?.offerAmount || r.offerPrice || 0);
+        return acc + (isNaN(fare) ? 0 : fare);
       }
       return acc;
     }, 0);
+    return Math.round(rawTotal);
   }, [allRides]);
 
   const renderRideItem = ({ item: ride }: { item: Ride }) => {
@@ -521,7 +522,7 @@ const RideHistoryScreen = () => {
             </Text>
             <Text style={styles.statValueGray}>
               {userRole === 'driver'
-                ? `NPR ${totalDriverEarnings}`
+                ? `NPR ${totalDriverEarnings.toLocaleString()}`
                 : `${thisMonthRidesCount} Rides`}
             </Text>
           </View>
