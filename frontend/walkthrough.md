@@ -1,20 +1,19 @@
-# Fix Trip Earnings Floating-Point Precision (`fix-trip-earnings-precision`)
+# Update Android Application Launcher Icon (`update-android-app-icon`)
 
-Fixed raw floating-point arithmetic precision output (e.g. `2513.7999999999997`) on the Activity / Trip Earnings stat banner card.
-
----
-
-## 🛠️ Summary of Root Cause & Fix
-
-### 🔴 Root Cause
-In JavaScript, summing raw decimal numbers (like `223.4 + 150.2 + 80.1 + ...`) using `.reduce()` introduces IEEE-754 binary floating-point representation artifacts (e.g., `2513.8` becomes `2513.7999999999997`). Printing `totalDriverEarnings` directly in JSX rendered the unformatted string `2513.7999999999997`.
+Updated the Android launcher icon & Expo app icon configuration to point directly to the Saathi red S logo image asset (`./assets/images/Splash Logo.png`).
 
 ---
 
-### 🟢 Solution
-- **File**: `frontend/app/(common)/rideHistory.tsx`
-- **Math Rounding**: Wrapped the `.reduce()` total in `Math.round(rawTotal)` to eliminate floating-point precision tailing numbers.
-- **Number Formatting**: Applied `.toLocaleString()` to render clean currency values (e.g., **`NPR 2,514`**).
+## 🛠️ Summary of Configuration Updates
+
+### `frontend/app.json`
+1. **Expo Icon**:
+   - `icon`: `"./assets/images/Splash Logo.png"`
+2. **Android Adaptive Icon**:
+   - `android.adaptiveIcon.foregroundImage`: `"./assets/images/Splash Logo.png"`
+   - `android.adaptiveIcon.backgroundColor`: `"#FFFFFF"`
+3. **Preserved Splash Screen**:
+   - Splash screen configuration under `plugins -> expo-splash-screen` was untouched as requested.
 
 ---
 
@@ -24,7 +23,8 @@ In JavaScript, summing raw decimal numbers (like `223.4 + 150.2 + 80.1 + ...`) u
 ---
 
 ## ✅ Verification Checklist
-- [x] Floating-point tailing decimals (`2513.7999999999997`) eliminated
-- [x] `Math.round()` & `.toLocaleString()` applied to `totalDriverEarnings`
-- [x] Activity screen renders clean currency string (`NPR 2,514`)
-- [x] `npx expo-doctor` passes 18/18 checks with 0 errors
+- [x] `./assets/images/Splash Logo.png` configured as the primary app icon in `app.json`
+- [x] Android `adaptiveIcon.foregroundImage` set to `./assets/images/Splash Logo.png`
+- [x] Android `adaptiveIcon.backgroundColor` set to `#FFFFFF`
+- [x] Splash screen configuration completely untouched
+- [x] App logic, APIs, navigation, and backend connections 100% preserved
