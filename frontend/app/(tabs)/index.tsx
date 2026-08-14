@@ -223,10 +223,10 @@ const PassengerHomeScreen = () => {
       if (!pickupLocation || pickupLocation === '' || pickupLocation === 'Kathmandu' || pickupLocation === 'Kathmandu, Nepal') {
         setPickupCoords({ lat: location.latitude, lng: location.longitude });
         const address = await locationService.getAddressFromCoordinates(location.latitude, location.longitude);
-        if (address && address !== 'Kathmandu, Nepal') {
+        if (address) {
           setPickupLocation(address);
         } else {
-          setPickupLocation('');
+          setPickupLocation('Current Location');
         }
       }
 

@@ -539,48 +539,7 @@ const DriverSection = () => {
   };
 
   const simulateMockRideRequest = () => {
-    const mockRide: Ride = {
-      _id: 'mock_ride_' + Date.now(),
-      status: 'searching',
-      offerPrice: Math.floor(Math.random() * 200) + 150, // 150 to 350
-      pickUpLocation: 'Kathmandu Mall',
-      dropOffLocation: 'Road Division Bhaktapur, Katunje',
-      pickUp: {
-        location: 'Kathmandu Mall',
-        coords: {
-          type: 'Point',
-          coordinates: [85.3123, 27.7007]
-        }
-      },
-      dropOff: {
-        location: 'Road Division Bhaktapur, Katunje',
-        coords: {
-          type: 'Point',
-          coordinates: [85.4282, 27.6713]
-        }
-      },
-      createdAt: new Date(),
-      updatedAt: new Date(),
-      passenger: {
-        _id: 'mock_passenger_' + Date.now(),
-        firstName: 'Sagar',
-        lastName: 'Thapa',
-        mobile: '+9779812345678',
-        photo: 'https://api.dicebear.com/9.x/glass/png?seed=Sagar'
-      },
-      vehicleType: {
-        _id: '507f1f77bcf86cd799439012',
-        name: 'Car',
-        basePrice: 150,
-        pricePerKm: 35
-      }
-    };
-    
-    setAvailableRides(prev => {
-      if (prev.some(r => r._id === mockRide._id)) return prev;
-      return [...prev, mockRide];
-    });
-    showToast('Mock ride request received!', 'info');
+    // Disabled mock ride simulation - live ride requests are received via WebSocket
   };
 
   const handleMakeOffer = async (ride: Ride) => {

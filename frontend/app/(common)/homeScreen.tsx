@@ -46,46 +46,29 @@ export default function HomeScreen() {
   const [loadingRoute, setLoadingRoute] = useState(false);
   const mapRef = useRef<MapView>(null);
 
-  // Mock location data - replace with real GPS when ready
+  // Fetch live GPS location on mount
   useEffect(() => {
-    // TODO: Replace with actual location service when backend is ready
-    // const getLocation = async () => {
-    //   let { status } = await Location.requestForegroundPermissionsAsync();
-    //   if (status !== 'granted') {
-    //     showToast('Permission to access location was denied', 'error');
-    //     return;
-    //   }
-    //   let location = await Location.getCurrentPositionAsync({});
-    //   setLocation(location);
-    // };
-    // getLocation();
+    const fetchLocation = async () => {
+      try {
+        const loc = await locationService.getCurrentLocation();
+        if (loc) {
+          setLocation({
+            coords: {
+              latitude: loc.latitude,
+              longitude: loc.longitude,
+            },
+          });
+        }
+      } catch (err) {
+        console.warn('Could not fetch initial device GPS location:', err);
+      }
+    };
+    fetchLocation();
+  }, []);
 
-    // Mock location for now
-    setLocation({
-      coords: {
-        latitude: 27.7172,
-        longitude: 85.324,
-      },
-    })
-  }, [])
-
-  // Mock ride status check - replace with API call later
   useEffect(() => {
-    // TODO: Replace with API call to check ride status
-    // const checkRideStatus = async () => {
-    //   try {
-    //     const response = await fetch('/api/user/ride-status');
-    //     const data = await response.json();
-    //     setLocalRideInProgress(data.rideInProgress);
-    //   } catch (error) {
-    //     console.error('Error checking ride status:', error);
-    //   }
-    // };
-    // checkRideStatus();
-
-    // Mock data for now
-    setLocalRideInProgress(false)
-  }, [])
+    setLocalRideInProgress(false);
+  }, []);
 
   useEffect(() => {
     const fetchRoute = async () => {

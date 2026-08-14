@@ -493,8 +493,8 @@ const RideTrackerScreen = () => {
   const [hasUnreadMessages, setHasUnreadMessages] = useState(false);
   const mapRef = useRef<MapView>(null);
   const simIntervalRef = useRef<any>(null);
-  const mockPickupRef = useRef({ lat: 27.7172, lng: 85.3240 });
-  const mockDropoffRef = useRef({ lat: 27.6710, lng: 85.3122 });
+  const defaultPickupRef = useRef({ lat: 27.7172, lng: 85.3240 });
+  const defaultDropoffRef = useRef({ lat: 27.6710, lng: 85.3122 });
 
   // --- PASSENGER UI STATES & countdown ---
   const [etaSeconds, setEtaSeconds] = useState(180);
@@ -1262,24 +1262,23 @@ const RideTrackerScreen = () => {
       try {
         setIsLoadingDetails(true);
 
-        // Check if we are simulating/mocking for testing
+        // Check if we are simulating for testing
         const isSimulating = params.simulating === 'true';
-        if (isSimulating || (rideId && rideId.startsWith('mock_'))) {
-          console.log('[setupWebSocketAndFetch] Simulating ride tracker, loading mock details...');
+        if (isSimulating) {
+          console.log('[setupWebSocketAndFetch] Simulating ride tracker...');
           
-          // Setup mock pickup and dropoff coords (Kathmandu areas)
-          const mockPickup = { lat: 27.7172, lng: 85.3240 };
-          const mockDropoff = { lat: 27.6710, lng: 85.3122 };
-          setPickupLocation(mockPickup);
-          setDropoffLocation(mockDropoff);
+          // Setup simulated pickup and dropoff coords
+          const simPickup = { lat: 27.7172, lng: 85.3240 };
+          const simDropoff = { lat: 27.6710, lng: 85.3122 };
+          setPickupLocation(simPickup);
+          setDropoffLocation(simDropoff);
           
-          // Setup mock driver location slightly offset from pickup
-          const mockDriver = { lat: 27.7190, lng: 85.3280 };
-          setDriverLocation(mockDriver);
-          setCompletedRoute([mockDriver]);
+          const simDriver = { lat: 27.7190, lng: 85.3280 };
+          setDriverLocation(simDriver);
+          setCompletedRoute([simDriver]);
           
-          // Construct mock ride details
-          const mockRide: any = {
+          // Construct simulated ride details
+          const simRide: any = {
             _id: rideId,
             status: 'accepted',
             passenger: {
@@ -1310,7 +1309,7 @@ const RideTrackerScreen = () => {
             pickUpLocation: params.from ? String(params.from) : 'Kathmandu',
             dropOffLocation: params.to ? String(params.to) : 'Lalitpur',
           };
-          setRideDetails(mockRide);
+          setRideDetails(simRide);
           setIsLoadingDetails(false);
           
           // Initialize simulated driver movement (arriving & ongoing trip progress)

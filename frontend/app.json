@@ -20,13 +20,14 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "This app needs access to location to track your position for ride sharing."
       },
       "config": {
-        "googleMapsApiKey": "AIzaSyC_ywfottDW64fr4FVtnvyfRZTbbFreD28"
+        "googleMapsApiKey": "AIzaSyCcSKuR9eNHBhtfirYECCh7iCkp33STopw"
       }
     },
     "android": {
+      "versionCode": 1,
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyC_ywfottDW64fr4FVtnvyfRZTbbFreD28"
+          "apiKey": "AIzaSyCcSKuR9eNHBhtfirYECCh7iCkp33STopw"
         }
       },
       "adaptiveIcon": {
@@ -34,10 +35,12 @@
         "backgroundColor": "#FFFFFF"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.prameshk7.frontend",
+      "package": "com.saathi.app",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -74,13 +77,17 @@
       "WEBSOCKET_URL": "https://ride-share-api-umog.onrender.com",
       "PUBLIC_ASSET_URL": "https://ride-share-api-umog.onrender.com",
       "DEFAULT_BASE_URL": "https://ride-share-api-umog.onrender.com",
-      "GOOGLE_MAPS_API_KEY": "AIzaSyC_ywfottDW64fr4FVtnvyfRZTbbFreD28",
+      "GOOGLE_MAPS_API_KEY": "AIzaSyCcSKuR9eNHBhtfirYECCh7iCkp33STopw",
       "SUPPORT_PHONE": "+977980010100",
       "SUPPORT_EMAIL": "support@saathiapp.com",
       "FACEBOOK_URL": "https://www.facebook.com/saathiapp",
       "INSTAGRAM_URL": "https://www.instagram.com/saathiapp",
       "TWITTER_URL": "https://twitter.com/saathiapp",
-      "WEBSITE_URL": "https://www.saathiapp.com"
-    }
+      "WEBSITE_URL": "https://www.saathiapp.com",
+      "eas": {
+        "projectId": "7a581d77-11a0-4d76-960b-99512116236d"
+      }
+    },
+    "owner": "vardanvardan"
   }
 }

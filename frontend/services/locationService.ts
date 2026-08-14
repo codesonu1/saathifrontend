@@ -2,7 +2,7 @@ import * as Location from 'expo-location';
 import apiClient from './apiClient';
 import Constants from 'expo-constants';
 
-const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyDbYiu_14LlULrCl6WXSNvTgEy3yBCKkQg';
+const GOOGLE_MAPS_API_KEY = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyCcSKuR9eNHBhtfirYECCh7iCkp33STopw';
 
 export interface LocationData {
   latitude: number;
@@ -71,18 +71,17 @@ class LocationService {
     }
   }
 
-  // Get current location
+  // Get current location (100% dynamic device GPS)
   async getCurrentLocation(): Promise<LocationData> {
-    try {
-      const hasPermission = await this.requestPermissions();
-      if (!hasPermission) {
-        throw new Error('Location permission not granted');
-      }
+    const hasPermission = await this.requestPermissions();
+    if (!hasPermission) {
+      throw new Error('Location permission not granted. Please enable GPS permissions in device settings.');
+    }
 
+    try {
+      // Use Balanced accuracy so location resolves instantly via Cell/Wi-Fi/GPS indoors & outdoors
       const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.High,
-        timeInterval: 5000,
-        distanceInterval: 10,
+        accuracy: Location.Accuracy.Balanced,
       });
 
       return {
@@ -91,9 +90,18 @@ class LocationService {
         accuracy: location.coords.accuracy || undefined,
         timestamp: location.timestamp,
       };
-    } catch (error) {
-      console.error('Error getting current location:', error);
-      throw error;
+    } catch (posErr) {
+      console.warn('getCurrentPositionAsync unfulfilled, attempting getLastKnownPositionAsync...', posErr);
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown) {
+        return {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+          accuracy: lastKnown.coords.accuracy || undefined,
+          timestamp: lastKnown.timestamp,
+        };
+      }
+      throw new Error('Unable to retrieve device GPS coordinates. Please ensure Location/GPS services are enabled on your device.');
     }
   }
 
@@ -121,6 +129,17 @@ class LocationService {
     try {
       console.log('Searching places for query:', query);
       
+      // Try Google Places Autocomplete first to get multiple rich suggestions
+      try {
+        const autocompleteResults = await this.searchPlacesWithAutocomplete(query, boundingBox);
+        if (autocompleteResults && autocompleteResults.length > 0) {
+          console.log('Autocomplete API returned multiple suggestions:', autocompleteResults);
+          return autocompleteResults;
+        }
+      } catch (acErr) {
+        console.warn('Autocomplete lookup error, trying backend search...', acErr);
+      }
+      
       const response = await apiClient.get('/google-maps/search', {
         params: { query }
       });
@@ -129,7 +148,6 @@ class LocationService {
 
       if (response.data.statusCode === 200) {
         let results = response.data.data;
-        // Filter by bounding box if provided
         if (boundingBox) {
           results = results.filter((place: any) =>
             place.location &&
@@ -137,32 +155,21 @@ class LocationService {
             place.location.lng >= boundingBox.west && place.location.lng <= boundingBox.east
           );
         }
-        console.log('Found places:', results);
         
-        // Backend already returns the correct format, just add place_id for frontend compatibility
         if (results && results.length > 0) {
           const placesWithIds = results.map((place: any, index: number) => ({
             ...place,
             place_id: place.place_id || `place_${index}`,
-            description: place.address, // For frontend compatibility
+            description: place.address,
             structured_formatting: {
               main_text: place.name,
               secondary_text: place.address
             }
           }));
-          console.log('Places with IDs:', placesWithIds);
           return placesWithIds;
         }
         
-        // If backend returns empty results, try Autocomplete API as fallback
-        console.log('Backend returned empty results, trying Autocomplete API...');
-        const autocompleteResults = await this.searchPlacesWithAutocomplete(query, boundingBox);
-        if (autocompleteResults.length > 0) {
-          console.log('Autocomplete API returned results:', autocompleteResults);
-          return autocompleteResults;
-        }
-        
-        return this.getMockSearchResults(query);
+        return [];
       }
       
       console.log('Search failed with status:', response.data.statusCode);
@@ -175,7 +182,7 @@ class LocationService {
         return autocompleteResults;
       }
       
-      return this.getMockSearchResults(query);
+      return [];
     } catch (error: any) {
       console.error('Error searching places:', {
         message: error.message,
@@ -195,43 +202,8 @@ class LocationService {
         console.error('Autocomplete API also failed:', autocompleteError);
       }
       
-      return this.getMockSearchResults(query);
+      return [];
     }
-  }
-
-  // Fallback mock search results for testing
-  private getMockSearchResults(query: string): GoogleMapsPlace[] {
-    const mockPlaces: GoogleMapsPlace[] = [
-      {
-        place_id: '1',
-        name: 'Kathmandu',
-        address: 'Kathmandu, Nepal',
-        location: { lat: 27.7172, lng: 85.3240 },
-        description: 'Kathmandu, Nepal',
-        structured_formatting: { main_text: 'Kathmandu', secondary_text: 'Nepal' }
-      },
-      {
-        place_id: '2',
-        name: 'Lalitpur',
-        address: 'Lalitpur, Nepal',
-        location: { lat: 27.6869, lng: 85.3000 },
-        description: 'Lalitpur, Nepal',
-        structured_formatting: { main_text: 'Lalitpur', secondary_text: 'Nepal' }
-      }
-    ];
-
-    // Filter mock places based on query (case-insensitive)
-    const queryLower = query.toLowerCase().trim();
-    const filteredPlaces = mockPlaces.filter(place => 
-      place.address.toLowerCase().includes(queryLower) ||
-      place.name.toLowerCase().includes(queryLower) ||
-      (place.description && place.description.toLowerCase().includes(queryLower)) ||
-      (place.structured_formatting && place.structured_formatting.main_text.toLowerCase().includes(queryLower)) ||
-      (place.structured_formatting && place.structured_formatting.secondary_text.toLowerCase().includes(queryLower))
-    );
-
-    console.log(`Mock search: Found ${filteredPlaces.length} places for query "${query}"`);
-    return filteredPlaces;
   }
 
   // Calculate distance using Haversine formula (fallback when API fails)
@@ -332,21 +304,10 @@ class LocationService {
           }
         };
         
-        console.log('Haversine fallback result:', result);
         return result;
       }
       
-      console.log('API failed and no coordinates, using ultimate mock fallback');
-      return {
-        distance: {
-          text: '5.4 km',
-          value: 5400
-        },
-        duration: {
-          text: '15 mins',
-          value: 900
-        }
-      };
+      return null;
     } catch (error: any) {
       console.error('Error calculating distance:', {
         message: error.message,
@@ -370,12 +331,6 @@ class LocationService {
           destinationCoords.lng
         );
         
-        console.log('Haversine calculation result:', {
-          distanceKm,
-          originCoords,
-          destinationCoords
-        });
-        
         const result = {
           distance: {
             text: `${distanceKm.toFixed(1)} km`,
@@ -387,21 +342,10 @@ class LocationService {
           }
         };
         
-        console.log('Haversine fallback result:', result);
         return result;
       }
       
-      console.log('API failed and no coordinates, using ultimate mock fallback');
-      return {
-        distance: {
-          text: '5.4 km',
-          value: 5400
-        },
-        duration: {
-          text: '15 mins',
-          value: 900
-        }
-      };
+      return null;
     }
   }
 
@@ -817,21 +761,36 @@ class LocationService {
 
   async getAddressFromCoordinates(latitude: number, longitude: number): Promise<string> {
     try {
+      // 1. Try native device reverse geocoder first (no API key required)
+      const nativeAddresses = await Location.reverseGeocodeAsync({ latitude, longitude });
+      if (nativeAddresses && nativeAddresses.length > 0) {
+        const item = nativeAddresses[0];
+        const name = item.name || item.streetNumber || item.street || item.district || item.subregion || item.city;
+        const city = item.city || item.region || item.country || '';
+        const fullAddress = name ? `${name}${city ? ', ' + city : ''}` : item.formattedAddress || '';
+        if (fullAddress && fullAddress.trim()) {
+          console.log('Native device reverse geocode result:', fullAddress);
+          return fullAddress;
+        }
+      }
+    } catch (nativeErr) {
+      console.warn('Native device reverse geocode failed, trying Google Geocoding API...', nativeErr);
+    }
+
+    try {
       const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`;
       
       const response = await fetch(url);
       const data = await response.json();
 
-      if (data.status !== 'OK' || !data.results[0]) {
-        console.warn(`Geocoding API notice (${data.status}), using default address fallback.`);
-        return 'Kathmandu, Nepal';
+      if (data.status === 'OK' && data.results && data.results[0]) {
+        return data.results[0].formatted_address;
       }
-
-      return data.results[0].formatted_address;
     } catch (error) {
-      console.warn('Geocoding request unfulfilled, using fallback location address.');
-      return 'Current Location';
+      console.warn('Google Geocoding API failed:', error);
     }
+
+    return 'Current Location';
   }
 
   async getCoordinatesFromAddress(address: string): Promise<{ lat: number; lng: number }> {
@@ -932,13 +891,12 @@ class LocationService {
       
       // Try the new Places API first
       // TODO: Replace with your new API key from Google Cloud Console
-      const apiKey = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyDbYiu_14LlULrCl6WXSNvTgEy3yBCKkQg'; // Your frontend API key
+      const apiKey = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyCcSKuR9eNHBhtfirYECCh7iCkp33STopw'; // Your frontend API key
       const url = `https://places.googleapis.com/v1/places:autocomplete?key=${apiKey}`;
       
       const requestBody = {
         input: query,
-        types: ['geocode'],
-        components: ['country:np'],
+        includedRegionCodes: ['np'],
         languageCode: 'en'
       };
       
@@ -946,8 +904,7 @@ class LocationService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-Goog-Api-Key': apiKey,
-          'X-Goog-FieldMask': 'places.displayName,places.id,places.formattedAddress'
+          'X-Goog-Api-Key': apiKey
         },
         body: JSON.stringify(requestBody)
       });
@@ -955,33 +912,30 @@ class LocationService {
       const data = await response.json();
       console.log('New Places API response:', data);
       
-      let places = data.places || [];
-      // After getting places, filter by boundingBox if provided
-      if (boundingBox && places.length > 0) {
-        // Only keep places with coordinates in box (if available)
-        places = places.filter((place: any) =>
-          place.location &&
-          place.location.lat >= boundingBox.south && place.location.lat <= boundingBox.north &&
-          place.location.lng >= boundingBox.west && place.location.lng <= boundingBox.east
-        );
-      }
+      const suggestions = data.suggestions || [];
       
-      if (places && places.length > 0) {
-        // Convert places to our format
-        const placesWithIds = places.map((place: any, index: number) => ({
-          place_id: place.id,
-          name: place.displayName?.text || place.formattedAddress,
-          address: place.formattedAddress,
-          location: {
-            lat: 0, // We'll need to get details for coordinates
-            lng: 0
-          },
-          description: place.formattedAddress,
-          structured_formatting: {
-            main_text: place.displayName?.text || place.formattedAddress,
-            secondary_text: place.formattedAddress
-          }
-        }));
+      if (suggestions && suggestions.length > 0) {
+        // Convert placePredictions to our format
+        const placesWithIds = suggestions.map((item: any, index: number) => {
+          const pred = item.placePrediction;
+          const mainText = pred?.structuredFormat?.mainText?.text || pred?.text?.text || query;
+          const secondaryText = pred?.structuredFormat?.secondaryText?.text || pred?.text?.text || '';
+          const fullText = pred?.text?.text || `${mainText}, ${secondaryText}`;
+          return {
+            place_id: pred?.placeId || pred?.place || `place_${index}`,
+            name: mainText,
+            address: secondaryText || fullText,
+            location: {
+              lat: 0, // Coordinates fetched when place is selected
+              lng: 0
+            },
+            description: fullText,
+            structured_formatting: {
+              main_text: mainText,
+              secondary_text: secondaryText
+            }
+          };
+        });
         
         console.log('Converted places from new API:', placesWithIds);
         return placesWithIds;
@@ -1003,7 +957,7 @@ class LocationService {
   // Fallback to legacy Places API
   private async searchPlacesWithLegacyAPI(query: string, boundingBox?: BoundingBox): Promise<GoogleMapsPlace[]> {
     try {
-      const apiKey = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyDbYiu_14LlULrCl6WXSNvTgEy3yBCKkQg';
+      const apiKey = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyCcSKuR9eNHBhtfirYECCh7iCkp33STopw';
       const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(query)}&key=${apiKey}&types=geocode&components=country:np`;
       
       const response = await fetch(url);
@@ -1042,22 +996,22 @@ class LocationService {
         return placesWithIds;
       }
       
-      console.log('Legacy API also returned no results, using mock data');
-      return this.getMockSearchResults(query);
+      console.log('Legacy API also returned no results');
+      return [];
     } catch (error: any) {
       console.error('Error with legacy API:', error);
-      console.log('Using mock data as final fallback');
-      return this.getMockSearchResults(query);
+      return [];
     }
   }
 
   // Get place details with coordinates
   async getPlaceDetails(placeId: string, boundingBox?: BoundingBox): Promise<GoogleMapsPlace | null> {
     try {
-      const apiKey = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyDbYiu_14LlULrCl6WXSNvTgEy3yBCKkQg';
+      const apiKey = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyCcSKuR9eNHBhtfirYECCh7iCkp33STopw';
       
-      // Try new Places API first
-      const url = `https://places.googleapis.com/v1/places/${placeId}?key=${apiKey}`;
+      // Ensure placeId has 'places/' prefix if needed
+      const normalizedPlaceId = placeId.startsWith('places/') ? placeId : `places/${placeId}`;
+      const url = `https://places.googleapis.com/v1/${normalizedPlaceId}?key=${apiKey}`;
       
       const response = await fetch(url, {
         headers: {
@@ -1107,7 +1061,7 @@ class LocationService {
   // Fallback to legacy Places API for details
   private async getPlaceDetailsLegacy(placeId: string, boundingBox?: BoundingBox): Promise<GoogleMapsPlace | null> {
     try {
-      const apiKey = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyDbYiu_14LlULrCl6WXSNvTgEy3yBCKkQg';
+      const apiKey = Constants.expoConfig?.extra?.GOOGLE_MAPS_API_KEY || 'AIzaSyCcSKuR9eNHBhtfirYECCh7iCkp33STopw';
       const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=geometry,name,formatted_address&key=${apiKey}`;
       
       const response = await fetch(url);

@@ -1,4 +1,3 @@
-//This is mock as my old Ui-based layout used it for bargaing, changed based on client's request
 "use client"
 
 import React, { useState, useEffect } from 'react';
@@ -71,44 +70,11 @@ const DriverSelectionScreen = () => {
   };
 
   useEffect(() => {
-    // Simulate loading drivers
     setLoading(true);
     setTimeout(() => {
-      const mockDrivers: Driver[] = [
-        {
-          id: '1',
-          name: 'Rajesh Kumar',
-          photo: '',
-          rating: 4.8,
-          distance: 0.5,
-          vehicle: vehicle,
-          fare: fare * 1.1,
-          eta: 3,
-        },
-        {
-          id: '2',
-          name: 'Amit Singh',
-          photo: '',
-          rating: 4.6,
-          distance: 0.8,
-          vehicle: vehicle,
-          fare: fare * 0.9,
-          eta: 5,
-        },
-        {
-          id: '3',
-          name: 'Suresh Patel',
-          photo: '',
-          rating: 4.9,
-          distance: 1.2,
-          vehicle: vehicle,
-          fare: fare * 1.2,
-          eta: 7,
-        },
-      ];
-      setDrivers(mockDrivers);
+      setDrivers([]);
       setLoading(false);
-    }, 2000);
+    }, 500);
   }, [fare, vehicle]);
 
   const handleBackPress = () => {
