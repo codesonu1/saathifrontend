@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   doneButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     borderRadius: 25,
     paddingVertical: 16,
     alignItems: 'center',

@@ -404,7 +404,7 @@ const styles = StyleSheet.create({
     color: '#ccc',
   },
   nextButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     paddingVertical: 15,
     borderRadius: 8,
     alignItems: 'center',

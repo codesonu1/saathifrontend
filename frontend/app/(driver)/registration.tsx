@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   stepName: { fontSize: 16, color: '#333', fontWeight: '500' },
   stepActions: { flexDirection: 'row', alignItems: 'center' },
   doneButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     borderRadius: 25,
     paddingVertical: 16,
     alignItems: 'center',

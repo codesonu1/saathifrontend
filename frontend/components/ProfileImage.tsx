@@ -100,7 +100,7 @@ const ProfileImage: React.FC<ProfileImageProps> = ({
         />
         {imageLoading && (
           <View style={[styles.loadingContainer, { width: size, height: size, borderRadius: size / 2 }]}>
-            <ActivityIndicator size="small" color="#075B5E" />
+            <ActivityIndicator size="small" color="#BC001F" />
           </View>
         )}
       </View>

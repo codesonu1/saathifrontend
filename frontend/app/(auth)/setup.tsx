@@ -123,21 +123,21 @@ const SetupScreen = () => {
           <Text style={styles.successSubtitle}>Welcome to Saathi, you're all set to start riding.</Text>
           <View style={styles.verifiedInfoContainer}>
             <View style={styles.verifiedItem}>
-              <Icon name="person" size={20} color="#075B5E" />
+              <Icon name="person" size={20} color="#BC001F" />
               <Text style={styles.verifiedText}>{name}</Text>
               <View style={styles.verifiedBadge}>
                 <Icon name="verified" size={16} color="#4CAF50" />
               </View>
             </View>
             <View style={styles.verifiedItem}>
-              <Icon name="email" size={20} color="#075B5E" />
+              <Icon name="email" size={20} color="#BC001F" />
               <Text style={styles.verifiedText}>{email}</Text>
               <View style={styles.verifiedBadge}>
                 <Icon name="verified" size={16} color="#4CAF50" />
               </View>
             </View>
             <View style={styles.verifiedItem}>
-              <Icon name="phone" size={20} color="#075B5E" />
+              <Icon name="phone" size={20} color="#BC001F" />
               <Text style={styles.verifiedText}>{phone}</Text>
               <View style={styles.verifiedBadge}>
                 <Icon name="verified" size={16} color="#4CAF50" />
@@ -157,7 +157,7 @@ const SetupScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <TouchableOpacity onPress={handleBackPress} style={{
-          backgroundColor: '#075B5E',
+          backgroundColor: '#BC001F',
           borderRadius: 20,
           width: 40,
           height: 40,
@@ -259,13 +259,13 @@ const styles = StyleSheet.create({
   title: { fontSize: 28, fontWeight: "700", marginBottom: 32, textAlign: "center", color: "#333" },
   profileImageContainer: { width: 100, height: 100, borderRadius: 50, marginBottom: 32, position: "relative" },
   profilePlaceholder: { width: "100%", height: "100%", borderRadius: 50, backgroundColor: "#f0f0f0", justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "#e0e0e0" },
-  cameraIcon: { position: "absolute", bottom: 0, right: 0, width: 32, height: 32, borderRadius: 16, backgroundColor: "#075B5E", justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "#fff" },
+  cameraIcon: { position: "absolute", bottom: 0, right: 0, width: 32, height: 32, borderRadius: 16, backgroundColor: "#BC001F", justifyContent: "center", alignItems: "center", borderWidth: 2, borderColor: "#fff" },
   inputContainer: { width: "100%", marginBottom: 16 },
   input: { width: "100%", height: 48, borderWidth: 1, borderColor: "#ccc", borderRadius: 8, paddingHorizontal: 10, color: "#000", fontSize: 16 },
-  inputFocused: { borderColor: "#075B5E", borderWidth: 2 },
+  inputFocused: { borderColor: "#BC001F", borderWidth: 2 },
   inputPrefilled: { backgroundColor: "#f8f9fa", color: "#666" },
   inputDisabled: { backgroundColor: "#f5f5f5", color: "#999" },
-  button: { width: "100%", backgroundColor: "#075B5E", borderRadius: 12, padding: 16, alignItems: "center" },
+  button: { width: "100%", backgroundColor: "#BC001F", borderRadius: 12, padding: 16, alignItems: "center" },
   buttonDisabled: { backgroundColor: "#ccc" },
   buttonContent: { flexDirection: "row", alignItems: "center" },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   verifiedItem: { flexDirection: "row", alignItems: "center", backgroundColor: "#f8f9fa", padding: 16, borderRadius: 8, marginBottom: 12 },
   verifiedText: { flex: 1, fontSize: 16, color: "#333", marginLeft: 12 },
   verifiedBadge: { marginLeft: 8 },
-  getStartedButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#075B5E", paddingHorizontal: 24, paddingVertical: 16, borderRadius: 12 },
+  getStartedButton: { flexDirection: "row", alignItems: "center", backgroundColor: "#BC001F", paddingHorizontal: 24, paddingVertical: 16, borderRadius: 12 },
   getStartedButtonText: { color: "#fff", fontSize: 18, fontWeight: "600", marginRight: 8 },
   buttonIcon: { marginLeft: 4 },
 

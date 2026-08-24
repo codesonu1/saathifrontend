@@ -6,9 +6,12 @@ import Icon from 'react-native-vector-icons/FontAwesome';
 import apiClient from '@/services/apiClient';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const PhoneInputScreen = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const topPadding = insets.top > 0 ? insets.top + 8 : 40;
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
@@ -119,7 +122,7 @@ const PhoneInputScreen = () => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
+      <TouchableOpacity onPress={handleBackPress} style={[styles.backButton, { marginTop: topPadding }]}>
         <Icon name="arrow-left" size={20} color="#000" />
       </TouchableOpacity>
       
@@ -243,14 +246,14 @@ const styles = StyleSheet.create({
   },
   button: { 
     width: '100%', 
-    backgroundColor: '#00809D', 
+    backgroundColor: '#BC001F', 
     borderRadius: 12 
   },
   buttonContent: { 
     height: 48 
   },
   link: { 
-    color: '#00809D', 
+    color: '#BC001F', 
     marginTop: 15, 
     textDecorationLine: 'underline',
     fontSize: 16

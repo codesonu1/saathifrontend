@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { locationService, GoogleMapsPlace } from '@/services/locationService';
+import { rideService } from '@/services/rideService';
 import Toast from './ui/Toast';
 
 interface LocationSearchProps {
@@ -41,6 +42,9 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
 }) => {
   const [searchResults, setSearchResults] = useState<GoogleMapsPlace[]>([]);
   const [savedAddresses, setSavedAddresses] = useState<any[]>([]);
+  const [recentLocations, setRecentLocations] = useState<GoogleMapsPlace[]>([]);
+  const [recentSectionTitle, setRecentSectionTitle] = useState<string>('Recent destinations');
+  const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [toast, setToast] = useState<{
@@ -55,6 +59,11 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
 
   const searchTimeoutRef = useRef<number | null>(null);
 
+  const isPickupField = Boolean(
+    (placeholder && (placeholder.toLowerCase().includes('current') || placeholder.toLowerCase().includes('pickup') || placeholder.toLowerCase().includes('from') || placeholder.toLowerCase().includes('kathmandu'))) ||
+    (value && value.toLowerCase().includes('current'))
+  );
+
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
     setToast({ visible: true, message, type });
   };
@@ -67,12 +76,15 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
     if (showSavedAddresses) {
       loadSavedAddresses();
     }
-    
-    // Test Google Maps API connectivity
-    locationService.testGoogleMapsAPI().then(isWorking => {
-      console.log('Google Maps API working:', isWorking);
-    });
   }, [showSavedAddresses]);
+
+  useEffect(() => {
+    if (showModal) {
+      setSearchQuery('');
+      setSearchResults([]);
+      loadRecentLocations();
+    }
+  }, [showModal]);
 
   const loadSavedAddresses = async () => {
     try {
@@ -83,46 +95,98 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
     }
   };
 
-  const handleSearch = async (query: string) => {
-    onChangeText(query);
+  const loadRecentLocations = async () => {
+    try {
+      const historyRides = await rideService.getPassengerRides();
+      if (Array.isArray(historyRides) && historyRides.length > 0) {
+        const list: GoogleMapsPlace[] = [];
+        const seen = new Set<string>();
 
-    // Clear previous timeout
+        if (isPickupField) {
+          setRecentSectionTitle('Recent pickup locations');
+          for (const r of historyRides) {
+            const locName = r.pickUpLocation || (r as any).pickUp?.location;
+            const lat = r.pickUpLat || (r as any).pickUp?.coords?.coordinates[1];
+            const lng = r.pickUpLng || (r as any).pickUp?.coords?.coordinates[0];
+            if (locName && typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
+              const key = `${locName.trim().toLowerCase()}-${lat.toFixed(4)}-${lng.toFixed(4)}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                list.push({
+                  place_id: `rec_pick_${r._id || Math.random()}`,
+                  name: locName,
+                  address: locName,
+                  location: { lat, lng },
+                  description: locName,
+                  structured_formatting: {
+                    main_text: locName,
+                    secondary_text: 'Recent pickup',
+                  },
+                });
+              }
+            }
+          }
+        } else {
+          setRecentSectionTitle('Recent destinations');
+          for (const r of historyRides) {
+            const locName = r.dropOffLocation || (r as any).dropOff?.location;
+            const lat = r.dropOffLat || (r as any).dropOff?.coords?.coordinates[1];
+            const lng = r.dropOffLng || (r as any).dropOff?.coords?.coordinates[0];
+            if (locName && typeof lat === 'number' && typeof lng === 'number' && !isNaN(lat) && !isNaN(lng)) {
+              const key = `${locName.trim().toLowerCase()}-${lat.toFixed(4)}-${lng.toFixed(4)}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                list.push({
+                  place_id: `rec_drop_${r._id || Math.random()}`,
+                  name: locName,
+                  address: locName,
+                  location: { lat, lng },
+                  description: locName,
+                  structured_formatting: {
+                    main_text: locName,
+                    secondary_text: 'Recent destination',
+                  },
+                });
+              }
+            }
+          }
+        }
+
+        setRecentLocations(list.slice(0, 3));
+      } else {
+        setRecentLocations([]);
+      }
+    } catch (err) {
+      console.log('No recent locations loaded in search modal:', err);
+      setRecentLocations([]);
+    }
+  };
+
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+
+    // Cancel previous pending search timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // Don't search if query is too short
-    if (query.length < 3) {
+    // Lazy load: Don't search if query is empty or less than 2 characters
+    if (!query || query.trim().length < 2) {
       setSearchResults([]);
+      setLoading(false);
       return;
     }
 
-    // Debounce search
+    // Debounce search by 500ms
     searchTimeoutRef.current = setTimeout(async () => {
       setLoading(true);
       try {
         console.log('LocationSearch: Searching for:', query);
-        const results = await locationService.searchPlaces(query, boundingBox);
+        const results = await locationService.searchPlaces(query.trim(), boundingBox);
         console.log('LocationSearch: Received results:', results);
         setSearchResults(results);
-        
-        // Only show "no places found" if we have no results and it's not due to fallback
-        if (results.length === 0) {
-          showToast('No places found. Try a different search term.', 'info');
-        }
       } catch (error: any) {
         console.error('LocationSearch: Search error:', error);
-        let errorMessage = 'Error searching locations';
-        
-        if (error.response?.status === 401) {
-          errorMessage = 'Authentication required. Please login again.';
-        } else if (error.response?.status === 500) {
-          errorMessage = 'Server error. Please try again later.';
-        } else if (error.message) {
-          errorMessage = `Search failed: ${error.message}`;
-        }
-        
-        showToast(errorMessage, 'error');
         setSearchResults([]);
       } finally {
         setLoading(false);
@@ -203,7 +267,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
       style={styles.savedAddress}
       onPress={() => handleSavedAddressSelect(item)}
     >
-      <MaterialIcons name="bookmark" size={20} color="#075B5E" />
+      <MaterialIcons name="bookmark" size={20} color="#BC001F" />
       <View style={styles.savedAddressText}>
         <Text style={styles.savedAddressName}>{item.name}</Text>
         <Text style={styles.savedAddressAddress}>{item.address}</Text>
@@ -212,14 +276,12 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
   );
 
   const handleClear = () => {
-    onChangeText('');
+    setSearchQuery('');
     setSearchResults([]);
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
   };
-
-  const displayValue = value === 'Current Location' ? '' : value;
 
   return (
     <View style={styles.container}>
@@ -232,7 +294,6 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
         <Text style={[styles.inputText, disabled && styles.inputTextDisabled]} numberOfLines={1}>
           {value || placeholder}
         </Text>
-        <MaterialIcons name="keyboard-arrow-down" size={20} color={disabled ? "#ccc" : "#666"} />
       </TouchableOpacity>
 
       <Modal
@@ -255,12 +316,13 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
               <MaterialIcons name="search" size={20} color="#666" />
               <TextInput
                 style={styles.searchInput}
-                placeholder={value === 'Current Location' ? 'Current Location' : 'Search for a place'}
-                value={displayValue}
+                placeholder="Search for location"
+                placeholderTextColor="#8F6F6E"
+                value={searchQuery}
                 onChangeText={handleSearch}
                 autoFocus
               />
-              {displayValue && displayValue.trim().length > 0 ? (
+              {searchQuery && searchQuery.trim().length > 0 ? (
                 <TouchableOpacity
                   onPress={handleClear}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
@@ -269,7 +331,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
                   <MaterialIcons name="close" size={20} color="#8F6F6E" />
                 </TouchableOpacity>
               ) : null}
-              {loading && <ActivityIndicator size="small" color="#075B5E" />}
+              {loading && <ActivityIndicator size="small" color="#BC001F" />}
             </View>
           </View>
 
@@ -279,7 +341,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
             keyExtractor={(item, index) => item.place_id || `place_${index}`}
             style={styles.resultsList}
             ListEmptyComponent={
-              !loading && displayValue.length >= 3 ? (
+              !loading && searchQuery.trim().length >= 2 ? (
                 <View style={styles.emptyState}>
                   <MaterialIcons name="search-off" size={48} color="#ccc" />
                   <Text style={styles.emptyStateText}>No places found</Text>
@@ -287,25 +349,46 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
               ) : null
             }
             ListHeaderComponent={
-              showSavedAddresses && savedAddresses.length > 0 ? (
-                <View style={styles.savedAddressesSection}>
-                  <Text style={styles.sectionTitle}>Saved Addresses</Text>
-                  {savedAddresses.map((address) => (
-                    <TouchableOpacity
-                      key={address._id || address.name}
-                      style={styles.savedAddress}
-                      onPress={() => handleSavedAddressSelect(address)}
-                    >
-                      <MaterialIcons name="bookmark" size={20} color="#075B5E" />
-                      <View style={styles.savedAddressText}>
-                        <Text style={styles.savedAddressName}>{address.name}</Text>
-                        <Text style={styles.savedAddressAddress}>{address.address}</Text>
-                      </View>
-                    </TouchableOpacity>
-                  ))}
-                  <View style={styles.divider} />
-                </View>
-              ) : null
+              <>
+                {recentLocations.length > 0 && (
+                  <View style={styles.savedAddressesSection}>
+                    <Text style={styles.sectionTitle}>{recentSectionTitle}</Text>
+                    {recentLocations.map((place, idx) => (
+                      <TouchableOpacity
+                        key={place.place_id || `rec_${idx}`}
+                        style={styles.savedAddress}
+                        onPress={() => handlePlaceSelect(place)}
+                      >
+                        <MaterialIcons name="location-on" size={20} color="#B7102A" />
+                        <View style={styles.savedAddressText}>
+                          <Text style={styles.savedAddressName}>{place.name}</Text>
+                          <Text style={styles.savedAddressAddress}>{place.structured_formatting?.secondary_text || place.address}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    <View style={styles.divider} />
+                  </View>
+                )}
+                {showSavedAddresses && savedAddresses.length > 0 && (
+                  <View style={styles.savedAddressesSection}>
+                    <Text style={styles.sectionTitle}>Saved Addresses</Text>
+                    {savedAddresses.map((address) => (
+                      <TouchableOpacity
+                        key={address._id || address.name}
+                        style={styles.savedAddress}
+                        onPress={() => handleSavedAddressSelect(address)}
+                      >
+                        <MaterialIcons name="bookmark" size={20} color="#BC001F" />
+                        <View style={styles.savedAddressText}>
+                          <Text style={styles.savedAddressName}>{address.name}</Text>
+                          <Text style={styles.savedAddressAddress}>{address.address}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                    <View style={styles.divider} />
+                  </View>
+                )}
+              </>
             }
           />
         </View>

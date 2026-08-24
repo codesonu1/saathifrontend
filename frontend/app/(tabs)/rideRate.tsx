@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react"
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, TextInput, StatusBar, SafeAreaView, Animated, KeyboardAvoidingView, Platform, ScrollView } from "react-native"
 import Icon from "react-native-vector-icons/MaterialIcons"
 import { useRouter, useLocalSearchParams } from "expo-router"
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { rideService } from '@/services/rideService'
 import webSocketService from '@/services/websocketService'
 
@@ -35,6 +36,10 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
 }
 
 const RideRatingScreen = () => {
+  const insets = useSafeAreaInsets();
+  const rawTop = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44);
+  const safeTopPadding = Math.max(rawTop + 6, 34);
+
   const { driverName, from, to, fare, vehicle, rideId, userRole, passengerName } = useLocalSearchParams()
   const router = useRouter()
   const [rating, setRating] = useState(0)
@@ -249,7 +254,7 @@ const RideRatingScreen = () => {
                   <Text style={styles.driverPassengerName}>{pName}</Text>
                   <View style={styles.verifiedBadgeContainer}>
                     <Icon name="verified" size={13} color="#BC001F" />
-                    <Text style={styles.verifiedBadgeText}>VERIFIED</Text>
+                    <Text style={styles.driverVerifiedBadgeText}>VERIFIED</Text>
                   </View>
                 </View>
                 <Text style={styles.driverPassengerSubtext}>Saathi Passenger</Text>
@@ -308,10 +313,10 @@ const RideRatingScreen = () => {
 
             <View style={styles.starRowContainer}>
               {[1, 2, 3, 4, 5].map((star) => (
-                <TouchableOpacity key={star} onPress={() => handleStarPress(star - 1)} activeOpacity={0.7} style={styles.starButton}>
+                <TouchableOpacity key={star} onPress={() => handleStarPress(star - 1)} activeOpacity={0.7} style={styles.driverStarButton}>
                   <Icon 
                     name={rating >= star ? "star" : "star-border"} 
-                    size={40} 
+                    size={32} 
                     color={rating >= star ? "#BC001F" : "#E3E2E7"} 
                   />
                 </TouchableOpacity>
@@ -396,151 +401,213 @@ const RideRatingScreen = () => {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
         >
-          <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled">
-            {/* Confetti Animation */}
-            {showConfetti && (
-              <Animated.View style={[styles.confetti, { opacity: confettiAnimation }]}>
-                {[...Array(20)].map((_, i) => (
-                  <Animated.View
-                    key={i}
-                    style={[
-                      styles.confettiPiece,
-                      {
-                        backgroundColor: ['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4'][i % 5],
-                        left: Math.random() * width,
-                        top: Math.random() * height,
-                        transform: [{ rotate: `${Math.random() * 360}deg` }],
-                      },
-                    ]}
-                  />
-                ))}
-              </Animated.View>
-            )}
+          {isDriver ? renderDriverContent() : (
+            <ScrollView contentContainerStyle={styles.passengerScrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {/* Confetti / Party Bumper Explosion Animation inside top section */}
+              {showConfetti && (
+                <Animated.View style={[styles.confettiOverlayContainer, { opacity: confettiAnimation }]}>
+                  {[...Array(24)].map((_, i) => {
+                    const angle = (i / 24) * 360;
+                    const radius = 60 + (i % 5) * 20;
+                    const translateX = radius * Math.cos((angle * Math.PI) / 180);
+                    const translateY = radius * Math.sin((angle * Math.PI) / 180);
+                    const isYellow = i % 2 === 0;
 
-            {isDriver ? renderDriverContent() : (
-              <>
-                {/* Header */}
-                <View style={styles.header}>
-                  <View style={styles.placeholder} />
-                  <Text style={styles.headerTitle}>Rate Your Ride</Text>
-                  <View style={styles.placeholder} />
+                    return (
+                      <Animated.View
+                        key={i}
+                        style={[
+                          styles.partyBumperPiece,
+                          {
+                            backgroundColor: isYellow ? '#FFD700' : '#FFFFFF',
+                            width: i % 3 === 0 ? 10 : 6,
+                            height: i % 3 === 0 ? 6 : 10,
+                            borderRadius: i % 4 === 0 ? 5 : 2,
+                            transform: [
+                              { translateX },
+                              { translateY },
+                              { rotate: `${i * 25}deg` },
+                            ],
+                          },
+                        ]}
+                      />
+                    );
+                  })}
+                </Animated.View>
+              )}
+
+              <View style={[styles.passengerMainContainer, { paddingTop: safeTopPadding }]}>
+                {/* Header Bar */}
+                <View style={styles.headerBar}>
+                  <TouchableOpacity style={styles.headerIconButton} onPress={() => router.replace("/(tabs)")}>
+                    <Icon name="arrow-back" size={20} color="#BC001F" />
+                  </TouchableOpacity>
+                  <Text style={styles.headerLogoTitle}>Saathi</Text>
+                  <TouchableOpacity style={styles.headerIconButton}>
+                    <Icon name="notifications" size={20} color="#BC001F" />
+                  </TouchableOpacity>
                 </View>
 
-                <View style={styles.content}>
-                  {/* Trip Summary Card */}
-                  <View style={styles.tripCard}>
-                    <View style={styles.tripHeader}>
-                      <View style={styles.successIconContainer}>
-                        <Icon name="check-circle" size={28} color="#4CAF50" />
-                      </View>
-                      <Text style={styles.tripCompleteText}>Trip Completed!</Text>
-                    </View>
+                {/* 1. Red Hero Fare Card */}
+                <View style={styles.redHeroCardCentered}>
+                  {/* Background Arc Accent */}
+                  <View style={styles.heroArcAccent} />
 
-                    {loadingDetails ? (
-                      <View style={styles.loadingContainer}>
-                        <Text style={styles.loadingText}>Loading trip details...</Text>
-                      </View>
-                    ) : (
-                    <View style={styles.tripDetails}>
-                      <View style={styles.tripRow}>
-                        <View style={styles.iconContainer}>
-                          <Icon name="person" size={18} color="#075B5E" />
-                        </View>
-                        <Text style={styles.tripLabel}>Driver:</Text>
-                        <Text style={styles.tripValue}>
+                  {/* Centered Check Circle */}
+                  <View style={styles.heroCenterCheckCircle}>
+                    <Icon name="check" size={20} color="#BC001F" />
+                  </View>
+
+                  <Text style={styles.heroCenteredTitle}>Trip Completed!</Text>
+                  <Text style={styles.heroCenteredSubtext}>Thanks for riding with Saathi</Text>
+
+                  {/* Total Fare White Pill */}
+                  <View style={styles.whiteFarePill}>
+                    <Text style={styles.whiteFarePillText}>Total Fare</Text>
+                  </View>
+
+                  {/* Large Centered Fare */}
+                  <Text style={styles.heroCenteredFareText}>
+                    <Text style={styles.heroCurrencySymbol}>रू </Text>
+                    {parseFloat(actualFare).toFixed(0)}
+                  </Text>
+
+                  {/* Bottom Payment Success Banner */}
+                  <View style={styles.whitePaymentSuccessBanner}>
+                    <Icon name="check-circle" size={16} color="#2E7D32" style={{ marginRight: 6 }} />
+                    <Text style={styles.whitePaymentSuccessText}>Payment completed successfully</Text>
+                  </View>
+                </View>
+
+                {/* 2. Ride Details Card */}
+                <View style={styles.rideDetailsCard}>
+                  <View style={styles.cardSectionHeaderRow}>
+                    <View style={styles.redHeaderBadge}>
+                      <Icon name="directions-car" size={14} color="#BC001F" />
+                    </View>
+                    <Text style={styles.sectionHeaderTitle}>Ride Details</Text>
+                  </View>
+
+                  {/* Driver Sub-row */}
+                  <View style={styles.driverSubRowContainer}>
+                    <View style={styles.driverAvatarContainer}>
+                      <Icon name="person" size={24} color="#BC001F" />
+                    </View>
+                    <View style={{ flex: 1, marginLeft: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        <Text style={styles.driverNameText}>
                           {driverName || (tripDetails?.driver?.firstName && tripDetails?.driver?.lastName 
                             ? `${tripDetails.driver.firstName} ${tripDetails.driver.lastName}`
-                            : tripDetails?.driver?.firstName || 'Driver')}
+                            : tripDetails?.driver?.firstName || 'Vardan Shah')}
                         </Text>
-                      </View>
-                      <View style={styles.tripRow}>
-                        <View style={styles.iconContainer}>
-                          <Icon name="directions-car" size={18} color="#075B5E" />
+                        <View style={styles.verifiedBadge}>
+                          <Icon name="check" size={10} color="#BC001F" />
+                          <Text style={styles.verifiedBadgeText}>VERIFIED</Text>
                         </View>
-                        <Text style={styles.tripLabel}>Vehicle:</Text>
-                        <Text style={styles.tripValue}>{vehicle || tripDetails?.vehicle || 'Vehicle'}</Text>
                       </View>
-                      <View style={styles.tripRow}>
-                        <View style={styles.iconContainer}>
-                          <Icon name="payment" size={18} color="#075B5E" />
-                        </View>
-                        <Text style={styles.tripLabel}>Fare:</Text>
-                        <Text style={styles.tripValue}>रू {parseFloat(actualFare).toFixed(0)}</Text>
-                      </View>
-                      <View style={styles.tripRow}>
-                        <View style={styles.iconContainer}>
-                          <Icon name="location-on" size={18} color="#075B5E" />
-                        </View>
-                        <Text style={styles.tripLabel}>From:</Text>
-                        <Text style={styles.tripValue} numberOfLines={1}>
-                          {from || (tripDetails?.pickUp?.address || 'Pickup Location')}
-                        </Text>
-                      </View>
-                      <View style={styles.tripRow}>
-                        <View style={styles.iconContainer}>
-                          <Icon name="location-on" size={18} color="#EA2F14" />
-                        </View>
-                        <Text style={styles.tripLabel}>To:</Text>
-                        <Text style={styles.tripValue} numberOfLines={1}>
-                          {to || (tripDetails?.dropOff?.address || 'Dropoff Location')}
-                        </Text>
-                      </View>
-                    </View>
-                    )}
-                  </View>
-
-                  {/* Rating Section */}
-                  <View style={styles.ratingCard}>
-                    <Text style={styles.ratingTitle}>How was your ride?</Text>
-                    <Text style={styles.ratingSubtitle}>{getRatingText()}</Text>
-
-                    <View style={styles.starContainer}>
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <TouchableOpacity key={star} onPress={() => handleStarPress(star - 1)} style={styles.starButton}>
-                          <Icon name="star" size={44} color={rating >= star ? "#FFD700" : "#E0E0E0"} />
-                        </TouchableOpacity>
-                      ))}
+                      <Text style={styles.driverRoleSubtext}>Driver</Text>
                     </View>
                   </View>
 
-                  {/* Feedback Section */}
-                  <View style={styles.feedbackCard}>
-                    <Text style={styles.feedbackTitle}>Share your feedback (Optional)</Text>
-                    <TextInput
-                      style={styles.feedbackInput}
-                      placeholder="Tell us about your ride experience..."
-                      placeholderTextColor="#999"
-                      value={feedback}
-                      onChangeText={setFeedback}
-                      multiline
-                      numberOfLines={4}
-                      textAlignVertical="top"
-                    />
+                  <View style={styles.cardRowDivider} />
+
+                  {/* Clean Full-width Detail Rows */}
+                  <View style={styles.fullWidthDetailRow}>
+                    <View style={styles.detailRowLeft}>
+                      <Icon name="directions-car" size={16} color="#BC001F" />
+                      <Text style={styles.detailRowLabel}>Vehicle</Text>
+                    </View>
+                    <Text style={styles.detailRowValue}>{vehicle || tripDetails?.vehicle || 'Taxi'}</Text>
                   </View>
 
-                  {/* Submit Button */}
+                  <View style={styles.cardRowDivider} />
+
+                  <View style={styles.fullWidthDetailRow}>
+                    <View style={styles.detailRowLeft}>
+                      <Icon name="payment" size={16} color="#BC001F" />
+                      <Text style={styles.detailRowLabel}>Fare</Text>
+                    </View>
+                    <Text style={styles.detailRowValue}>रू {parseFloat(actualFare).toFixed(0)}</Text>
+                  </View>
+
+                  <View style={styles.cardRowDivider} />
+
+                  <View style={styles.fullWidthDetailRow}>
+                    <View style={styles.detailRowLeft}>
+                      <Icon name="location-on" size={16} color="#BC001F" />
+                      <Text style={styles.detailRowLabel}>From</Text>
+                    </View>
+                    <Text style={styles.detailRowValue} numberOfLines={1}>
+                      {from || (tripDetails?.pickUp?.address || 'P84M+MR7, Kathmandu')}
+                    </Text>
+                  </View>
+
+                  <View style={styles.cardRowDivider} />
+
+                  <View style={styles.fullWidthDetailRow}>
+                    <View style={styles.detailRowLeft}>
+                      <Icon name="location-on" size={16} color="#BC001F" />
+                      <Text style={styles.detailRowLabel}>To</Text>
+                    </View>
+                    <Text style={styles.detailRowValue} numberOfLines={1}>
+                      {to || (tripDetails?.dropOff?.address || 'Patan Hospital')}
+                    </Text>
+                  </View>
+                </View>
+
+                {/* 3. Rating & Feedback Card */}
+                <View style={styles.ratingFeedbackCard}>
+                  <View style={styles.cardSectionHeaderRow}>
+                    <View style={styles.goldStarBadge}>
+                      <Icon name="star" size={14} color="#FF9800" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.ratingTitleText}>How was your ride?</Text>
+                      <Text style={styles.ratingSubtext}>
+                        Rate your experience with {(driverName as string)?.split(' ')[0] || 'Vardan'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.starsRow}>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <TouchableOpacity key={star} onPress={() => handleStarPress(star - 1)} style={styles.starTouch}>
+                        <Icon name={rating >= star ? "star" : "star-border"} size={36} color={rating >= star ? "#FFB800" : "#C0C0C0"} />
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  <Text style={styles.feedbackInputLabel}>Share your feedback (Optional)</Text>
+                  <TextInput
+                    style={styles.feedbackTextInput}
+                    placeholder="Tell us about your ride experience..."
+                    placeholderTextColor="#9E9E9E"
+                    value={feedback}
+                    onChangeText={setFeedback}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                  />
+
                   <TouchableOpacity
-                    style={[styles.submitButton, (rating === 0 || submitting) && styles.submitButtonDisabled]}
+                    style={[styles.primaryRedSubmitBtn, (submitting) && styles.driverSubmitButtonDisabled]}
                     onPress={handleSubmit}
-                    disabled={rating === 0 || submitting}
+                    disabled={submitting}
+                    activeOpacity={0.9}
                   >
-                    <Text style={styles.submitButtonText}>{submitting ? 'Submitting...' : 'Submit Rating'}</Text>
-                    <Icon name="send" size={20} color="#fff" style={styles.submitIcon} />
+                    <Text style={styles.primaryRedSubmitBtnText}>
+                      {submitting ? 'Submitting...' : 'Submit Rating'}
+                    </Text>
+                    <Icon name="chevron-right" size={20} color="#FFFFFF" />
                   </TouchableOpacity>
 
-                  {/* Skip Button */}
-                  <TouchableOpacity 
-                    style={styles.skipButton} 
-                    onPress={() => {
-                      router.replace("/(tabs)")
-                    }}
-                  >
-                    <Text style={styles.skipButtonText}>Skip</Text>
+                  <TouchableOpacity style={styles.skipBtn} onPress={() => router.replace("/(tabs)")}>
+                    <Text style={styles.skipBtnText}>Skip</Text>
                   </TouchableOpacity>
                 </View>
-              </>
+              </View>
+            </ScrollView>
             )}
-          </ScrollView>
         </KeyboardAvoidingView>
     </SafeAreaView>
     </ErrorBoundary>
@@ -550,194 +617,326 @@ const RideRatingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f9fa",
+    backgroundColor: "#F8F9FA",
   },
-  header: {
-    backgroundColor: "#fff",
+  passengerScrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
+  },
+  passengerMainContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'ios' ? 4 : 12,
+    gap: 14,
+  },
+  headerBar: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    elevation: 2,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    marginTop: 30,
+    paddingVertical: 10,
   },
-  backButton: {
-    padding: 8,
-    borderRadius: 20,
-    backgroundColor: "#f8f9fa",
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#075B5E",
-  },
-  placeholder: {
-    width: 40,
-  },
-  content: {
-    flex: 1,
-    padding: 20,
-  },
-  tripCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 24,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  tripHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f0f0",
-  },
-  successIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#E8F5E8",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  tripCompleteText: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#333",
-  },
-  tripDetails: {
-    gap: 16,
-  },
-  tripRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#f8f9fa",
+  headerIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#FFF0F2",
     alignItems: "center",
     justifyContent: "center",
   },
-  tripLabel: {
-    fontSize: 15,
-    color: "#666",
-    minWidth: 60,
-    fontWeight: "500",
-  },
-  tripValue: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#333",
-    flex: 1,
-  },
-  ratingCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 28,
-    alignItems: "center",
-    marginBottom: 24,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  ratingTitle: {
+  headerLogoTitle: {
     fontSize: 22,
-    fontWeight: "700",
-    color: "#333",
+    fontWeight: "800",
+    color: "#BC001F",
+  },
+  confettiOverlayContainer: {
+    position: "absolute",
+    top: 90,
+    left: width / 2,
+    zIndex: 100,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  partyBumperPiece: {
+    position: "absolute",
+  },
+  notificationDotBadge: {
+    position: "absolute",
+    top: 6,
+    right: 6,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#BC001F",
+    borderWidth: 1.5,
+    borderColor: "#FFF0F2",
+  },
+
+  /* 1. Red Hero Fare Card */
+  redHeroCardCentered: {
+    backgroundColor: "#BC001F",
+    borderRadius: 20,
+    padding: 20,
+    alignItems: "center",
+    shadowColor: "#BC001F",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+    elevation: 5,
+    overflow: "hidden",
+    position: "relative",
+  },
+  heroArcAccent: {
+    position: "absolute",
+    top: -50,
+    width: 300,
+    height: 180,
+    borderRadius: 150,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.12)",
+  },
+  heroCenterCheckCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  heroCenteredTitle: {
+    fontSize: 22,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginBottom: 2,
+  },
+  heroCenteredSubtext: {
+    fontSize: 12,
+    color: "rgba(255, 255, 255, 0.9)",
+    fontWeight: "500",
+    marginBottom: 12,
+  },
+  whiteFarePill: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderRadius: 12,
     marginBottom: 8,
   },
-  ratingSubtitle: {
-    fontSize: 16,
-    color: "#075B5E",
-    fontWeight: "600",
-    marginBottom: 28,
+  whiteFarePillText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: "#BC001F",
   },
-  starContainer: {
-    flexDirection: "row",
-    gap: 12,
+  heroCenteredFareText: {
+    fontSize: 38,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginBottom: 14,
   },
-  starButton: {
-    padding: 6,
+  heroCurrencySymbol: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#FFFFFF",
   },
-  feedbackCard: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 24,
-    marginBottom: 28,
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-  },
-  feedbackTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#333",
-    marginBottom: 16,
-  },
-  feedbackInput: {
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-    borderRadius: 16,
-    padding: 18,
-    fontSize: 16,
-    color: "#333",
-    minHeight: 120,
-    backgroundColor: "#f8f9fa",
-    textAlignVertical: "top",
-  },
-  submitButton: {
-    backgroundColor: "#075B5E",
-    borderRadius: 16,
-    paddingVertical: 18,
-    paddingHorizontal: 28,
+  whitePaymentSuccessBanner: {
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    width: "100%",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
-    elevation: 3,
+  },
+  whitePaymentSuccessText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1A1B1F",
+  },
+
+  /* 2. Ride Details Card */
+  rideDetailsCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  submitButtonDisabled: {
-    backgroundColor: "#ccc",
-    elevation: 0,
+  cardSectionHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginBottom: 12,
   },
-  submitButtonText: {
-    color: "#fff",
-    fontSize: 18,
+  redHeaderBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FFF0F2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goldStarBadge: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#FFF8E7",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sectionHeaderTitle: {
+    fontSize: 15,
     fontWeight: "700",
-    marginRight: 8,
+    color: "#191C1D",
   },
-  submitIcon: {
-    marginLeft: 4,
+  driverSubRowContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
   },
-  skipButton: {
+  driverAvatarContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFF0F2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  driverNameText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#191C1D",
+  },
+  verifiedBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFF0F2",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 3,
+  },
+  verifiedBadgeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: "#BC001F",
+  },
+  driverRoleSubtext: {
+    fontSize: 12,
+    color: "#757575",
+    marginTop: 2,
+  },
+  cardRowDivider: {
+    height: 1,
+    backgroundColor: "#F5F5F5",
+    marginVertical: 10,
+  },
+  fullWidthDetailRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  detailRowLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  detailRowLabel: {
+    fontSize: 13,
+    color: "#757575",
+    fontWeight: "500",
+  },
+  detailRowValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#191C1D",
+  },
+  ratingTitleText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#191C1D",
+  },
+  ratingSubtext: {
+    fontSize: 12,
+    color: "#757575",
+    marginTop: 1,
+  },
+
+  /* 3. Rating & Feedback Card */
+  ratingFeedbackCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    padding: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  starsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 10,
+    marginVertical: 14,
+  },
+  starTouch: {
+    padding: 2,
+  },
+  feedbackInputLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#191C1D",
+    alignSelf: "flex-start",
+    marginBottom: 6,
+  },
+  feedbackTextInput: {
+    width: "100%",
+    backgroundColor: "#F8F9FA",
+    borderWidth: 1,
+    borderColor: "#EAEAEA",
+    borderRadius: 12,
+    padding: 12,
+    fontSize: 13,
+    color: "#191C1D",
+    minHeight: 64,
+    marginBottom: 16,
+    textAlignVertical: "top",
+  },
+  primaryRedSubmitBtn: {
+    width: "100%",
+    backgroundColor: "#BC001F",
+    borderRadius: 12,
     paddingVertical: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+    shadowColor: "#BC001F",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  primaryRedSubmitBtnText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    marginRight: 4,
+  },
+  skipBtn: {
+    paddingVertical: 4,
     alignItems: "center",
   },
-  skipButtonText: {
-    color: "#666",
-    fontSize: 16,
+  skipBtnText: {
+    fontSize: 13,
+    color: "#757575",
     fontWeight: "600",
   },
   confetti: {
@@ -796,64 +995,64 @@ const styles = StyleSheet.create({
     backgroundColor: '#F4F3F8',
   },
   driverScrollContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 40,
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 24,
   },
   earningsHeroCard: {
     backgroundColor: '#E6192E',
-    borderRadius: 20,
-    padding: 24,
+    borderRadius: 14,
+    padding: 14,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 14,
     shadowColor: '#BC001F',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 6,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 4,
   },
   earningsHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 6,
+    marginBottom: 6,
   },
   earningsTitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#FFFFFF',
     fontWeight: '700',
   },
   earningsAmountRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
-    marginVertical: 4,
+    marginVertical: 2,
   },
   currencySymbol: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: '800',
     color: '#FFFFFF',
-    marginRight: 4,
+    marginRight: 3,
     opacity: 0.9,
   },
   earningsAmountText: {
-    fontSize: 56,
+    fontSize: 38,
     fontWeight: '800',
     color: '#FFFFFF',
-    letterSpacing: -1,
+    letterSpacing: -0.5,
   },
   earningsLabelText: {
-    fontSize: 11,
+    fontSize: 10,
     color: 'rgba(255, 255, 255, 0.85)',
     fontWeight: '700',
-    letterSpacing: 1.5,
-    marginTop: 2,
-    marginBottom: 16,
+    letterSpacing: 1.2,
+    marginTop: 1,
+    marginBottom: 10,
   },
   earningsWalletBanner: {
     backgroundColor: 'rgba(0, 0, 0, 0.12)',
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
     width: '100%',
     alignItems: 'center',
     borderWidth: 1,
@@ -861,43 +1060,43 @@ const styles = StyleSheet.create({
   },
   earningsWalletText: {
     color: 'rgba(255, 255, 255, 0.95)',
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '500',
     textAlign: 'center',
   },
   driverSectionWrapper: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   sectionHeaderLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: '#5F5E5E',
-    letterSpacing: 1,
-    marginBottom: 8,
-    paddingLeft: 4,
+    letterSpacing: 0.8,
+    marginBottom: 4,
+    paddingLeft: 2,
   },
   driverPassengerCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    padding: 10,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
     borderColor: '#EFEDF3',
   },
   driverPassengerAvatarWrapper: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#FFDAD7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 10,
   },
   driverPassengerDetailsCol: {
     flex: 1,
@@ -905,10 +1104,10 @@ const styles = StyleSheet.create({
   driverPassengerNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
   },
   driverPassengerName: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '700',
     color: '#1A1B1F',
   },
@@ -916,34 +1115,34 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFDAD6',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 12,
-    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    gap: 2,
   },
-  verifiedBadgeText: {
-    fontSize: 10,
+  driverVerifiedBadgeText: {
+    fontSize: 9,
     color: '#BC001F',
     fontWeight: '800',
-    letterSpacing: 0.5,
+    letterSpacing: 0.4,
   },
   driverPassengerSubtext: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#5F5E5E',
-    marginTop: 2,
+    marginTop: 1,
   },
   chatIconButton: {
-    padding: 8,
+    padding: 6,
   },
   routeCardContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 12,
+    padding: 12,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
     borderWidth: 1,
     borderColor: '#EFEDF3',
   },
@@ -952,65 +1151,65 @@ const styles = StyleSheet.create({
   },
   timelineIndicatorsCol: {
     alignItems: 'center',
-    width: 20,
-    marginRight: 12,
-    paddingTop: 4,
+    width: 16,
+    marginRight: 10,
+    paddingTop: 2,
   },
   pickupDotOuter: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: 'rgba(188, 0, 31, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   pickupDotInner: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#BC001F',
   },
   timelineConnectorLine: {
     width: 1.5,
-    height: 36,
+    height: 24,
     backgroundColor: '#E3E2E7',
-    marginVertical: 3,
+    marginVertical: 2,
   },
   dropoffSquareOuter: {
-    width: 14,
-    height: 14,
-    borderRadius: 3,
+    width: 12,
+    height: 12,
+    borderRadius: 2,
     backgroundColor: 'rgba(26, 27, 31, 0.15)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   dropoffSquareInner: {
-    width: 7,
-    height: 7,
-    borderRadius: 1.5,
+    width: 6,
+    height: 6,
+    borderRadius: 1,
     backgroundColor: '#1A1B1F',
   },
   timelineAddressCol: {
     flex: 1,
-    gap: 16,
+    gap: 10,
   },
   addressBlock: {},
   addressTypeLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
     color: '#5F5E5E',
-    letterSpacing: 1,
-    marginBottom: 2,
+    letterSpacing: 0.8,
+    marginBottom: 1,
   },
   addressText: {
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
     color: '#1A1B1F',
   },
   routeDivider: {
     height: 1,
     backgroundColor: '#E3E2E7',
-    marginVertical: 14,
+    marginVertical: 10,
   },
   routeMetaRow: {
     flexDirection: 'row',
@@ -1020,57 +1219,57 @@ const styles = StyleSheet.create({
   routeMetaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   routeMetaText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#5F5E5E',
     fontWeight: '500',
   },
   ratingSectionWrapper: {
     alignItems: 'center',
-    marginVertical: 12,
+    marginVertical: 8,
   },
   ratingSectionHeadline: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: '700',
     color: '#1A1B1F',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   ratingSectionSubtext: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#5F5E5E',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   starRowContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 10,
   },
-  starButton: {
-    padding: 4,
+  driverStarButton: {
+    padding: 2,
   },
   tagsSection: {
-    marginTop: 12,
+    marginTop: 8,
     width: '100%',
   },
   tagsTitle: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     color: '#5F5E5E',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   tagsList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
   },
   tagChip: {
     backgroundColor: '#F4F3F8',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E3E2E7',
   },
@@ -1079,7 +1278,7 @@ const styles = StyleSheet.create({
     borderColor: '#BC001F',
   },
   tagText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#1A1B1F',
     fontWeight: '500',
   },
@@ -1089,48 +1288,48 @@ const styles = StyleSheet.create({
   },
   commentsInputContainer: {
     width: '100%',
-    marginTop: 16,
+    marginTop: 10,
   },
   commentsLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
     color: '#5F5E5E',
-    letterSpacing: 1,
-    marginBottom: 8,
+    letterSpacing: 0.8,
+    marginBottom: 4,
     textTransform: 'uppercase',
   },
   commentsTextInput: {
     backgroundColor: '#FFFFFF',
     borderWidth: 1,
     borderColor: '#E7BCB9',
-    borderRadius: 16,
-    padding: 14,
-    fontSize: 14,
+    borderRadius: 12,
+    padding: 10,
+    fontSize: 12,
     color: '#1A1B1F',
-    minHeight: 80,
+    minHeight: 56,
   },
   actionButtonsContainer: {
-    marginTop: 20,
-    gap: 10,
+    marginTop: 12,
+    gap: 6,
   },
   primaryRedSubmitCTA: {
     backgroundColor: '#BC001F',
-    paddingVertical: 16,
-    borderRadius: 16,
+    paddingVertical: 11,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     shadowColor: '#BC001F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   primaryRedSubmitCTAText: {
     color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   driverSubmitButtonDisabled: {
     backgroundColor: '#C8C6C5',
@@ -1138,16 +1337,16 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
   },
   secondaryDashboardCTA: {
-    paddingVertical: 14,
-    borderRadius: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
   secondaryDashboardCTAText: {
     color: '#5F5E5E',
-    fontSize: 15,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
 

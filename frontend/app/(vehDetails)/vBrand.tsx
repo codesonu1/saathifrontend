@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   closeText: {
     fontSize: 16,
-    color: '#075B5E',
+    color: '#BC001F',
     fontWeight: '600',
   },
   content: {
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     borderColor: '#ccc',
   },
   saveButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',

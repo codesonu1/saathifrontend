@@ -76,7 +76,9 @@ const ProfileSettingsScreen = () => {
     if (!imageUrl)
       return 'https://www.shutterstock.com/image-vector/default-avatar-photo-placeholder-grey-600nw-2007531536.jpg';
     if (imageUrl.startsWith('http')) return imageUrl;
-    return `${ASSET_BASE_URL}${imageUrl}`;
+    const base = ASSET_BASE_URL.replace(/\/+$/, '');
+    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    return `${base}${path}`;
   };
 
   useEffect(() => {
@@ -265,47 +267,95 @@ const ProfileSettingsScreen = () => {
       base64: false,
     });
     if (!pickerResult.canceled) {
+      const fileUri = pickerResult.assets[0].uri;
+      // Optimistically display selected photo immediately
+      setImageUri(fileUri);
       setUploading(true);
       try {
-        const uri = pickerResult.assets[0].uri;
+        const fileName = fileUri.split('/').pop() || `profile_${Date.now()}.jpg`;
+        const match = /\.(\w+)$/.exec(fileName);
+        const ext = match ? match[1].toLowerCase() : 'jpg';
+        const fileType = ext === 'png' ? 'image/png' : 'image/jpeg';
 
         const formData = new FormData();
         formData.append('file', {
-          uri: uri,
-          type: 'image/jpeg',
-          name: 'profile.jpg',
+          uri: fileUri,
+          name: fileName,
+          type: fileType,
         } as any);
 
-        const uploadResponse = await apiClient.post('uploads/public', formData, {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        });
+        const token = await getAccessToken();
+        const apiBaseUrl = (apiClient.defaults.baseURL || 'https://ride-share-api-umog.onrender.com/api/v1').replace(/\/+$/, '');
 
-        if (uploadResponse.data.statusCode === 201) {
-          const imageUrl = uploadResponse.data.data.url;
+        let resData: any = null;
+        const endpoints = [`${apiBaseUrl}/uploads/public`, `${apiBaseUrl}/uploads/private`];
 
-          let fixedImageUrl = imageUrl;
-          if (imageUrl.includes('localhost:3000')) {
-            fixedImageUrl = imageUrl.replace(DEFAULT_BASE_URL, ASSET_BASE_URL);
+        for (const endpoint of endpoints) {
+          try {
+            console.log('[Profile] Uploading profile photo to:', endpoint);
+            const response = await fetch(endpoint, {
+              method: 'POST',
+              headers: {
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: formData,
+            });
+
+            if (response.ok) {
+              resData = await response.json();
+              console.log('[Profile] Upload response:', resData);
+              break;
+            } else {
+              console.log('[Profile] Upload endpoint returned status:', response.status);
+            }
+          } catch (fetchErr: any) {
+            console.log('[Profile] Endpoint fetch error:', endpoint, fetchErr?.message);
+          }
+        }
+
+        const uploadedPath = typeof resData?.data === 'string'
+          ? resData.data
+          : (resData?.data?.url || resData?.data?.path || resData?.url || resData?.data);
+
+        if (uploadedPath && typeof uploadedPath === 'string') {
+          let photoPayload = uploadedPath;
+          if (photoPayload.startsWith('undefined/')) {
+            photoPayload = photoPayload.replace(/^undefined\/?/, '');
+          }
+          if (photoPayload.includes('localhost:3000')) {
+            photoPayload = photoPayload.replace(DEFAULT_BASE_URL, ASSET_BASE_URL);
           }
 
-          const profileUpdateData = { photo: fixedImageUrl };
-          const profileResponse = await apiClient.patch('me', profileUpdateData);
+          console.log('[Profile] Sending photo payload to PATCH me:', photoPayload);
 
-          if (profileResponse.data.statusCode === 200) {
-            const newUrl = getFullImageUrl(profileResponse.data.data.photo);
-            setImageUri(newUrl);
+          let profileResponse: any = null;
+          try {
+            profileResponse = await apiClient.patch('me', { photo: photoPayload });
+          } catch (patchErr: any) {
+            console.log('[Profile] PATCH me with relative payload failed:', photoPayload, patchErr?.response?.status, patchErr?.response?.data);
+            const fullUrl = getFullImageUrl(photoPayload);
+            console.log('[Profile] Retrying PATCH me with full URL:', fullUrl);
+            profileResponse = await apiClient.patch('me', { photo: fullUrl });
+          }
+
+          if (profileResponse?.data?.statusCode === 200 || profileResponse?.data?.data) {
+            const newPhotoPath = profileResponse.data?.data?.photo || photoPayload;
+            const newUrl = getFullImageUrl(newPhotoPath);
+            const cacheBustedUrl = newUrl.includes('?') ? `${newUrl}&t=${Date.now()}` : `${newUrl}?t=${Date.now()}`;
+            setImageUri(cacheBustedUrl);
+            initialDataRef.current.imageUri = cacheBustedUrl;
             showModal('success', 'Success', 'Profile image updated successfully');
           } else {
             showModal('error', 'Error', 'Failed to update profile with new image.');
           }
         } else {
-          showModal('error', 'Error', 'Failed to upload image.');
+          showModal('error', 'Error', 'Failed to upload image. Please check your network connection.');
         }
       } catch (err: any) {
-        console.error('Failed to upload image:', err);
-        showModal('error', 'Error', `Failed to upload image: ${err.message || 'Unknown error'}`);
+        console.error('Failed to upload image detailed error:', err?.response?.data || err?.message || err);
+        const backendMessage = err?.response?.data?.message;
+        const detailStr = Array.isArray(backendMessage) ? backendMessage.join(', ') : (backendMessage || err.message || 'Network error');
+        showModal('error', 'Error', `Failed to upload image: ${detailStr}`);
       } finally {
         setUploading(false);
       }
@@ -723,21 +773,21 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   saveButton: {
-    backgroundColor: '#B7102A',
-    borderRadius: 12,
-    height: 52,
+    backgroundColor: '#BC001F',
+    borderRadius: 10,
+    height: 42,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 8,
-    elevation: 3,
-    shadowColor: '#B7102A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    elevation: 2,
+    shadowColor: '#BC001F',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   saveButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
 });

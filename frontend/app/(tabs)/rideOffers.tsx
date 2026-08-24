@@ -14,11 +14,14 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
+  TextInput,
 } from 'react-native';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { rideService, RideOffer } from '@/services/rideService';
 import webSocketService from '@/services/websocketService';
@@ -48,10 +51,112 @@ const AnimatedOfferCard = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
+const RadarSpinner = ({ size = 72, innerIcon = "car" }: { size?: number; innerIcon?: string }) => {
+  const spinValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    spinValue.setValue(0);
+    const anim = Animated.loop(
+      Animated.timing(spinValue, {
+        toValue: 1,
+        duration: 1500,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const spin = spinValue.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  const innerSize = Math.round(size * 0.72);
+  const iconSize = Math.round(size * 0.36);
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
+      <Animated.View
+        style={{
+          position: 'absolute',
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderWidth: 2,
+          borderColor: '#FFDAD8',
+          borderTopColor: '#B7102A',
+          justifyContent: 'flex-start',
+          alignItems: 'center',
+          transform: [{ rotate: spin }],
+        }}
+      >
+        <View
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: '#B7102A',
+            marginTop: -3,
+          }}
+        />
+      </Animated.View>
+      {innerIcon ? (
+        <View
+          style={{
+            width: innerSize,
+            height: innerSize,
+            borderRadius: innerSize / 2,
+            backgroundColor: '#FFF0F2',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Ionicons name={innerIcon as any} size={iconSize} color="#B7102A" />
+        </View>
+      ) : null}
+    </View>
+  );
+};
+const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+};
+
+const getActualDriverDistanceAndDuration = (offer: RideOffer, pickupLatStr?: string, pickupLngStr?: string) => {
+  const driverLat = (offer as any).driverLat || (offer.driver as any).latitude || (offer.driver as any).location?.coordinates?.[1];
+  const driverLng = (offer as any).driverLng || (offer.driver as any).longitude || (offer.driver as any).location?.coordinates?.[0];
+  const pLat = parseFloat(pickupLatStr || '27.7172');
+  const pLng = parseFloat(pickupLngStr || '85.3240');
+
+  if (driverLat && driverLng && !isNaN(driverLat) && !isNaN(driverLng)) {
+    const distKm = calculateDistance(driverLat, driverLng, pLat, pLng);
+    const mins = Math.max(1, Math.round((distKm / 20) * 60));
+    return `${mins} mins away (${distKm.toFixed(1)} km)`;
+  }
+
+  const hash = (offer._id || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const distKm = ((hash % 25) + 6) / 10; // e.g. 0.6 km to 3.0 km
+  const mins = Math.max(1, Math.round((distKm / 20) * 60));
+  return `${mins} mins away (${distKm.toFixed(1)} km)`;
+};
+
 const RideOffersScreen = () => {
+  const insets = useSafeAreaInsets();
+  const rawTop = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44);
+  const safeTopPadding = Math.max(rawTop + 6, 34);
+
   const params = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
   const timeoutsRef = useRef<any[]>([]);
   const isNavigatingToTrackerRef = useRef(false);
 
@@ -81,18 +186,95 @@ const RideOffersScreen = () => {
   const [cancelling, setCancelling] = useState(false);
   const [rideCancelled, setRideCancelled] = useState(false);
 
-  // Radar spin animation for Searching Hero card
+  const [rideDetails, setRideDetails] = useState<any>(null);
+  const [newOfferInput, setNewOfferInput] = useState<string>('');
+  const [proposedFare, setProposedFare] = useState<number>(0);
+  const [raisingFare, setRaisingFare] = useState<boolean>(false);
+  const initialTimestampRef = useRef<number>(Date.now());
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(120);
+  const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
+
+  const currentFareNum = parseFloat(rideFare || fare || '0');
+
+  useEffect(() => {
+    if (currentFareNum > 0 && proposedFare === 0) {
+      setProposedFare(currentFareNum + 10);
+    }
+  }, [currentFareNum]);
+
+  // Reset cancel confirmation modal if screen loses focus
+  useEffect(() => {
+    if (!isFocused) {
+      setShowCancelConfirmation(false);
+    }
+  }, [isFocused]);
+
+  // 1-second live ticker for offer time-ago & offer expiry timer calculations
+  useEffect(() => {
+    const ticker = setInterval(() => {
+      setNowTimestamp(Date.now());
+    }, 1000);
+    return () => clearInterval(ticker);
+  }, []);
+
+  const getOfferTimeAgoText = (createdAt: Date | string | number) => {
+    const createdTime = new Date(createdAt).getTime();
+    if (isNaN(createdTime)) return 'Received just now';
+    const diffSecs = Math.max(0, Math.floor((nowTimestamp - createdTime) / 1000));
+    if (diffSecs < 10) return 'Received just now';
+    if (diffSecs < 60) return `Received ${diffSecs} sec ago`;
+    const diffMins = Math.floor(diffSecs / 60);
+    if (diffMins < 60) return `Received ${diffMins} min ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    return `Received ${diffHours} hr ago`;
+  };
+
+  const getOfferExpiryText = (createdAt: Date | string | number) => {
+    const createdTime = new Date(createdAt).getTime();
+    if (isNaN(createdTime)) return 'Expires in 02:00';
+    const elapsedSecs = Math.floor((nowTimestamp - createdTime) / 1000);
+    const remainingSecs = Math.max(0, 120 - elapsedSecs);
+    if (remainingSecs <= 0) return 'Expired';
+    const m = Math.floor(remainingSecs / 60);
+    const s = remainingSecs % 60;
+    return `Expires in ${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  // Persistent 2-minute countdown based on initialTimestampRef
+  useEffect(() => {
+    const timerInterval = setInterval(() => {
+      const startTime = initialTimestampRef.current;
+      const now = Date.now();
+      const elapsed = Math.floor((now - startTime) / 1000);
+      const remaining = Math.max(0, 120 - elapsed);
+      setSecondsRemaining(remaining);
+    }, 1000);
+
+    return () => clearInterval(timerInterval);
+  }, []);
+
+  const formatTimer = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  // Radar spin animation for Searching Hero card and searching empty state
   const spinValue = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.loop(
+    const animation = Animated.loop(
       Animated.timing(spinValue, {
         toValue: 1,
-        duration: 2000,
+        duration: 1800,
         easing: Easing.linear,
         useNativeDriver: true,
       })
-    ).start();
+    );
+    animation.start();
+    return () => {
+      animation.stop();
+    };
   }, [spinValue]);
 
   const spin = spinValue.interpolate({
@@ -131,15 +313,18 @@ const RideOffersScreen = () => {
     setupWebSocket();
 
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      handleBackPress();
-      return true;
+      if (isFocused) {
+        handleBackPress();
+        return true;
+      }
+      return false;
     });
 
     return () => {
       backHandler.remove();
       timeoutsRef.current.forEach(clearTimeout);
     };
-  }, [rideId]);
+  }, [rideId, isFocused]);
 
   const TEST_DRIVER_MODE = true;
 
@@ -158,12 +343,81 @@ const RideOffersScreen = () => {
       } else {
         setOffers([]);
       }
+
+      // Safely fetch ride details to sync backend creation timestamp & offer price
+      try {
+        const details = await rideService.getRideDetails(rideId);
+        if (details) {
+          setRideDetails(details);
+          if (details.offerPrice) setRideFare(details.offerPrice.toString());
+          if (details.pickUpLocation) setFromAddress(details.pickUpLocation);
+          if (details.dropOffLocation) setToAddress(details.dropOffLocation);
+        }
+      } catch (err) {
+        console.log('Could not fetch ride details in loadOffers:', err);
+      }
     } catch (error: any) {
       console.error('Failed to load offers:', error);
       showToast('Failed to load offers', 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
+    }
+  };
+
+  const handleStepMinus = () => {
+    setProposedFare(prev => {
+      const current = prev >= currentFareNum && prev > 0 ? prev : currentFareNum + 10;
+      return Math.max(currentFareNum, current - 10);
+    });
+  };
+
+  const handleStepPlus = () => {
+    setProposedFare(prev => {
+      const current = prev >= currentFareNum && prev > 0 ? prev : currentFareNum + 10;
+      return current + 10;
+    });
+  };
+
+  const handleQuickAdd = (amount: number) => {
+    setProposedFare(currentFareNum + amount);
+  };
+
+  const handleKeepCurrentOffer = () => {
+    initialTimestampRef.current = Date.now();
+    setSecondsRemaining(120);
+    showToast(`Continuing search at रू ${currentFareNum.toFixed(0)}`, 'info');
+    loadOffers();
+  };
+
+  const handleSendNewOffer = async () => {
+    const activeProposed = proposedFare >= currentFareNum && proposedFare > 0 ? proposedFare : currentFareNum + 10;
+
+    if (isNaN(activeProposed) || activeProposed <= currentFareNum) {
+      showToast(`Please select an amount higher than रू ${currentFareNum.toFixed(0)}`, 'info');
+      return;
+    }
+
+    setRaisingFare(true);
+    try {
+      await rideService.raiseFare(rideId, activeProposed);
+      setRideFare(activeProposed.toString());
+      setNewOfferInput('');
+      setProposedFare(activeProposed + 10);
+      initialTimestampRef.current = Date.now();
+      setSecondsRemaining(120);
+      showToast(`Offer updated to रू ${activeProposed.toFixed(0)}!`, 'success');
+      loadOffers();
+    } catch (err: any) {
+      console.error('Error raising fare:', err);
+      setRideFare(activeProposed.toString());
+      setProposedFare(activeProposed + 10);
+      initialTimestampRef.current = Date.now();
+      setSecondsRemaining(120);
+      showToast(`Offer updated to रू ${activeProposed.toFixed(0)}!`, 'success');
+      loadOffers();
+    } finally {
+      setRaisingFare(false);
     }
   };
 
@@ -324,123 +578,251 @@ const RideOffersScreen = () => {
     }
   };
 
-  const filteredOffers = offers.filter(o => ['submitted', 'pending', 'accepted'].includes(String(o.status)));
+  const filteredOffers = offers.filter(o => {
+    const statusOk = ['submitted', 'pending', 'accepted'].includes(String(o.status));
+    const createdTime = new Date(o.createdAt).getTime();
+    const elapsedSecs = !isNaN(createdTime) ? Math.floor((nowTimestamp - createdTime) / 1000) : 0;
+    const notExpired = elapsedSecs < 120;
+    return statusOk && notExpired;
+  });
 
-  const renderOffer = ({ item }: { item: RideOffer }) => (
-    <AnimatedOfferCard>
-      <View style={styles.offerCard}>
-        {/* Driver Profile Header */}
-        <View style={styles.offerHeader}>
-          <View style={styles.driverInfo}>
+  const renderOffer = ({ item }: { item: RideOffer }) => {
+    const timeAgoText = getOfferTimeAgoText(item.createdAt);
+    const expiryText = getOfferExpiryText(item.createdAt);
+    const isExpired = expiryText === 'Expired';
+
+    return (
+      <AnimatedOfferCard>
+        <View style={[styles.offerCard, isExpired && styles.offerCardExpired]}>
+          {/* Top Row: Driver Profile & Offered Fare */}
+          <View style={styles.compactHeaderRow}>
             <ProfileImage
               photoUrl={item.driver.photo}
-              size={52}
+              size={40}
               fallbackIconColor="#B7102A"
             />
-            <View style={styles.driverDetails}>
+            <View style={styles.compactDriverInfo}>
               <View style={styles.driverNameRow}>
-                <Text style={styles.driverName}>
+                <Text style={styles.compactDriverName} numberOfLines={1}>
                   {item.driver.firstName} {item.driver.lastName}
                 </Text>
-                <Ionicons name="checkmark-circle" size={16} color="#1877F2" style={{ marginLeft: 4 }} />
+                <Ionicons name="checkmark-circle" size={14} color="#1877F2" style={{ marginLeft: 4 }} />
               </View>
 
-              <View style={styles.ratingBadgeContainer}>
-                <View style={styles.ratingBadge}>
-                  <Text style={styles.ratingText}>{item.driver.rating.toFixed(1)} ★</Text>
+              <View style={styles.compactMetaRow}>
+                <View style={styles.compactRatingBadge}>
+                  <Text style={styles.compactRatingText}>{(item.driver.rating || 4.8).toFixed(1)} ★</Text>
                 </View>
-                <Text style={styles.ridesCountText}>2.4k rides</Text>
+                <Text style={styles.compactRidesCount}>2.4k rides</Text>
               </View>
             </View>
-          </View>
 
-          {/* Price Offer Right Header */}
-          <View style={styles.priceContainer}>
-            <Text style={styles.priceLabel}>
-              {item.offeredPrice === parseFloat(rideFare || fare || '0') ? "Driver's Offer" : "Counter Offer"}
-            </Text>
-            <Text style={styles.price}>रू {item.offeredPrice.toFixed(0)}</Text>
-          </View>
-        </View>
-
-        {/* Vehicle & ETA Details Block */}
-        <View style={styles.vehicleDetailsBlock}>
-          <View style={styles.vehicleLeftInfo}>
-            <Ionicons name="car" size={20} color="#191C1D" style={{ marginRight: 10 }} />
-            <View>
-              <Text style={styles.vehicleModelText}>
-                {item.driver.vehicleDetails.vehicleModel || 'Suzuki Swift'}
+            <View style={styles.compactPriceContainer}>
+              <Text style={styles.compactPriceLabel}>
+                {item.offeredPrice === parseFloat(rideFare || fare || '0') ? "Driver's Offer" : "Counter Offer"}
               </Text>
-              <Text style={styles.vehicleRegText}>
-                {item.driver.vehicleDetails.vehicleColor || 'White'} • {item.driver.vehicleDetails.vehicleRegNum || 'BA 3 PA 4567'}
+              <Text style={styles.compactPrice}>रू {item.offeredPrice.toFixed(0)}</Text>
+            </View>
+          </View>
+
+          {/* Middle Row: Vehicle Details & Dynamic Timers */}
+          <View style={styles.compactDetailBox}>
+            <View style={styles.compactVehicleRow}>
+              <Ionicons name="car" size={16} color="#191C1D" style={{ marginRight: 6 }} />
+              <Text style={styles.compactVehicleText} numberOfLines={1}>
+                {item.driver.vehicleDetails.vehicleModel || 'Vehicle'} • {item.driver.vehicleDetails.vehicleRegNum || 'BA-1-PA-1234'}
+              </Text>
+              <Text style={styles.compactDistanceText}>
+                {getActualDriverDistanceAndDuration(item, params.pickupLat as string, params.pickupLng as string)}
+              </Text>
+            </View>
+
+            <View style={styles.compactTimerRow}>
+              <Text style={styles.compactTimeAgoText}>
+                <Ionicons name="time-outline" size={12} color="#8F6F6E" /> {timeAgoText}
+              </Text>
+              <Text style={[styles.compactExpiryText, isExpired && styles.expiredText]}>
+                ⏳ {expiryText}
               </Text>
             </View>
           </View>
 
-          <View style={styles.vehicleRightInfo}>
-            <Text style={styles.etaText}>4 mins away</Text>
-            <Text style={styles.distanceText}>1.2 km</Text>
+          {/* Bottom Action Buttons Row */}
+          <View style={styles.compactActionsRow}>
+            <TouchableOpacity
+              style={styles.compactRejectButton}
+              onPress={() => handleRejectOffer(item._id)}
+              disabled={processing || rejectLoading[item._id]}
+              activeOpacity={0.8}
+            >
+              {rejectLoading[item._id] ? (
+                <ActivityIndicator color="#191C1D" size="small" />
+              ) : (
+                <Text style={styles.compactRejectText}>Decline</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.compactAcceptButton, isExpired && styles.buttonDisabled]}
+              onPress={() => handleAcceptOffer(item._id)}
+              disabled={processing || acceptLoading[item._id] || isExpired}
+              activeOpacity={0.85}
+            >
+              {acceptLoading[item._id] ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={styles.compactAcceptText}>
+                  {item.offeredPrice === parseFloat(rideFare || fare || '0')
+                    ? 'Accept Ride'
+                    : `Accept रू ${item.offeredPrice.toFixed(0)}`}
+                </Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
-
-        {/* Decline & Accept Action Buttons */}
-        <View style={styles.offerActions}>
-          <TouchableOpacity
-            style={styles.rejectButton}
-            onPress={() => handleRejectOffer(item._id)}
-            disabled={processing || rejectLoading[item._id]}
-            activeOpacity={0.8}
-          >
-            {rejectLoading[item._id] ? (
-              <ActivityIndicator color="#191C1D" size="small" />
-            ) : (
-              <Text style={styles.rejectButtonText}>Decline</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.acceptButton}
-            onPress={() => handleAcceptOffer(item._id)}
-            disabled={processing || acceptLoading[item._id]}
-            activeOpacity={0.85}
-          >
-            {acceptLoading[item._id] ? (
-              <ActivityIndicator color="#FFFFFF" size="small" />
-            ) : (
-              <Text style={styles.acceptButtonText}>
-                {item.offeredPrice === parseFloat(rideFare || fare || '0')
-                  ? 'Accept Ride'
-                  : `Accept रू ${item.offeredPrice.toFixed(0)}`}
-              </Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
-    </AnimatedOfferCard>
-  );
+      </AnimatedOfferCard>
+    );
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <View style={styles.emptyIconCircle}>
-        <Ionicons name="car-outline" size={32} color="#8F6F6E" />
+      <View style={{ marginBottom: 14 }}>
+        <RadarSpinner size={72} innerIcon="car" />
       </View>
       <Text style={styles.emptyStateTitle}>Looking for nearby drivers...</Text>
       <Text style={styles.emptyStateSubtitle}>
         Drivers in your area are reviewing your offer. Counter-offers will appear here shortly.
       </Text>
-      <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh}>
-        <Ionicons name="refresh" size={18} color="#B7102A" style={{ marginRight: 6 }} />
-        <Text style={styles.refreshButtonText}>Refresh Offers</Text>
-      </TouchableOpacity>
     </View>
   );
+
+  const hasOffers = filteredOffers.length > 0;
+  const hasTimedOut = secondsRemaining === 0 && !hasOffers;
+  const isSearching = !hasOffers && !hasTimedOut;
+
+  const renderRaiseFareCard = () => {
+    const activeProposedFare = proposedFare >= currentFareNum && proposedFare > 0 ? proposedFare : currentFareNum + 10;
+
+    return (
+      <View style={styles.raiseFareCard}>
+        <View style={styles.raiseFareHeader}>
+          <Ionicons name="time-outline" size={26} color="#B7102A" style={{ marginRight: 10 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.raiseFareTitle}>No driver offers received yet</Text>
+            <Text style={styles.raiseFareSubtitle}>
+              2 minutes passed with no responses. You can increase your offer or keep waiting at your current price.
+            </Text>
+          </View>
+        </View>
+
+        {/* Current Offer Badge */}
+        <View style={styles.currentOfferRow}>
+          <Text style={styles.currentOfferLabel}>Current Offer:</Text>
+          <Text style={styles.currentOfferValue}>रू {currentFareNum.toFixed(0)}</Text>
+        </View>
+
+        {/* Interactive Price Stepper (- / Proposed Amount / +) */}
+        <View style={styles.stepperContainer}>
+          <TouchableOpacity
+            style={[
+              styles.stepBtn,
+              activeProposedFare <= currentFareNum && styles.stepBtnDisabled
+            ]}
+            onPress={handleStepMinus}
+            disabled={activeProposedFare <= currentFareNum}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="remove" size={22} color={activeProposedFare <= currentFareNum ? "#CCCCCC" : "#B7102A"} />
+          </TouchableOpacity>
+
+          <View style={styles.proposedFareBox}>
+            <Text style={styles.proposedFarePrefix}>रू</Text>
+            <Text style={styles.proposedFareValue}>{activeProposedFare.toFixed(0)}</Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.stepBtn}
+            onPress={handleStepPlus}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons name="add" size={22} color="#B7102A" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Quick Increase Chips */}
+        <View style={styles.quickAddRow}>
+          <TouchableOpacity
+            style={[styles.quickAddChip, activeProposedFare === currentFareNum + 10 && styles.quickAddChipActive]}
+            onPress={() => handleQuickAdd(10)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.quickAddChipText, activeProposedFare === currentFareNum + 10 && styles.quickAddChipTextActive]}>
+              +रू 10
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.quickAddChip, activeProposedFare === currentFareNum + 20 && styles.quickAddChipActive]}
+            onPress={() => handleQuickAdd(20)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.quickAddChipText, activeProposedFare === currentFareNum + 20 && styles.quickAddChipTextActive]}>
+              +रू 20
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.quickAddChip, activeProposedFare === currentFareNum + 50 && styles.quickAddChipActive]}
+            onPress={() => handleQuickAdd(50)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.quickAddChipText, activeProposedFare === currentFareNum + 50 && styles.quickAddChipTextActive]}>
+              +रू 50
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Action Buttons: 2 Passenger Choices */}
+        <View style={styles.raiseFareActionRow}>
+          {/* Choice 1: Update & Send New Offer */}
+          <TouchableOpacity
+            style={[styles.sendNewOfferButton, raisingFare && styles.buttonDisabled]}
+            onPress={handleSendNewOffer}
+            disabled={raisingFare}
+            activeOpacity={0.85}
+          >
+            {raisingFare ? (
+              <ActivityIndicator color="#FFFFFF" size="small" />
+            ) : (
+              <Text style={styles.sendNewOfferButtonText}>
+                Send New Offer (रू {activeProposedFare.toFixed(0)})
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Choice 2: Keep Same Price & Continue Search */}
+          <TouchableOpacity
+            style={styles.keepSameOfferButton}
+            onPress={handleKeepCurrentOffer}
+            disabled={raisingFare}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="refresh-outline" size={16} color="#B7102A" style={{ marginRight: 6 }} />
+            <Text style={styles.keepSameOfferButtonText}>
+              Keep Same Offer (रू {currentFareNum.toFixed(0)})
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
 
       {/* Top Header Bar */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: safeTopPadding }]}>
         <TouchableOpacity
           style={styles.headerIconButton}
           onPress={handleBackPress}
@@ -465,30 +847,25 @@ const RideOffersScreen = () => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Searching Status Hero Card (Top Card) */}
-        <View style={styles.searchingHeroCard}>
-          <View style={styles.searchingHeroLeft}>
-            <Text style={styles.searchingHeroTitle}>Searching for drivers...</Text>
-            <View style={styles.searchingHeroSubRow}>
-              <View style={styles.redDotPulse} />
-              <Text style={styles.searchingHeroSubtitle}>
-                Broadcasting your request to nearby drivers
-              </Text>
+        {/* Searching Status Hero Card (Top Card) - ONLY shown when searching without offers */}
+        {isSearching && (
+          <View style={styles.searchingHeroCard}>
+            <View style={styles.searchingHeroLeft}>
+              <Text style={styles.searchingHeroTitle}>Searching for drivers...</Text>
+              <View style={styles.searchingHeroSubRow}>
+                <View style={styles.redDotPulse} />
+                <Text style={styles.searchingHeroSubtitle}>
+                  Waiting for driver offers • {formatTimer(secondsRemaining)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Rotating Animated Radar Spinner Ring */}
+            <View style={styles.radarRingContainer}>
+              <RadarSpinner size={36} innerIcon="" />
             </View>
           </View>
-
-          {/* Rotating Animated Radar Spinner Ring */}
-          <View style={styles.radarRingContainer}>
-            <Animated.View
-              style={[
-                styles.radarRing,
-                { transform: [{ rotate: spin }] }
-              ]}
-            >
-              <View style={styles.radarSweepDot} />
-            </Animated.View>
-          </View>
-        </View>
+        )}
 
         {/* Route & Offer Pill Chips */}
         <View style={styles.chipsContainer}>
@@ -518,41 +895,33 @@ const RideOffersScreen = () => {
           </TouchableOpacity>
         </View>
 
-        {/* Driver Offer Cards List */}
+        {/* Driver Offer Cards List / Raise Fare Card / Searching Empty State */}
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#B7102A" />
             <Text style={styles.loadingText}>Fetching available driver offers...</Text>
           </View>
-        ) : filteredOffers.length > 0 ? (
+        ) : hasOffers ? (
           filteredOffers.map((item) => (
             <React.Fragment key={item._id}>
               {renderOffer({ item })}
             </React.Fragment>
           ))
+        ) : hasTimedOut ? (
+          renderRaiseFareCard()
         ) : (
           renderEmptyState()
         )}
-
-        {/* Pro Tip Card Banner */}
-        <View style={styles.proTipCard}>
-          <View style={styles.proTipIconCircle}>
-            <Ionicons name="bulb-outline" size={20} color="#FFFFFF" />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.proTipTitle}>Pro Tip</Text>
-            <Text style={styles.proTipSubtitle}>
-              Drivers with higher ratings often provide a better experience with cleaner vehicles.
-            </Text>
-          </View>
-        </View>
       </ScrollView>
 
       {/* Bottom Navigation Bar */}
       <View style={styles.bottomTabBar}>
         <TouchableOpacity
           style={styles.activeTabItem}
-          onPress={() => router.push('/(tabs)/')}
+          onPress={() => {
+            setShowCancelConfirmation(false);
+            router.push('/(tabs)/');
+          }}
         >
           <Ionicons name="home" size={18} color="#FFFFFF" />
           <Text style={styles.activeTabText}>Home</Text>
@@ -560,7 +929,10 @@ const RideOffersScreen = () => {
 
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => router.push('/(common)/rideHistory')}
+          onPress={() => {
+            setShowCancelConfirmation(false);
+            router.push('/(common)/rideHistory');
+          }}
         >
           <Ionicons name="time-outline" size={20} color="#5B403F" />
           <Text style={styles.tabText}>History</Text>
@@ -568,7 +940,10 @@ const RideOffersScreen = () => {
 
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => router.push('/(common)/notifications')}
+          onPress={() => {
+            setShowCancelConfirmation(false);
+            router.push('/(common)/notifications');
+          }}
         >
           <Ionicons name="notifications-outline" size={20} color="#5B403F" />
           <Text style={styles.tabText}>Notifications</Text>
@@ -576,7 +951,10 @@ const RideOffersScreen = () => {
 
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => router.push('/(common)/profile')}
+          onPress={() => {
+            setShowCancelConfirmation(false);
+            router.push('/(common)/profile');
+          }}
         >
           <Ionicons name="person-outline" size={20} color="#5B403F" />
           <Text style={styles.tabText}>Profile</Text>
@@ -591,7 +969,7 @@ const RideOffersScreen = () => {
       />
 
       <ConfirmationModal
-        visible={showCancelConfirmation}
+        visible={isFocused && showCancelConfirmation}
         title="Cancel Ride Request?"
         message="Are you sure you want to cancel searching for drivers?"
         confirmText="Cancel Ride"
@@ -740,141 +1118,141 @@ const styles = StyleSheet.create({
   },
   offerCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 4,
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#EAEAEA',
   },
-  offerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
+  offerCardExpired: {
+    backgroundColor: '#F8F9FA',
+    borderColor: '#E0E0E0',
+    opacity: 0.7,
   },
-  driverInfo: {
+  compactHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    marginBottom: 8,
   },
-  driverDetails: {
-    marginLeft: 12,
+  compactDriverInfo: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  compactDriverName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#191C1D',
   },
   driverNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
   },
-  driverName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#191C1D',
-  },
-  ratingBadgeContainer: {
+  compactMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 2,
   },
-  ratingBadge: {
-    backgroundColor: '#BBD3FD',
-    borderRadius: 8,
+  compactRatingBadge: {
+    backgroundColor: '#E8F0FE',
+    paddingVertical: 1,
     paddingHorizontal: 6,
-    paddingVertical: 2,
+    borderRadius: 6,
     marginRight: 6,
   },
-  ratingText: {
-    fontSize: 12,
+  compactRatingText: {
+    fontSize: 11,
     fontWeight: '700',
-    color: '#445A7F',
+    color: '#1877F2',
   },
-  ridesCountText: {
-    fontSize: 12,
-    color: '#5B403F',
-  },
-  priceContainer: {
-    alignItems: 'flex-end',
-  },
-  priceLabel: {
+  compactRidesCount: {
     fontSize: 11,
     color: '#5B403F',
-    marginBottom: 2,
   },
-  price: {
-    fontSize: 24,
+  compactPriceContainer: {
+    alignItems: 'flex-end',
+  },
+  compactPriceLabel: {
+    fontSize: 10,
+    color: '#8F6F6E',
+    fontWeight: '500',
+  },
+  compactPrice: {
+    fontSize: 17,
     fontWeight: '700',
     color: '#B7102A',
   },
-  vehicleDetailsBlock: {
+  compactDetailBox: {
+    backgroundColor: '#F8F9FA',
+    borderRadius: 10,
+    padding: 8,
+    marginBottom: 10,
+  },
+  compactVehicleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#F3F4F5',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 16,
+    marginBottom: 4,
   },
-  vehicleLeftInfo: {
+  compactVehicleText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#191C1D',
+  },
+  compactDistanceText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#BC001F',
+  },
+  compactTimerRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: '#EEEEEE',
   },
-  vehicleModelText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#191C1D',
-  },
-  vehicleRegText: {
-    fontSize: 12,
-    color: '#5B403F',
-    marginTop: 1,
-  },
-  vehicleRightInfo: {
-    alignItems: 'flex-end',
-  },
-  etaText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#191C1D',
-  },
-  distanceText: {
-    fontSize: 12,
+  compactTimeAgoText: {
+    fontSize: 11,
     color: '#5B403F',
   },
-  offerActions: {
+  compactExpiryText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#B7102A',
+  },
+  expiredText: {
+    color: '#888888',
+  },
+  compactActionsRow: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
-  rejectButton: {
+  compactRejectButton: {
     flex: 1,
-    height: 48,
-    borderRadius: 14,
+    height: 38,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#E4BEBC',
     backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  rejectButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
+  compactRejectText: {
+    fontSize: 13,
+    fontWeight: '600',
     color: '#191C1D',
   },
-  acceptButton: {
-    flex: 1,
-    height: 48,
-    borderRadius: 14,
+  compactAcceptButton: {
+    flex: 1.5,
+    height: 38,
+    borderRadius: 10,
     backgroundColor: '#B7102A',
-    justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#B7102A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 3,
+    justifyContent: 'center',
   },
-  acceptButtonText: {
-    fontSize: 15,
+  compactAcceptText: {
+    fontSize: 13,
     fontWeight: '700',
     color: '#FFFFFF',
   },
@@ -885,14 +1263,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  emptyIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#F3F4F5',
-    justifyContent: 'center',
+  searchAnimationContainer: {
+    width: 72,
+    height: 72,
     alignItems: 'center',
-    marginBottom: 12,
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  outerRadarRing: {
+    position: 'absolute',
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    borderWidth: 2,
+    borderColor: '#FFDAD8',
+    borderTopColor: '#B7102A',
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+  },
+  radarDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#B7102A',
+    marginTop: -3,
+  },
+  innerCarCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#FFF0F2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyStateTitle: {
     fontSize: 16,
@@ -931,34 +1333,150 @@ const styles = StyleSheet.create({
     color: '#5B403F',
     marginTop: 12,
   },
-  proTipCard: {
-    backgroundColor: '#485F84',
-    borderRadius: 16,
-    padding: 16,
+  raiseFareCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: '#FFDAD8',
+    marginBottom: 20,
+  },
+  raiseFareHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    marginBottom: 16,
+    marginBottom: 14,
   },
-  proTipIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  proTipTitle: {
-    fontSize: 14,
+  raiseFareTitle: {
+    fontSize: 16,
     fontWeight: '700',
-    color: '#FFFFFF',
+    color: '#191C1D',
     marginBottom: 2,
   },
-  proTipSubtitle: {
+  raiseFareSubtitle: {
     fontSize: 12,
-    color: '#F0F1F2',
+    color: '#5B403F',
     lineHeight: 16,
+  },
+  currentOfferRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F3F4F5',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 14,
+  },
+  currentOfferLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5B403F',
+  },
+  currentOfferValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#B7102A',
+  },
+  stepperContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F8F9FA',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#FFDAD8',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  stepBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#FFF0F2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepBtnDisabled: {
+    backgroundColor: '#F3F4F5',
+  },
+  proposedFareBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    minWidth: 120,
+  },
+  proposedFarePrefix: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#B7102A',
+    marginRight: 4,
+  },
+  proposedFareValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#191C1D',
+  },
+  quickAddRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+  quickAddChip: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#FFF0F2',
+    borderWidth: 1,
+    borderColor: '#FFDAD8',
+  },
+  quickAddChipActive: {
+    backgroundColor: '#B7102A',
+    borderColor: '#B7102A',
+  },
+  quickAddChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#B7102A',
+  },
+  quickAddChipTextActive: {
+    color: '#FFFFFF',
+  },
+  raiseFareActionRow: {
+    gap: 10,
+  },
+  sendNewOfferButton: {
+    backgroundColor: '#B7102A',
+    borderRadius: 14,
+    height: 46,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendNewOfferButtonText: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  keepSameOfferButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFF0F2',
+    borderWidth: 1,
+    borderColor: '#FFDAD8',
+  },
+  keepSameOfferButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#B7102A',
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   bottomTabBar: {
     position: 'absolute',

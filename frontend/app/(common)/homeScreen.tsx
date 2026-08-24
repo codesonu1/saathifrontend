@@ -345,7 +345,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   modeButton: {
-    backgroundColor: "#075B5E",
+    backgroundColor: "#BC001F",
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 20,

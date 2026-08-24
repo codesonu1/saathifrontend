@@ -425,7 +425,7 @@ const RideDetailsScreen = () => {
               .row { display: flex; justify-content: space-between; margin-bottom: 8px; }
               .label { color: #888; font-size: 14px; }
               .value { font-weight: 500; font-size: 15px; }
-              .fare { font-size: 20px; font-weight: bold; color: #075B5E; margin-top: 16px; }
+              .fare { font-size: 20px; font-weight: bold; color: #BC001F; margin-top: 16px; }
               .footer { text-align: center; color: #aaa; font-size: 12px; margin-top: 32px; }
             </style>
           </head>
@@ -554,7 +554,7 @@ const RideDetailsScreen = () => {
         <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBackPress} style={{
-            backgroundColor: '#075B5E',
+            backgroundColor: '#BC001F',
             borderRadius: 20,
             width: 40,
             height: 40,
@@ -591,7 +591,7 @@ const RideDetailsScreen = () => {
       {/* Header with role indicator */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBackPress} style={{
-          backgroundColor: '#075B5E',
+          backgroundColor: '#BC001F',
           borderRadius: 20,
           width: 40,
           height: 40,
@@ -721,19 +721,19 @@ const RideDetailsScreen = () => {
             photoUrl={getPersonPhoto()}
             size={60}
             showBorder={true}
-            borderColor={isDriver ? '#075B5E' : '#fff'}
-            fallbackIconColor={isDriver ? '#075B5E' : '#fff'}
+            borderColor={isDriver ? '#BC001F' : '#fff'}
+            fallbackIconColor={isDriver ? '#BC001F' : '#fff'}
             fallbackIconSize={24}
           />
           <View style={{ flex: 1, marginLeft: 16 }}>
-            <Text style={{ fontSize: 18, fontWeight: '700', color: '#075B5E' }}>{getPersonName()}</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#BC001F' }}>{getPersonName()}</Text>
             {isDriver ? (
               <Text style={{ fontSize: 14, color: '#666', marginBottom: 4 }}>Passenger</Text>
             ) : (
               <Text style={{ fontSize: 14, color: '#666', marginBottom: 4 }}>Driver</Text>
             )}
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 2 }}>
-              <Icon name="directions-car" size={16} color="#075B5E" style={{ marginRight: 6 }} />
+              <Icon name="directions-car" size={16} color="#BC001F" style={{ marginRight: 6 }} />
               <Text style={{ fontSize: 15, color: '#333' }}>{vehicleInfo.make} {vehicleInfo.model} {vehicleInfo.regNum}</Text>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -841,11 +841,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#075B5E",
+    borderColor: "#BC001F",
   },
   roleText: {
     fontSize: 12,
-    color: "#075B5E",
+    color: "#BC001F",
     fontWeight: "500",
   },
   scrollView: {
@@ -955,7 +955,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#075B5E",
+    backgroundColor: "#BC001F",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -1115,7 +1115,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: "#075B5E",
+    backgroundColor: "#BC001F",
     borderRadius: 8,
   },
   retryButtonText: {

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator, StatusBar, Platform, ScrollView, KeyboardAvoidingView, Animated, PanResponder, Switch } from "react-native"
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator, StatusBar, Platform, ScrollView, KeyboardAvoidingView, Animated, PanResponder, Switch, Keyboard, TextInput as RNTextInput } from "react-native"
 import { TextInput } from "react-native-paper"
 import Icon from "react-native-vector-icons/MaterialIcons"
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons'
@@ -23,7 +23,8 @@ const { width, height } = Dimensions.get("window")
 
 const PassengerHomeScreen = () => {
   const insets = useSafeAreaInsets()
-  const topHeaderPos = insets.top > 0 ? insets.top + 2 : (Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 36)
+  const rawTop = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44)
+  const topHeaderPos = Math.max(rawTop + 10, 40)
   const bottomInset = insets.bottom > 0 ? insets.bottom : 10
   const { rideInProgress, driverName, from, to, fare, vehicle, progress: initialProgress, pickupLat, pickupLng, dropoffLat, dropoffLng } = useLocalSearchParams()
   const getString = (val: string | string[] | undefined) => (Array.isArray(val) ? (val[0] ?? "") : (val ?? ""))
@@ -47,6 +48,7 @@ const PassengerHomeScreen = () => {
   const [carFare, setCarFare] = useState<number | null>(null)
   const [autoAccept, setAutoAccept] = useState<boolean>(true)
   const [calculatedFares, setCalculatedFares] = useState<{ [key: string]: number }>({})
+  const [isCalculatingFare, setIsCalculatingFare] = useState<boolean>(false)
 
   const handleSelectVehicle = (vt: VehicleType) => {
     setSelectedVehicleType(vt);
@@ -88,6 +90,16 @@ const PassengerHomeScreen = () => {
       tension: 40,
     }).start();
   };
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const sub = Keyboard.addListener(showEvent, () => {
+      toggleExpand(true);
+    });
+    return () => {
+      sub.remove();
+    };
+  }, []);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -151,17 +163,49 @@ const PassengerHomeScreen = () => {
     }
   };
 
+  const getMinimumPrice = (): number => {
+    if (selectedVehicleType) {
+      const calcFare = calculatedFares[selectedVehicleType._id] || calculatedFares[selectedVehicleType.name.toLowerCase().trim()];
+      if (typeof calcFare === 'number' && calcFare > 0) {
+        return calcFare;
+      }
+      if (typeof selectedVehicleType.basePrice === 'number' && selectedVehicleType.basePrice > 0) {
+        return selectedVehicleType.basePrice;
+      }
+    }
+    return selectedCategory === 'bike' ? 50 : 120;
+  };
+
+  const handleOfferPriceChange = (text: string) => {
+    const clean = text.replace(/[^0-9]/g, '');
+    setOfferPrice(clean);
+  };
+
+  const handleOfferPriceBlur = () => {
+    const minPrice = getMinimumPrice();
+    const val = parseFloat(offerPrice);
+    if (isNaN(val) || val < minPrice) {
+      setOfferPrice(minPrice.toFixed(0));
+      showToast(`Offer cannot be less than base price (रू ${minPrice.toFixed(0)})`, 'info');
+    }
+  };
+
   const handleIncrementPrice = () => {
+    const minPrice = getMinimumPrice();
     const currentPrice = parseFloat(offerPrice);
-    if (isNaN(currentPrice)) return;
-    const newPrice = currentPrice + 10;
+    const base = isNaN(currentPrice) ? minPrice : currentPrice;
+    const newPrice = base + 10;
     setOfferPrice(newPrice.toString());
   };
 
   const handleDecrementPrice = () => {
+    const minPrice = getMinimumPrice();
     const currentPrice = parseFloat(offerPrice);
-    if (isNaN(currentPrice)) return;
-    const minPrice = selectedVehicleType?.basePrice || selectedVehicleType?.pricingBase || 50;
+    if (isNaN(currentPrice) || currentPrice <= minPrice) {
+      showToast(`Offer cannot be less than base price (रू ${minPrice.toFixed(0)})`, 'info');
+      setOfferPrice(minPrice.toFixed(0));
+      return;
+    }
     const newPrice = Math.max(minPrice, currentPrice - 10);
     setOfferPrice(newPrice.toString());
   };
@@ -215,6 +259,26 @@ const PassengerHomeScreen = () => {
       lng >= KATHMANDU_BOUNDING_BOX.west && lng <= KATHMANDU_BOUNDING_BOX.east;
   }
 
+  const sortVehicleTypes = (types: any[]) => {
+    if (!Array.isArray(types)) return [];
+    return [...types].sort((a, b) => {
+      const aName = (a.name || '').toLowerCase().trim();
+      const bName = (b.name || '').toLowerCase().trim();
+
+      const getRank = (name: string) => {
+        if (name.includes('bike') || name.includes('moto') || name.includes('motorcycle') || name.includes('scooter')) {
+          return 1; // Bike 1st
+        }
+        if (name.includes('car') || (name.includes('taxi') && !name.includes('ev'))) {
+          return 2; // Car 2nd
+        }
+        return 3; // EV Taxi, SUV, etc. 3rd+
+      };
+
+      return getRank(aName) - getRank(bName);
+    });
+  };
+
   const initializeApp = async () => {
     try {
       const location = await locationService.getCurrentLocation();
@@ -231,13 +295,13 @@ const PassengerHomeScreen = () => {
       }
 
       const types = await rideService.getVehicleTypes();
-      setVehicleTypes(types);
+      const sortedTypes = sortVehicleTypes(types);
+      setVehicleTypes(sortedTypes);
 
-      if (types.length > 0) {
-        const defaultVt = getVehicleTypeByCategory('bike', types);
-        if (defaultVt) {
-          setSelectedVehicleType(defaultVt);
-        }
+      if (sortedTypes.length > 0) {
+        const defaultVt = sortedTypes[0]; // Bike is 1st
+        setSelectedVehicleType(defaultVt);
+        setSelectedCategory('bike');
       }
 
       // Safely fetch passenger ride history for recent destinations
@@ -322,8 +386,9 @@ const PassengerHomeScreen = () => {
   useEffect(() => {
     const calculateFare = async () => {
       if (!pickupCoords || !destinationCoords) return;
+      setIsCalculatingFare(true);
       try {
-        const types = vehicleTypes.length > 0 ? vehicleTypes : await rideService.getVehicleTypes();
+        const types = vehicleTypes.length > 0 ? vehicleTypes : sortVehicleTypes(await rideService.getVehicleTypes());
         if (types.length > 0 && vehicleTypes.length === 0) {
           setVehicleTypes(types);
         }
@@ -351,10 +416,30 @@ const PassengerHomeScreen = () => {
           if (activeFare > 0) {
             setOfferPrice(activeFare.toFixed(0));
           } else {
-            setOfferPrice('');
+            // Fallback estimation using Haversine formula
+            const R = 6371;
+            const dLat = (destinationCoords.lat - pickupCoords.lat) * Math.PI / 180;
+            const dLon = (destinationCoords.lng - pickupCoords.lng) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                      Math.cos(pickupCoords.lat * Math.PI / 180) * Math.cos(destinationCoords.lat * Math.PI / 180) *
+                      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distKm = Math.max(0.5, R * c);
+            const fallbackFare = selectedCategory === 'bike' ? Math.round(40 + distKm * 15) : Math.round(100 + distKm * 35);
+            setOfferPrice(fallbackFare.toFixed(0));
           }
         } else {
-          setOfferPrice('');
+          // Haversine fallback estimation
+          const R = 6371;
+          const dLat = (destinationCoords.lat - pickupCoords.lat) * Math.PI / 180;
+          const dLon = (destinationCoords.lng - pickupCoords.lng) * Math.PI / 180;
+          const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                    Math.cos(pickupCoords.lat * Math.PI / 180) * Math.cos(destinationCoords.lat * Math.PI / 180) *
+                    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          const distKm = Math.max(0.5, R * c);
+          const fallbackFare = selectedCategory === 'bike' ? Math.round(40 + distKm * 15) : Math.round(100 + distKm * 35);
+          setOfferPrice(fallbackFare.toFixed(0));
         }
 
         if (result && result.polyline && result.polyline.length > 0) {
@@ -368,7 +453,19 @@ const PassengerHomeScreen = () => {
         }
       } catch (error) {
         console.error('Failed to calculate fare:', error);
-        setOfferPrice('');
+        // Haversine fallback estimation on error
+        const R = 6371;
+        const dLat = (destinationCoords.lat - pickupCoords.lat) * Math.PI / 180;
+        const dLon = (destinationCoords.lng - pickupCoords.lng) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(pickupCoords.lat * Math.PI / 180) * Math.cos(destinationCoords.lat * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distKm = Math.max(0.5, R * c);
+        const fallbackFare = selectedCategory === 'bike' ? Math.round(40 + distKm * 15) : Math.round(100 + distKm * 35);
+        setOfferPrice(fallbackFare.toFixed(0));
+      } finally {
+        setIsCalculatingFare(false);
       }
     };
     calculateFare();
@@ -510,6 +607,20 @@ const PassengerHomeScreen = () => {
           }}
           minZoomLevel={12}
           maxZoomLevel={17}
+          onRegionChangeComplete={async (region, { isGesture }) => {
+            if (isGesture && !isDestinationSelected) {
+              const { latitude, longitude } = region;
+              setPickupCoords({ lat: latitude, lng: longitude });
+              try {
+                const address = await locationService.getAddressFromCoordinates(latitude, longitude);
+                if (address) {
+                  setPickupLocation(address);
+                }
+              } catch (err) {
+                console.warn('Map drag reverse geocode notice:', err);
+              }
+            }
+          }}
         >
           {currentLocation && typeof currentLocation.latitude === 'number' && !isNaN(currentLocation.latitude) && typeof currentLocation.longitude === 'number' && !isNaN(currentLocation.longitude) && (
             <Marker
@@ -547,6 +658,13 @@ const PassengerHomeScreen = () => {
           )}
         </MapView>
 
+        {/* Center Marker Pin Overlay for Map Dragging */}
+        {!isDestinationSelected && (
+          <View style={styles.centerPinContainer} pointerEvents="none">
+            <MaterialIcons name="location-on" size={36} color="#B7102A" />
+          </View>
+        )}
+
         {/* STATE 2: Floating Top Search Card (ONLY shown when destination is selected) */}
         {isDestinationSelected && (
           <View style={styles.topSearchCard}>
@@ -578,7 +696,6 @@ const PassengerHomeScreen = () => {
                   boundingBox={KATHMANDU_BOUNDING_BOX}
                 />
               </View>
-              <Ionicons name="search" size={20} color="#8F6F6E" style={{ marginLeft: 6 }} />
             </View>
           </View>
         )}
@@ -614,51 +731,42 @@ const PassengerHomeScreen = () => {
           >
             {!isDestinationSelected ? (
               <>
-                {/* 1. Segmented Category Pill Switcher (Bike / Car) */}
+                {/* 1. Dynamic Category Pill Selector (All Admin API Vehicle Types) */}
                 <View style={styles.categoryTabContainer}>
-                  <TouchableOpacity
-                    style={[
-                      styles.categoryTab,
-                      selectedCategory === 'bike' && styles.activeCategoryTab
-                    ]}
-                    onPress={() => handleCategoryChange('bike')}
-                    disabled={loading}
-                    activeOpacity={0.85}
-                  >
-                    <FontAwesome5
-                      name="motorcycle"
-                      size={18}
-                      color={selectedCategory === 'bike' ? '#FFFFFF' : '#191C1D'}
-                    />
-                    <Text style={[
-                      styles.categoryTabText,
-                      selectedCategory === 'bike' && styles.activeCategoryTabText
-                    ]}>
-                      Bike
-                    </Text>
-                  </TouchableOpacity>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {vehicleTypes.map((vt) => {
+                      const isSelected = selectedVehicleType?._id === vt._id || selectedVehicleType?.name === vt.name;
+                      const nameLower = (vt.name || '').toLowerCase().trim();
+                      const iconName = (nameLower.includes('bike') || nameLower.includes('moto') || nameLower.includes('motorcycle') || nameLower.includes('scooter'))
+                        ? 'motorcycle'
+                        : (nameLower.includes('ev') || nameLower.includes('electric') ? 'bolt' : 'car');
 
-                  <TouchableOpacity
-                    style={[
-                      styles.categoryTab,
-                      selectedCategory === 'car' && styles.activeCategoryTab
-                    ]}
-                    onPress={() => handleCategoryChange('car')}
-                    disabled={loading}
-                    activeOpacity={0.85}
-                  >
-                    <Ionicons
-                      name="car"
-                      size={20}
-                      color={selectedCategory === 'car' ? '#FFFFFF' : '#191C1D'}
-                    />
-                    <Text style={[
-                      styles.categoryTabText,
-                      selectedCategory === 'car' && styles.activeCategoryTabText
-                    ]}>
-                      Car
-                    </Text>
-                  </TouchableOpacity>
+                      return (
+                        <TouchableOpacity
+                          key={vt._id || vt.name}
+                          style={[
+                            styles.categoryTab,
+                            isSelected && styles.activeCategoryTab
+                          ]}
+                          onPress={() => handleSelectVehicle(vt)}
+                          disabled={loading}
+                          activeOpacity={0.85}
+                        >
+                          <FontAwesome5
+                            name={iconName}
+                            size={16}
+                            color={isSelected ? '#FFFFFF' : '#191C1D'}
+                          />
+                          <Text style={[
+                            styles.categoryTabText,
+                            isSelected && styles.activeCategoryTabText
+                          ]}>
+                            {vt.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
                 </View>
 
                 {/* 2 & 3. Pickup and Destination Location Cards */}
@@ -691,15 +799,14 @@ const PassengerHomeScreen = () => {
                         boundingBox={KATHMANDU_BOUNDING_BOX}
                       />
                     </View>
-                    <Ionicons name="search" size={20} color="#8F6F6E" style={{ marginLeft: 6 }} />
                   </View>
                 </View>
 
-                {/* 4. Recent Destinations (Rendered ONLY if history exists) */}
+                {/* 4. Recent Destinations (Maximum 3 Items, Hidden if Empty) */}
                 {recentDestinations.length > 0 && (
                   <View style={styles.recentDestinationsCard}>
                     <Text style={styles.recentDestinationsHeader}>Recent destinations</Text>
-                    {recentDestinations.map((item, index) => (
+                    {recentDestinations.slice(0, 3).map((item, index) => (
                       <TouchableOpacity
                         key={index}
                         style={styles.recentDestinationItemRow}
@@ -707,7 +814,7 @@ const PassengerHomeScreen = () => {
                         activeOpacity={0.7}
                       >
                         <View style={styles.recentIconBadge}>
-                          <Ionicons name="time-outline" size={18} color="#B7102A" />
+                          <Ionicons name="location-outline" size={18} color="#B7102A" />
                         </View>
                         <View style={styles.recentTextCol}>
                           <Text style={styles.recentTitleText} numberOfLines={1}>{item.name}</Text>
@@ -723,38 +830,40 @@ const PassengerHomeScreen = () => {
               <>
                 {/* Segmented Dynamic Category Selector Tabs (Rendered for ALL active backend vehicle types) */}
                 <View style={styles.categoryTabContainer}>
-                  {vehicleTypes.map((vt) => {
-                    const isSelected = selectedVehicleType?._id === vt._id || selectedVehicleType?.name === vt.name;
-                    const nameLower = vt.name.toLowerCase().trim();
-                    const iconName = (nameLower.includes('bike') || nameLower.includes('moto') || nameLower.includes('motorcycle') || nameLower.includes('scooter'))
-                      ? 'motorcycle'
-                      : (nameLower.includes('ev') || nameLower.includes('electric') ? 'bolt' : 'car');
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+                    {vehicleTypes.map((vt) => {
+                      const isSelected = selectedVehicleType?._id === vt._id || selectedVehicleType?.name === vt.name;
+                      const nameLower = (vt.name || '').toLowerCase().trim();
+                      const iconName = (nameLower.includes('bike') || nameLower.includes('moto') || nameLower.includes('motorcycle') || nameLower.includes('scooter'))
+                        ? 'motorcycle'
+                        : (nameLower.includes('ev') || nameLower.includes('electric') ? 'bolt' : 'car');
 
-                    return (
-                      <TouchableOpacity
-                        key={vt._id || vt.name}
-                        style={[
-                          styles.categoryTab,
-                          isSelected && styles.activeCategoryTab
-                        ]}
-                        onPress={() => handleSelectVehicle(vt)}
-                        disabled={loading}
-                        activeOpacity={0.85}
-                      >
-                        <FontAwesome5
-                          name={iconName}
-                          size={16}
-                          color={isSelected ? '#FFFFFF' : '#191C1D'}
-                        />
-                        <Text style={[
-                          styles.categoryTabText,
-                          isSelected && styles.activeCategoryTabText
-                        ]}>
-                          {vt.name}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                      return (
+                        <TouchableOpacity
+                          key={vt._id || vt.name}
+                          style={[
+                            styles.categoryTab,
+                            isSelected && styles.activeCategoryTab
+                          ]}
+                          onPress={() => handleSelectVehicle(vt)}
+                          disabled={loading}
+                          activeOpacity={0.85}
+                        >
+                          <FontAwesome5
+                            name={iconName}
+                            size={16}
+                            color={isSelected ? '#FFFFFF' : '#191C1D'}
+                          />
+                          <Text style={[
+                            styles.categoryTabText,
+                            isSelected && styles.activeCategoryTabText
+                          ]}>
+                            {vt.name}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
                 </View>
 
                 {/* Selected Vehicle Pricing Card */}
@@ -765,7 +874,7 @@ const PassengerHomeScreen = () => {
                         {selectedVehicleType?.name || 'Vehicle'}
                       </Text>
                       <View style={styles.activeVehicleMeta}>
-                        <Ionicons name="person" size={13} color="#5B403F" />
+                        <Ionicons name="person" size={12} color="#5B403F" />
                         <Text style={styles.activeVehicleCapacity}>
                           {selectedVehicleType?.capacity || 1} passenger{(selectedVehicleType?.capacity || 1) > 1 ? 's' : ''}
                         </Text>
@@ -778,44 +887,74 @@ const PassengerHomeScreen = () => {
 
                     {/* Fare Price Display */}
                     <View style={styles.farePriceRight}>
-                      <Text style={styles.farePriceValue}>
-                        {offerPrice && !isNaN(parseFloat(offerPrice)) ? `रू ${parseFloat(offerPrice).toFixed(0)}` : 'Unable to calculate fare'}
-                      </Text>
+                      {isCalculatingFare ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <ActivityIndicator size="small" color="#B7102A" style={{ marginRight: 6 }} />
+                          <Text style={styles.fareCalculatingText}>Calculating fare...</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.farePriceValue}>
+                          {offerPrice && !isNaN(parseFloat(offerPrice)) ? `रू ${parseFloat(offerPrice).toFixed(0)}` : 'Calculating fare...'}
+                        </Text>
+                      )}
                       <Text style={styles.farePriceLabel}>Estimated Fare</Text>
                     </View>
                   </View>
 
-                  {/* Price Adjuster Buttons (- / +) */}
-                  <View style={styles.priceAdjusterContainer}>
-                    <TouchableOpacity
-                      style={styles.adjustPriceButton}
-                      onPress={handleDecrementPrice}
-                      disabled={loading}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="remove" size={22} color="#191C1D" />
-                    </TouchableOpacity>
+                  {/* Price Adjuster Buttons (- / + & Editable Write-In Pill) */}
+                  {(() => {
+                    const minPriceNum = getMinimumPrice();
+                    const currentPriceNum = parseFloat(offerPrice);
+                    const isAtMin = !isNaN(currentPriceNum) && currentPriceNum <= minPriceNum;
 
-                    <View style={styles.priceAdjusterPill}>
-                      <Text style={styles.priceAdjusterValue}>
-                        {offerPrice && !isNaN(parseFloat(offerPrice)) ? `रू ${parseFloat(offerPrice).toFixed(0)}` : '--'}
-                      </Text>
-                    </View>
+                    return (
+                      <View style={styles.priceAdjusterContainer}>
+                        <TouchableOpacity
+                          style={[styles.adjustPriceButton, isAtMin && styles.stepBtnDisabled]}
+                          onPress={handleDecrementPrice}
+                          disabled={loading || isCalculatingFare || isAtMin}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="remove" size={18} color={isAtMin ? "#CCCCCC" : "#191C1D"} />
+                        </TouchableOpacity>
 
-                    <TouchableOpacity
-                      style={styles.adjustPriceButton}
-                      onPress={handleIncrementPrice}
-                      disabled={loading}
-                      activeOpacity={0.8}
-                    >
-                      <Ionicons name="add" size={22} color="#191C1D" />
-                    </TouchableOpacity>
-                  </View>
+                        <View style={styles.priceAdjusterPill}>
+                          {isCalculatingFare ? (
+                            <ActivityIndicator size="small" color="#B7102A" />
+                          ) : (
+                            <View style={styles.priceInputWrapper}>
+                              <Text style={styles.priceCurrencySymbol}>रू</Text>
+                              <RNTextInput
+                                style={styles.priceAdjusterInput}
+                                value={offerPrice}
+                                onChangeText={handleOfferPriceChange}
+                                onFocus={() => toggleExpand(true)}
+                                onBlur={handleOfferPriceBlur}
+                                keyboardType="number-pad"
+                                placeholder={minPriceNum ? minPriceNum.toFixed(0) : '0'}
+                                placeholderTextColor="#8F6F6E"
+                                editable={!loading && !isCalculatingFare}
+                              />
+                            </View>
+                          )}
+                        </View>
+
+                        <TouchableOpacity
+                          style={styles.adjustPriceButton}
+                          onPress={handleIncrementPrice}
+                          disabled={loading || isCalculatingFare}
+                          activeOpacity={0.8}
+                        >
+                          <Ionicons name="add" size={18} color="#191C1D" />
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })()}
 
                   {/* Auto-accept Offers Switch */}
                   <View style={styles.toggleRow}>
                     <View style={styles.toggleTextContainer}>
-                      <Ionicons name="flash" size={18} color="#B7102A" style={{ marginRight: 8 }} />
+                      <Ionicons name="flash" size={16} color="#B7102A" style={{ marginRight: 6 }} />
                       <Text style={styles.toggleLabel}>Auto-accept offers</Text>
                     </View>
                     <Switch
@@ -844,9 +983,9 @@ const PassengerHomeScreen = () => {
                       >
                         <View style={styles.secondaryLeft}>
                           {isBikeType ? (
-                            <FontAwesome5 name="motorcycle" size={20} color="#191C1D" style={{ marginRight: 12 }} />
+                            <FontAwesome5 name="motorcycle" size={18} color="#191C1D" style={{ marginRight: 10 }} />
                           ) : (
-                            <Ionicons name="car-outline" size={24} color="#191C1D" style={{ marginRight: 12 }} />
+                            <Ionicons name="car-outline" size={20} color="#191C1D" style={{ marginRight: 10 }} />
                           )}
                           <View>
                             <Text style={styles.secondaryTitle}>{altVt.name}</Text>
@@ -855,9 +994,13 @@ const PassengerHomeScreen = () => {
                             </Text>
                           </View>
                         </View>
-                        <Text style={styles.secondaryPrice}>
-                          {altFare && altFare > 0 ? `~ रू ${altFare.toFixed(0)}` : '--'}
-                        </Text>
+                        {isCalculatingFare ? (
+                          <ActivityIndicator size="small" color="#B7102A" />
+                        ) : (
+                          <Text style={styles.secondaryPrice}>
+                            {altFare && altFare > 0 ? `~ रू ${altFare.toFixed(0)}` : '--'}
+                          </Text>
+                        )}
                       </TouchableOpacity>
                     );
                   })}
@@ -941,6 +1084,9 @@ const PassengerHomeScreen = () => {
       <SidePanel
         visible={sidePanelVisible}
         onClose={() => setSidePanelVisible(false)}
+        role="passenger"
+        rideInProgress={false}
+        onChangeRole={() => {}}
       />
 
       <Toast
@@ -957,8 +1103,8 @@ const PassengerHomeScreen = () => {
             setShowRaiseFareModal(false);
             setSelectedRideForRaise(null);
           }}
-          currentFare={selectedRideForRaise.fare}
-          onRaiseFare={handleConfirmRaiseFare}
+          calculatedFare={selectedRideForRaise.fare}
+          onSend={handleConfirmRaiseFare}
           loading={raiseFareLoading}
         />
       )}
@@ -1019,6 +1165,16 @@ const styles = StyleSheet.create({
     flex: 1,
     width: width,
   },
+  centerPinContainer: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginTop: -36,
+    marginLeft: -18,
+    zIndex: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   topSearchCard: {
     position: 'absolute',
     top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 54,
@@ -1027,11 +1183,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
     padding: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#EAEAEA',
     zIndex: 10,
   },
   searchRow: {
@@ -1062,11 +1215,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
   },
   bottomSheetWrapper: {
     position: 'absolute',
@@ -1077,11 +1225,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 26,
     borderTopRightRadius: 26,
-    elevation: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#EAEAEA',
     zIndex: 20,
   },
   dragHandleContainer: {
@@ -1101,14 +1246,14 @@ const styles = StyleSheet.create({
   },
   bottomSheetContent: {
     paddingHorizontal: 18,
-    paddingBottom: 24,
+    paddingBottom: Platform.OS === 'ios' ? 90 : 80,
   },
   categoryTabContainer: {
     flexDirection: 'row',
     backgroundColor: '#F3F4F5',
     borderRadius: 16,
     padding: 4,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   recentDestinationsCard: {
     backgroundColor: '#FFFFFF',
@@ -1117,14 +1262,9 @@ const styles = StyleSheet.create({
     marginTop: 14,
     borderWidth: 1,
     borderColor: '#EFEDF3',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
   },
   recentDestinationsHeader: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
     color: '#191C1D',
     marginBottom: 10,
@@ -1162,24 +1302,19 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   categoryTab: {
-    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
     gap: 8,
   },
   activeCategoryTab: {
     backgroundColor: '#B7102A',
-    shadowColor: '#B7102A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3,
   },
   categoryTabText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: '#191C1D',
   },
@@ -1188,28 +1323,23 @@ const styles = StyleSheet.create({
   },
   fareSelectionCard: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
+    borderRadius: 18,
+    padding: 14,
     borderWidth: 1,
     borderColor: '#FFDAD8',
-    marginBottom: 14,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    elevation: 2,
+    marginBottom: 12,
   },
   activeVehicleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 14,
+    marginBottom: 10,
   },
   activeVehicleInfo: {
     flex: 1,
   },
   activeVehicleTitle: {
-    fontSize: 22,
+    fontSize: 17,
     fontWeight: '700',
     color: '#191C1D',
     marginBottom: 2,
@@ -1236,7 +1366,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   farePriceValue: {
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '700',
     color: '#B7102A',
   },
@@ -1249,37 +1379,63 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 16,
-    marginVertical: 10,
+    gap: 14,
+    marginVertical: 8,
   },
   adjustPriceButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#E4BEBC',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
+  },
+  stepBtnDisabled: {
+    backgroundColor: '#F8F9FA',
+    borderColor: '#EAEAEA',
   },
   priceAdjusterPill: {
     backgroundColor: '#F3F4F5',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 28,
-    minWidth: 130,
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 14,
+    minWidth: 120,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  priceAdjusterValue: {
-    fontSize: 22,
+  priceInputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  priceCurrencySymbol: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#191C1D',
+    marginRight: 4,
+  },
+  priceAdjusterInput: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#191C1D',
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    minWidth: 45,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    margin: 0,
+  },
+  priceAdjusterValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#191C1D',
+  },
+  fareCalculatingText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#B7102A',
   },
   toggleRow: {
     flexDirection: 'row',
@@ -1287,16 +1443,16 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: '#F3F4F5',
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginTop: 10,
   },
   toggleTextContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   toggleLabel: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#191C1D',
   },
@@ -1304,16 +1460,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingHorizontal: 12,
-    marginBottom: 14,
+    marginBottom: 8,
   },
   secondaryLeft: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   secondaryTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: '#191C1D',
   },
@@ -1323,21 +1479,17 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   secondaryPrice: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
     color: '#191C1D',
   },
   findDriverButton: {
     backgroundColor: '#B7102A',
-    borderRadius: 16,
-    height: 54,
+    borderRadius: 14,
+    height: 48,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#B7102A',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 5,
+    marginTop: 8,
     marginBottom: 16,
   },
   buttonDisabled: {
@@ -1345,7 +1497,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
   },

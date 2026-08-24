@@ -183,7 +183,7 @@ const DriverSelectionScreen = () => {
         <ProfileImage 
           photoUrl={item.photo}
           size={48}
-          fallbackIconColor="#075B5E"
+          fallbackIconColor="#BC001F"
         />
         <View style={styles.driverDetails}>
           <Text style={styles.driverName}>{item.name}</Text>
@@ -214,7 +214,7 @@ const DriverSelectionScreen = () => {
   if (bargainingDriver) {
     return (
       <SafeAreaView style={styles.container}>
-          <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
+          <StatusBar barStyle="light-content" backgroundColor="#BC001F" />
 
           {/* Header */}
           <View style={styles.header}>
@@ -235,7 +235,7 @@ const DriverSelectionScreen = () => {
                 <ProfileImage 
                   photoUrl={bargainingDriver.photo}
                   size={48}
-                  fallbackIconColor="#075B5E"
+                  fallbackIconColor="#BC001F"
                 />
                 <View>
                   <Text style={styles.bargainDriverName}>{bargainingDriver.name}</Text>
@@ -285,7 +285,7 @@ const DriverSelectionScreen = () => {
             {driverResponse && (
               <View style={styles.responseCard}>
                 <View style={styles.responseHeader}>
-                  <MaterialIcons name="chat-bubble" size={20} color="#075B5E" />
+                  <MaterialIcons name="chat-bubble" size={20} color="#BC001F" />
                   <Text style={styles.responseTitle}>Driver's Response</Text>
                 </View>
                 <Text style={styles.responseMessage}>"{driverResponse.message}"</Text>
@@ -356,7 +356,7 @@ const DriverSelectionScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
+        <StatusBar barStyle="light-content" backgroundColor="#BC001F" />
 
         {/* Header */}
         <View style={styles.header}>
@@ -395,7 +395,7 @@ const DriverSelectionScreen = () => {
                   : "directions-car"
               } 
               size={20} 
-              color="#075B5E" 
+              color="#BC001F" 
             />
             <Text style={styles.vehicleText}>{Array.isArray(vehicle) ? vehicle[0] : vehicle}</Text>
           </View>
@@ -404,7 +404,7 @@ const DriverSelectionScreen = () => {
         {/* Drivers List */}
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#075B5E" />
+            <ActivityIndicator size="large" color="#BC001F" />
             <Text style={styles.loadingText}>Searching for drivers...</Text>
           </View>
         ) : (
@@ -492,7 +492,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     marginRight: 12,
   },
   dropDot: {
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
   },
   driverVehicle: {
     fontSize: 14,
-    color: '#075B5E',
+    color: '#BC001F',
   },
   driverActions: {
     flexDirection: 'row',
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   selectButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 8,
@@ -653,7 +653,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   fareControlButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -710,7 +710,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     borderLeftWidth: 4,
-    borderLeftColor: '#075B5E',
+    borderLeftColor: '#BC001F',
   },
   responseHeader: {
     flexDirection: 'row',
@@ -740,7 +740,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#075B5E',
+    color: '#BC001F',
   },
   actionButtons: {
     flexDirection: 'row',
@@ -760,7 +760,7 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     flex: 1,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',

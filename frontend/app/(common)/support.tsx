@@ -92,19 +92,19 @@ export default function Support() {
     {
       name: "Website",
       icon: "language",
-      color: "#075B5E",
+      color: "#BC001F",
       url: socialLinks.website,
     },
   ]
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
+      <StatusBar barStyle="light-content" backgroundColor="#BC001F" />
 
       {/* Header */}
       <View style={[styles.header, { paddingTop: topPadding, height: 60 + topPadding }]}>
       <TouchableOpacity onPress={() => router.back()}  style={{
-          backgroundColor: '#075B5E',
+          backgroundColor: '#BC001F',
           borderRadius: 20,
           width: 40,
           height: 40,
@@ -127,7 +127,7 @@ export default function Support() {
         {/* Welcome Section */}
         <View style={styles.welcomeCard}>
           <View style={styles.welcomeIcon}>
-            <Icon name="support-agent" size={32} color="#075B5E" />
+            <Icon name="support-agent" size={32} color="#BC001F" />
           </View>
           <Text style={styles.welcomeTitle}>How can we help you?</Text>
           <Text style={styles.welcomeSubtitle}>
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#075B5E",
+    color: "#BC001F",
   },
   placeholder: {
     width: 40,
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   },
   footerText: {
     fontSize: 14,
-    color: "#075B5E",
+    color: "#BC001F",
     textAlign: "center",
     lineHeight: 20,
   },

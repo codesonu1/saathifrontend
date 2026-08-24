@@ -185,10 +185,10 @@ const DriverHomeScreen = () => {
   const handlePassengerMode = () => router.push('/(tabs)');
 
   if (loading) return (
-    <View style={{ flex: 1, backgroundColor: '#075B5E', justifyContent: 'center', alignItems: 'center' }}>
-      <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
-      <ActivityIndicator size="large" color="#ffffff" style={{ marginBottom: 16 }} />
-      <Text style={{ fontSize: 16, color: '#ffffff', opacity: 0.85, fontWeight: '500' }}>Loading Driver Section...</Text>
+    <View style={{ flex: 1, backgroundColor: '#FFFFFF', justifyContent: 'center', alignItems: 'center' }}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <ActivityIndicator size="large" color="#BC001F" style={{ marginBottom: 16 }} />
+      <Text style={{ fontSize: 15, color: '#191C1D', fontWeight: '500' }}>Loading Driver Section...</Text>
     </View>
   );
 

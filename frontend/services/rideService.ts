@@ -983,6 +983,46 @@ class RideService {
       throw error;
     }
   }
+  async raiseFare(rideId: string, newOfferPrice: number): Promise<boolean> {
+    try {
+      console.log('RideService: Raising fare for rideId:', rideId, 'to:', newOfferPrice);
+      let success = false;
+
+      // Pattern 1: Dedicated raise-fare endpoint
+      try {
+        const response = await apiClient.patch(`/rides/${rideId}/raise-fare`, {
+          offerPrice: newOfferPrice,
+        });
+        success = response.status === 200 || response.status === 201 || response.data?.statusCode === 200 || response.data?.statusCode === 201 || !!response.data;
+      } catch (err: any) {
+        console.warn('RideService: /rides/raise-fare fallback notice, trying PATCH /rides:', err?.message);
+        // Pattern 2: Direct ride update endpoint
+        try {
+          const patchRes = await apiClient.patch(`/rides/${rideId}`, { offerPrice: newOfferPrice });
+          success = patchRes.status === 200 || patchRes.status === 201 || patchRes.data?.statusCode === 200 || patchRes.data?.statusCode === 201 || !!patchRes.data;
+        } catch (patchErr: any) {
+          console.error('RideService: Both raise-fare endpoints failed:', patchErr?.message);
+          success = false;
+        }
+      }
+
+      if (success) {
+        // Emit WebSocket event so all connected driver sockets receive the new offer price instantly
+        try {
+          webSocketService.emitEvent('fareUpdated', { rideId, offerPrice: newOfferPrice });
+          webSocketService.emitEvent('fareUpdated', { rideId, offerPrice: newOfferPrice }, undefined, 'ride');
+          webSocketService.emitEvent('fareUpdated', { rideId, offerPrice: newOfferPrice }, undefined, 'passenger');
+        } catch (wsErr) {
+          console.warn('RideService: WebSocket fareUpdated emit warning:', wsErr);
+        }
+      }
+
+      return success;
+    } catch (error: any) {
+      console.error('RideService: Error raising fare:', error);
+      return false;
+    }
+  }
 }
 
 export const rideService = new RideService();

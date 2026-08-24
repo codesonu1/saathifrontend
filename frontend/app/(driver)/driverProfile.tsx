@@ -489,30 +489,32 @@ const DriverProfileScreen = () => {
           </View>
         </View>
 
-        {/* Save Changes Button */}
-        <View style={styles.saveButtonWrapper}>
-          <TouchableOpacity
-            style={[
-              styles.saveButton,
-              saveSuccess && styles.saveButtonSuccess,
-              saving && { opacity: 0.8 },
-            ]}
-            onPress={handleSave}
-            disabled={saving}
-            activeOpacity={0.88}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : saveSuccess ? (
-              <View style={styles.buttonInnerRow}>
-                <MaterialIcons name="check-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
-                <Text style={styles.saveButtonText}>Saved!</Text>
-              </View>
-            ) : (
-              <Text style={styles.saveButtonText}>Save Changes</Text>
-            )}
-          </TouchableOpacity>
-        </View>
+        {/* Save Changes Button (only visible when profile edits are made) */}
+        {isDirty && (
+          <View style={styles.saveButtonWrapper}>
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                saveSuccess && styles.saveButtonSuccess,
+                saving && { opacity: 0.8 },
+              ]}
+              onPress={handleSave}
+              disabled={saving}
+              activeOpacity={0.88}
+            >
+              {saving ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : saveSuccess ? (
+                <View style={styles.buttonInnerRow}>
+                  <MaterialIcons name="check-circle" size={20} color="#FFFFFF" style={{ marginRight: 6 }} />
+                  <Text style={styles.saveButtonText}>Saved!</Text>
+                </View>
+              ) : (
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
 
       {/* Fixed Driver Bottom Navigation */}
@@ -761,15 +763,15 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: '#BC001F',
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 11,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#BC001F',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
-    shadowRadius: 10,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 2,
   },
   saveButtonSuccess: {
     backgroundColor: '#16A34A',
@@ -779,7 +781,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   saveButtonText: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '700',
     color: '#FFFFFF',
   },

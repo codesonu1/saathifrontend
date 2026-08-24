@@ -131,7 +131,7 @@ const ProfileSettingsScreen = () => {
           underlineColor="transparent"
           activeUnderlineColor="transparent"
           editable={!loading}
-          cursorColor="#075B5E"
+          cursorColor="#BC001F"
         />
         <TextInput
           mode="flat"
@@ -143,7 +143,7 @@ const ProfileSettingsScreen = () => {
           underlineColor="transparent"
           activeUnderlineColor="transparent"
           editable={!loading}
-          cursorColor="#075B5E"
+          cursorColor="#BC001F"
         />
         <TextInput
           mode="flat"
@@ -157,7 +157,7 @@ const ProfileSettingsScreen = () => {
           underlineColor="transparent"
           activeUnderlineColor="transparent"
           editable={!loading}
-          cursorColor="#075B5E"
+          cursorColor="#BC001F"
         />
         <TextInput
             mode="flat"
@@ -169,7 +169,7 @@ const ProfileSettingsScreen = () => {
             placeholderTextColor={'#ccc'}
             activeUnderlineColor="transparent"
             editable={!loading}
-            cursorColor="#075B5E"
+            cursorColor="#BC001F"
         />
       </View>
       <TouchableOpacity style={[styles.saveButton, loading && styles.saveButtonDisabled]} onPress={handleSave} disabled={loading}>
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     width: 36,
     height: 36,
     borderRadius: 18,
@@ -252,7 +252,7 @@ const styles = StyleSheet.create({
     color: '#999',
   },
   saveButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     marginHorizontal: 20,
     paddingVertical: 15,
     borderRadius: 8,

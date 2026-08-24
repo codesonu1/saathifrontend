@@ -118,19 +118,19 @@ const VehicleInfo = () => {
       <View style={styles.content}>
         <TouchableOpacity style={styles.option} onPress={() => handleNavigate('brand')} disabled={loading}>
           <Text style={[styles.optionText, loading && styles.optionTextDisabled]}>Brand</Text>
-          <Icon name="chevron-right" size={24} color={loading ? "#ccc" : "#075B5E"} />
+          <Icon name="chevron-right" size={24} color={loading ? "#ccc" : "#BC001F"} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.option} onPress={() => handleNavigate('registrationPlate')} disabled={loading}>
           <Text style={[styles.optionText, loading && styles.optionTextDisabled]}>Registration plate</Text>
-          <Icon name="chevron-right" size={24} color={loading ? "#ccc" : "#075B5E"} />
+          <Icon name="chevron-right" size={24} color={loading ? "#ccc" : "#BC001F"} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.option} onPress={() => handleNavigate('picture')} disabled={loading}>
           <Text style={[styles.optionText, loading && styles.optionTextDisabled]}>Picture</Text>
-          <Icon name="chevron-right" size={24} color={loading ? "#ccc" : "#075B5E"} />
+          <Icon name="chevron-right" size={24} color={loading ? "#ccc" : "#BC001F"} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.option} onPress={() => handleNavigate('billbook')} disabled={loading}>
           <Text style={[styles.optionText, loading && styles.optionTextDisabled]}>Billbook</Text>
-          <Icon name="chevron-right" size={24} color={loading ? "#ccc" : "#075B5E"} />
+          <Icon name="chevron-right" size={24} color={loading ? "#ccc" : "#BC001F"} />
         </TouchableOpacity>
         
         <TouchableOpacity
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   closeText: {
-    color: '#075B5E',
+    color: '#BC001F',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -219,7 +219,7 @@ const styles = StyleSheet.create({
     color: '#ccc',
   },
   doneButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     paddingVertical: 15,
     borderRadius: 8,
     alignItems: 'center',

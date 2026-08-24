@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   addButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     paddingVertical: 12,
     paddingHorizontal: 30,
     borderRadius: 8,
@@ -230,7 +230,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   saveButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     paddingVertical: 15,
     borderRadius: 8,
     alignItems: 'center',

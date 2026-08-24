@@ -20,7 +20,26 @@ const AccountRestoration = () => {
   const [currentUserMobile, setCurrentUserMobile] = useState<string | null>(null);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendTimer, setResendTimer] = useState<number>(50);
+  const [isResendDisabled, setIsResendDisabled] = useState<boolean>(true);
   const [accessToken, setAccessToken] = useState('');
+
+  React.useEffect(() => {
+    let interval: any = null;
+    if (step === 'otp') {
+      if (resendTimer > 0) {
+        setIsResendDisabled(true);
+        interval = setInterval(() => {
+          setResendTimer(prev => prev - 1);
+        }, 1000);
+      } else {
+        setIsResendDisabled(false);
+      }
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [step, resendTimer]);
   const [showBackConfirmation, setShowBackConfirmation] = useState(false);
   const [toast, setToast] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({ visible: false, message: '', type: 'info' });
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -106,6 +125,7 @@ const AccountRestoration = () => {
             return;
           }
           setStep('otp');
+          setResendTimer(50);
           showToast('OTP sent successfully!', 'success');
         } catch (profileErr) {
           showToast('No vehicle registered for this account.', 'error');
@@ -229,8 +249,15 @@ const AccountRestoration = () => {
             >
               {loading ? <ActivityIndicator color="#fff" /> : <Text style={[styles.buttonText, otp.length === CODE_LENGTH && styles.buttonTextActive]}>Verify OTP</Text>}
             </TouchableOpacity>
-            <TouchableOpacity onPress={handleSendOtp} disabled={loading} style={{ marginTop: 20 }}>
-              <Text style={[styles.resendText, loading && styles.resendTextDisabled]}>Resend OTP</Text>
+            <TouchableOpacity
+              onPress={handleSendOtp}
+              disabled={isResendDisabled || loading}
+              style={{ marginTop: 20, alignItems: 'center' }}
+              activeOpacity={0.75}
+            >
+              <Text style={[styles.resendText, isResendDisabled && styles.resendTextDisabled]}>
+                {isResendDisabled ? `Resend OTP in ${resendTimer}s` : 'Resend OTP'}
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -313,7 +340,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   buttonActive: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
   },
   buttonText: {
     fontSize: 16,
@@ -343,10 +370,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   codeInputActive: {
-    borderColor: '#00809D',
+    borderColor: '#BC001F',
   },
   codeInputFilled: {
-    borderColor: '#00809D',
+    borderColor: '#BC001F',
     backgroundColor: '#e0f7fa',
   },
   codeDigit: {

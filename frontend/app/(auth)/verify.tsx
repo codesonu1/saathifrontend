@@ -29,6 +29,8 @@ const VerifyScreen = () => {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [showBackConfirmation, setShowBackConfirmation] = useState(false);
+  const [resendTimer, setResendTimer] = useState<number>(50);
+  const [isResendDisabled, setIsResendDisabled] = useState<boolean>(true);
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
@@ -39,6 +41,21 @@ const VerifyScreen = () => {
     type: 'info',
   });
   const inputRef = useRef<TextInput | null>(null);
+
+  useEffect(() => {
+    let interval: any = null;
+    if (resendTimer > 0) {
+      setIsResendDisabled(true);
+      interval = setInterval(() => {
+        setResendTimer(prev => prev - 1);
+      }, 1000);
+    } else {
+      setIsResendDisabled(false);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [resendTimer]);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
     setToast({ visible: true, message, type });
@@ -121,11 +138,13 @@ const VerifyScreen = () => {
   }, [loading]);
 
   const resendOTP = async () => {
+    if (isResendDisabled || loading) return;
     setLoading(true);
     try {
       const response = await apiClient.post('/auth/login', { mobile });
       if (response.data.statusCode === 201) {
         showToast('OTP resent successfully!', 'success');
+        setResendTimer(50);
       } else {
         showToast('Failed to resend OTP. Please try again.', 'error');
       }
@@ -226,11 +245,26 @@ const VerifyScreen = () => {
               )}
             </TouchableOpacity>
 
-            {/* Resend Link */}
-            <TouchableOpacity onPress={resendOTP} style={styles.resendContainer} disabled={loading}>
+            {/* Resend Link & 50s Countdown Timer */}
+            <View style={styles.resendContainer}>
               <Text style={styles.resendText}>Didn't receive code? </Text>
-              <Text style={[styles.resendLink, loading && styles.resendLinkDisabled]}>Resend</Text>
-            </TouchableOpacity>
+              <TouchableOpacity
+                onPress={resendOTP}
+                disabled={isResendDisabled || loading}
+                activeOpacity={0.75}
+                style={styles.resendTouchable}
+              >
+                <Ionicons
+                  name="refresh-outline"
+                  size={14}
+                  color={isResendDisabled ? '#8F6F6E' : '#B7102A'}
+                  style={{ marginRight: 4 }}
+                />
+                <Text style={[styles.resendLink, isResendDisabled && styles.resendLinkDisabled]}>
+                  {isResendDisabled ? `Resend in ${resendTimer}s` : 'Resend Code'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* End-to-End Secure Badge */}
@@ -415,13 +449,18 @@ const styles = StyleSheet.create({
     color: '#5B403F',
     fontSize: 14,
   },
+  resendTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   resendLink: {
     color: '#B7102A',
     fontWeight: '700',
     fontSize: 14,
   },
   resendLinkDisabled: {
-    color: '#E4BEBC',
+    color: '#8F6F6E',
+    fontWeight: '500',
   },
   secureFooter: {
     flexDirection: 'row',

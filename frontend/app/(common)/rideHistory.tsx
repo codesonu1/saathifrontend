@@ -139,17 +139,41 @@ const RideHistoryScreen = () => {
     return () => unsub();
   }, []);
 
-  // Compute filtered rides based on search query
+  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'cancelled'>('all');
+  const [dateFilter, setDateFilter] = useState<'all' | 'month'>('all');
+
+  // Compute filtered rides based on status, date filter, and search query
   const filteredRidesList = useMemo(() => {
-    if (!searchQuery.trim()) return allRides;
-    const query = searchQuery.toLowerCase().trim();
-    return allRides.filter((ride) => {
-      const pickup = (ride.pickUpLocation || ride.pickUp?.location || '').toLowerCase();
-      const dropoff = (ride.dropOffLocation || ride.dropOff?.location || '').toLowerCase();
-      const vehicle = (ride.vehicleType?.name || '').toLowerCase();
-      return pickup.includes(query) || dropoff.includes(query) || vehicle.includes(query);
-    });
-  }, [allRides, searchQuery]);
+    let rides = allRides;
+
+    // 1. Status Filter
+    if (statusFilter !== 'all') {
+      rides = rides.filter((r) => r.status === statusFilter);
+    }
+
+    // 2. Date Filter
+    if (dateFilter === 'month') {
+      const now = new Date();
+      rides = rides.filter((r) => {
+        if (!r.createdAt) return false;
+        const d = new Date(r.createdAt);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      });
+    }
+
+    // 3. Search query filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim();
+      rides = rides.filter((ride) => {
+        const pickup = (ride.pickUpLocation || ride.pickUp?.location || '').toLowerCase();
+        const dropoff = (ride.dropOffLocation || ride.dropOff?.location || '').toLowerCase();
+        const vehicle = (ride.vehicleType?.name || '').toLowerCase();
+        return pickup.includes(query) || dropoff.includes(query) || vehicle.includes(query);
+      });
+    }
+
+    return rides;
+  }, [allRides, statusFilter, dateFilter, searchQuery]);
 
   const sections: SectionData[] = useMemo(() => {
     return groupRidesByDate(filteredRidesList);
@@ -474,57 +498,75 @@ const RideHistoryScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" translucent={false} />
+      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       <View style={{ flex: 1 }}>
-        {/* Header */}
-        <View style={[styles.header, { paddingTop: topPadding, height: 60 + topPadding }]}>
-          <TouchableOpacity
-            onPress={() => router.back()}
-            style={styles.backButton}
-            activeOpacity={0.8}
-          >
-            <MaterialIcons name="arrow-back" size={22} color="#191C1D" />
+        {/* Header matching Notification page style */}
+        <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding, marginTop: 0 }]}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <MaterialIcons name="arrow-back" size={24} color="#333" />
           </TouchableOpacity>
-          <View style={{ flex: 1, marginLeft: 12 }}>
-            <Text style={styles.headerTitle}>
-              {userRole === 'driver' ? 'Driver Trip Activity' : 'History'}
-            </Text>
-            <Text style={styles.headerSubtitle}>
-              {userRole === 'driver'
-                ? 'Review your completed driver trips & trip earnings.'
-                : 'Review your past travels and receipts.'}
-            </Text>
-          </View>
+          <Text style={styles.headerTitle}>History</Text>
         </View>
 
-        {/* Stats Banner Cards */}
-        <View style={styles.statsBannerRow}>
-          {/* Card 1: Total Rides / Completed Trips */}
-          <View style={styles.statCardRed}>
-            <MaterialIcons name="verified-user" size={24} color="#FFFFFF" style={{ marginBottom: 12 }} />
-            <Text style={styles.statLabelRed}>
-              {userRole === 'driver' ? 'Completed Trips' : 'Total Rides'}
-            </Text>
-            <Text style={styles.statValueRed}>{totalRidesCount}</Text>
-          </View>
+        {/* Filter Section replacing Summary Cards */}
+        <View style={styles.filterSection}>
+          <Text style={styles.filterLabel}>Filter Rides</Text>
+          <View style={styles.chipRow}>
+            {/* Status Filter Chips */}
+            <TouchableOpacity
+              style={[styles.filterChip, statusFilter === 'all' && styles.filterChipActive]}
+              onPress={() => setStatusFilter('all')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, statusFilter === 'all' && styles.filterChipTextActive]}>
+                All
+              </Text>
+            </TouchableOpacity>
 
-          {/* Card 2: This Month / Total Earnings */}
-          <View style={styles.statCardGray}>
-            <MaterialIcons
-              name={userRole === 'driver' ? 'account-balance-wallet' : 'bar-chart'}
-              size={24}
-              color="#B7102A"
-              style={{ marginBottom: 12 }}
-            />
-            <Text style={styles.statLabelGray}>
-              {userRole === 'driver' ? 'Trip Earnings' : 'This Month'}
-            </Text>
-            <Text style={styles.statValueGray}>
-              {userRole === 'driver'
-                ? `NPR ${totalDriverEarnings.toLocaleString()}`
-                : `${thisMonthRidesCount} Rides`}
-            </Text>
+            <TouchableOpacity
+              style={[styles.filterChip, statusFilter === 'completed' && styles.filterChipActive]}
+              onPress={() => setStatusFilter('completed')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, statusFilter === 'completed' && styles.filterChipTextActive]}>
+                Completed
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.filterChip, statusFilter === 'cancelled' && styles.filterChipActive]}
+              onPress={() => setStatusFilter('cancelled')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, statusFilter === 'cancelled' && styles.filterChipTextActive]}>
+                Cancelled
+              </Text>
+            </TouchableOpacity>
+
+            {/* Separator Divider */}
+            <View style={styles.chipDivider} />
+
+            {/* Date Filter Chips */}
+            <TouchableOpacity
+              style={[styles.filterChip, dateFilter === 'all' && styles.filterChipActive]}
+              onPress={() => setDateFilter('all')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, dateFilter === 'all' && styles.filterChipTextActive]}>
+                All Time
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.filterChip, dateFilter === 'month' && styles.filterChipActive]}
+              onPress={() => setDateFilter('month')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, dateFilter === 'month' && styles.filterChipTextActive]}>
+                This Month
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -561,9 +603,11 @@ const RideHistoryScreen = () => {
                 <View style={styles.emptyIconCircle}>
                   <MaterialIcons name="history" size={40} color="#B7102A" />
                 </View>
-                <Text style={styles.emptyTitle}>No trips yet</Text>
+                <Text style={styles.emptyTitle}>No trips found</Text>
                 <Text style={styles.emptySubtext}>
-                  {searchQuery ? 'No rides match your search query.' : 'Your completed and past rides will appear here.'}
+                  {searchQuery || statusFilter !== 'all' || dateFilter !== 'all'
+                    ? 'No rides match your selected filters.'
+                    : 'Your completed and past rides will appear here.'}
                 </Text>
               </View>
             }
@@ -584,77 +628,71 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 12,
-    paddingBottom: 14,
-    backgroundColor: '#F8F9FA',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9ECEF',
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#F3F4F5',
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 4,
   },
   headerTitle: {
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'Roboto',
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#191C1D',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+    marginLeft: 12,
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: '#5B403F',
-    marginTop: 2,
+  filterSection: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E9ECEF',
+    marginBottom: 8,
   },
-  statsBannerRow: {
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  chipRow: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    gap: 14,
-    marginBottom: 16,
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
   },
-  statCardRed: {
-    flex: 1,
-    backgroundColor: '#B7102A',
+  filterChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 16,
-    padding: 16,
-    elevation: 3,
-    shadowColor: '#B7102A',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-  },
-  statLabelRed: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    opacity: 0.9,
-    marginBottom: 4,
-  },
-  statValueRed: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  statCardGray: {
-    flex: 1,
     backgroundColor: '#F3F4F5',
-    borderRadius: 16,
-    padding: 16,
     borderWidth: 1,
-    borderColor: '#EDEEEF',
+    borderColor: '#E9ECEF',
   },
-  statLabelGray: {
+  filterChipActive: {
+    backgroundColor: '#BC001F',
+    borderColor: '#BC001F',
+  },
+  filterChipText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#5B403F',
-    marginBottom: 4,
+    fontWeight: '500',
+    color: '#333',
   },
-  statValueGray: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#191C1D',
+  filterChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  chipDivider: {
+    width: 1,
+    height: 18,
+    backgroundColor: '#DDD',
+    marginHorizontal: 2,
   },
   searchBarRow: {
     flexDirection: 'row',
@@ -913,11 +951,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   completedStatusText: {
-    color: '#075B5E',
+    color: '#BC001F',
   },
   cancelledStatusText: {
     color: '#EA2F14',
   },
-})
-
-export default RideHistoryScreen
+});

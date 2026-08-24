@@ -96,7 +96,7 @@ const ChooseVehicle = () => {
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#f5f5f5" />
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#075B5E" />
+          <ActivityIndicator size="large" color="#BC001F" />
           <Text style={styles.loadingText}>Loading vehicle types...</Text>
         </View>
       </SafeAreaView>
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
   },
   vehiclePrice: {
     fontSize: 12,
-    color: '#075B5E',
+    color: '#BC001F',
     fontWeight: '500',
   },
 });

@@ -24,7 +24,7 @@ import webSocketService from '@/services/websocketService';
 import ProfileImage from '../../components/ProfileImage';
 import { getCurrentUserId } from '@/services/apiClient';
 
-const PRIMARY = '#075B5E';
+const PRIMARY = '#BC001F';
 const SECONDARY = '#EA2F14';
 const BG = '#f8f9fa';
 

@@ -17,9 +17,13 @@ import { MaterialIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import apiClient, { clearAccessToken } from '@/services/apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../../components/ui/Toast';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const LoginScreen = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const topPadding = insets.top > 0 ? insets.top + 8 : (Platform.OS === 'android' ? 32 : 16);
+  const bottomPadding = insets.bottom > 0 ? insets.bottom + 8 : 24;
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{
@@ -94,7 +98,7 @@ const LoginScreen = () => {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[styles.scrollContent, { paddingTop: topPadding, paddingBottom: bottomPadding }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -149,33 +153,6 @@ const LoginScreen = () => {
               )}
             </TouchableOpacity>
 
-            {/* Divider */}
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>OR</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {/* Social Authentication Buttons */}
-            <TouchableOpacity
-              style={styles.socialButton}
-              onPress={() => router.push('/(auth)/setup?source=google')}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="logo-google" size={18} color="#EA4335" style={{ marginRight: 10 }} />
-              <Text style={styles.socialButtonText}>Continue with Google</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.socialButton}
-              onPress={() => router.push('/(auth)/setup?source=facebook')}
-              disabled={loading}
-              activeOpacity={0.8}
-            >
-              <FontAwesome5 name="facebook" size={18} color="#1877F2" style={{ marginRight: 10 }} />
-              <Text style={styles.socialButtonText}>Continue with Facebook</Text>
-            </TouchableOpacity>
           </View>
 
           {/* Footer Links */}

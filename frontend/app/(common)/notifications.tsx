@@ -239,7 +239,7 @@ const Notifications = () => {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#075B5E" />
+          <ActivityIndicator size="large" color="#BC001F" />
         </View>
       ) : (
         <View style={{ flex: 1 }}>
@@ -320,7 +320,7 @@ const styles = StyleSheet.create({
   markReadText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#075B5E',
+    color: '#BC001F',
   },
   listContent: {
     padding: 16,
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
   },
   deleteButton: {
     padding: 4,

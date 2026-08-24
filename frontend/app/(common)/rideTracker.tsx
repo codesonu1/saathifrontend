@@ -19,6 +19,7 @@ import {
 import * as Location from 'expo-location';
 import { useRouter, useLocalSearchParams, useNavigation } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import { locationService } from '@/services/locationService';
@@ -117,7 +118,7 @@ class ErrorBoundary extends React.Component<
           </Text>
           <TouchableOpacity
             style={{
-              backgroundColor: '#075B5E',
+              backgroundColor: '#BC001F',
               paddingHorizontal: 20,
               paddingVertical: 10,
               borderRadius: 8,
@@ -397,7 +398,7 @@ const RideTrackerScreen = () => {
         </Text>
         <TouchableOpacity
           style={{
-            backgroundColor: '#075B5E',
+            backgroundColor: '#BC001F',
             paddingHorizontal: 20,
             paddingVertical: 10,
             borderRadius: 8,
@@ -412,6 +413,7 @@ const RideTrackerScreen = () => {
   }
 
   // --- PARAMS & ROUTER ---
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const router = useRouter();
   const navigation = useNavigation();
@@ -987,14 +989,15 @@ const RideTrackerScreen = () => {
               }
             }
             
-            // Check if at dropoff
+            // Check if at dropoff (only auto-complete if progress is at least 80% or ride has been active for >15s to prevent instant completion on start)
             const toDropoffDistance = calculateDistance(
               location.lat,
               location.lng,
               dropoffLocationRef.current.lat,
               dropoffLocationRef.current.lng
             );
-            if (toDropoffDistance < 0.05) { // 50m threshold
+            const isEligibleForCompletion = lastProgressRef.current >= 80 || (rideStartTime && Date.now() - rideStartTime > 15000);
+            if (toDropoffDistance < 0.05 && isEligibleForCompletion) { // 50m threshold
               console.log('[updateDriverLocation] Driver at dropoff, completing ride');
               
               // Set progress to 100% before completing
@@ -1982,6 +1985,7 @@ const RideTrackerScreen = () => {
       
       // Set progress to 0% - backend will handle progress calculation
       setProgress(0);
+      lastProgressRef.current = 0;
       setRideStartTime(Date.now());
       
       // Reset progress tracking
@@ -2410,7 +2414,7 @@ const RideTrackerScreen = () => {
       case 'in-progress':
         return '#4CAF50';
       case 'completed':
-        return '#075B5E';
+        return '#BC001F';
       case 'cancelled':
         return '#F44336';
       case 'searching':
@@ -2577,8 +2581,8 @@ const RideTrackerScreen = () => {
   if (isLoadingDetails) {
     console.log('[RideTracker] Loading ride details');
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}> 
-        <ActivityIndicator size="large" color="#075B5E" />
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }]}> 
+        <ActivityIndicator size="large" color="#BC001F" />
         <Text style={{ marginTop: 10 }}>Loading ride details...</Text>
       </View>
     );
@@ -2596,7 +2600,7 @@ const RideTrackerScreen = () => {
           This ride has been cancelled. You will be redirected to your home screen.
         </Text>
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: '#075B5E', marginTop: 30 }]}
+          style={[styles.button, { backgroundColor: '#BC001F', marginTop: 30 }]}
           onPress={() => {
             if (userRole === 'passenger') {
               router.replace('/(tabs)');
@@ -2662,8 +2666,9 @@ const RideTrackerScreen = () => {
     return `${color} ${make} ${model}`.trim();
   };
   const vehicleNameFormatted = getFormattedVehicleName();
-  const vehicleRegNum = (rideDetails as any)?.driverProfile?.vehicleRegNum || 'LF-638';
-  const driverRating = (rideDetails as any)?.driverProfile?.rating || '4.77';
+  const vehicleRegNum = (rideDetails as any)?.driverProfile?.vehicleRegNum || 'BA-1-PA-1234';
+  const rawRating = (rideDetails as any)?.driverProfile?.rating || (rideDetails as any)?.driver?.rating;
+  const driverRating = rawRating ? Number(rawRating).toFixed(1) : '4.9';
   const driverFirstName = otherUserName ? otherUserName.split(' ')[0] : 'Driver';
 
   const formatEtaTime = (seconds: number) => {
@@ -2698,10 +2703,13 @@ const RideTrackerScreen = () => {
   return (
     <ErrorBoundary>
       <View style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#075B5E" />
+        <StatusBar barStyle="light-content" backgroundColor="#BC001F" />
         <View style={styles.mapContainer}>
           {rideStatus !== 'completed' && rideStatus !== 'cancelled' && (
-            <TouchableOpacity style={styles.backButton} onPress={handleBackButtonPress}>
+            <TouchableOpacity 
+              style={[styles.backButton, { top: Math.max((insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44)) + 8, 42) }]} 
+              onPress={handleBackButtonPress}
+            >
               <MaterialIcons name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
           )}
@@ -2873,7 +2881,7 @@ const RideTrackerScreen = () => {
             showsBuildings={true}
             showsIndoors={true}
             loadingEnabled={true}
-            loadingIndicatorColor="#075B5E"
+            loadingIndicatorColor="#BC001F"
             loadingBackgroundColor="#ffffff"
           >
           {/* Pickup Location Marker */}
@@ -3004,6 +3012,7 @@ const RideTrackerScreen = () => {
             style={styles.passengerSheetScroll}
             contentContainerStyle={styles.passengerSheetContent}
             showsVerticalScrollIndicator={false}
+            scrollEnabled={true}
           >
             {/* 1. Header Row: Ride Progress Title + Bold Primary Red Percentage */}
             <View style={styles.vvHeaderRow}>
@@ -3028,7 +3037,7 @@ const RideTrackerScreen = () => {
 
             {/* 3. Subtitle / ETA status */}
             <View style={styles.vvSubRow}>
-              <MaterialIcons name="access-time" size={16} color="#5B403F" style={{ marginRight: 6 }} />
+              <MaterialIcons name="access-time" size={15} color="#5B403F" style={{ marginRight: 6 }} />
               <Text style={styles.vvSubText}>
                 {rideStatus === 'accepted'
                   ? (driverArrived ? 'Driver has arrived at pickup' : `Arriving in approx. ${Math.max(1, Math.ceil((etaSeconds || 480) / 60))} mins`)
@@ -3039,16 +3048,16 @@ const RideTrackerScreen = () => {
             {/* 4. Driver Info Card (#F3F4F5 rounded container) */}
             <View style={styles.vvDriverCard}>
               <View style={styles.vvAvatarContainer}>
-                <MaterialIcons name="person" size={32} color="#485F84" />
+                <MaterialIcons name="person" size={28} color="#485F84" />
                 <View style={styles.vvVerifiedBadge}>
-                  <MaterialIcons name="check-circle" size={14} color="#0066FF" />
+                  <MaterialIcons name="check-circle" size={12} color="#0066FF" />
                 </View>
               </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
+              <View style={{ flex: 1, marginLeft: 10 }}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                   <Text style={styles.vvDriverName}>{driverFirstName || 'Purna Shah'}</Text>
                   <View style={styles.vvRatingBadge}>
-                    <MaterialIcons name="star-outline" size={14} color="#B7102A" />
+                    <MaterialIcons name="star-outline" size={13} color="#B7102A" />
                     <Text style={styles.vvRatingText}>{driverRating || '4.9'}</Text>
                   </View>
                 </View>
@@ -3061,7 +3070,7 @@ const RideTrackerScreen = () => {
             {/* 5. Pickup & Dropoff Route Section */}
             <View style={styles.vvRouteContainer}>
               <View style={styles.vvRouteItem}>
-                <MaterialIcons name="my-location" size={20} color="#286182" style={{ marginRight: 12 }} />
+                <MaterialIcons name="my-location" size={18} color="#286182" style={{ marginRight: 10 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.vvRouteLabel}>Pickup</Text>
                   <Text style={styles.vvRouteAddress} numberOfLines={1}>
@@ -3073,7 +3082,7 @@ const RideTrackerScreen = () => {
               <View style={styles.vvRouteConnectorLine} />
 
               <View style={styles.vvRouteItem}>
-                <MaterialIcons name="location-on" size={20} color="#B7102A" style={{ marginRight: 12 }} />
+                <MaterialIcons name="location-on" size={18} color="#B7102A" style={{ marginRight: 10 }} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.vvRouteLabel}>Dropoff</Text>
                   <Text style={styles.vvRouteAddress} numberOfLines={1}>
@@ -3086,7 +3095,7 @@ const RideTrackerScreen = () => {
             {/* 6. Fare & Cash Payment Row */}
             <View style={styles.vvFareRow}>
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <MaterialIcons name="account-balance-wallet" size={22} color="#191C1D" style={{ marginRight: 10 }} />
+                <MaterialIcons name="account-balance-wallet" size={20} color="#191C1D" style={{ marginRight: 8 }} />
                 <Text style={styles.vvFareText}>Fare: रू {parseFloat(actualFare).toFixed(0)}</Text>
               </View>
               <View style={styles.vvCashBadge}>
@@ -3101,7 +3110,7 @@ const RideTrackerScreen = () => {
                 onPress={handleCallPress}
                 activeOpacity={0.85}
               >
-                <MaterialIcons name="call" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <MaterialIcons name="call" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
                 <Text style={styles.vvCallButtonText}>Call</Text>
               </TouchableOpacity>
 
@@ -3110,7 +3119,7 @@ const RideTrackerScreen = () => {
                 onPress={handleMessageOtherUser}
                 activeOpacity={0.85}
               >
-                <MaterialIcons name="chat-bubble-outline" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <MaterialIcons name="chat-bubble-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
                 <Text style={styles.vvMessageButtonText}>Message</Text>
               </TouchableOpacity>
             </View>
@@ -3122,7 +3131,7 @@ const RideTrackerScreen = () => {
                 disabled={cancelling}
                 activeOpacity={0.85}
               >
-                <MaterialIcons name="cancel" size={20} color="#B7102A" style={{ marginRight: 8 }} />
+                <MaterialIcons name="cancel" size={18} color="#B7102A" style={{ marginRight: 6 }} />
                 <Text style={styles.vvCancelOutlineText}>Cancel Ride</Text>
               </TouchableOpacity>
             )}
@@ -3132,86 +3141,15 @@ const RideTrackerScreen = () => {
             style={styles.passengerSheetScroll}
             contentContainerStyle={styles.passengerSheetContent}
             showsVerticalScrollIndicator={false}
+            scrollEnabled={true}
           >
             {/* Drag Handle Pill */}
             <View style={styles.sheetDragHandle} />
 
-            {/* Passenger Info & Fare Header Card */}
-            <View style={styles.driverPassengerCard}>
-              <View style={styles.vvAvatarContainer}>
-                <MaterialIcons name="person" size={32} color="#485F84" />
-                <View style={styles.vvVerifiedBadge}>
-                  <MaterialIcons name="check-circle" size={14} color="#BC001F" />
-                </View>
-              </View>
-              <View style={{ flex: 1, marginLeft: 12 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Text style={styles.driverPassengerName}>{otherUserName || 'Purna Shah'}</Text>
-                  <Text style={styles.driverFareText}>NPR {parseFloat(actualFare).toFixed(0)}</Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
-                  <View style={styles.driverRatingRow}>
-                    <MaterialIcons name="star" size={14} color="#5F5E5E" />
-                    <Text style={styles.driverRatingText}>4.9 • 124 Rides</Text>
-                  </View>
-                  <View style={styles.driverCategoryBadge}>
-                    <Text style={styles.driverCategoryBadgeText}>{vehicle || 'Taxi Economy'}</Text>
-                  </View>
-                </View>
-              </View>
-            </View>
-
-            {/* Driver Arrived Status Card (Arrival Confirmation UI) */}
-            {driverArrived && (
-              <View style={styles.arrivedStatusCard}>
-                <View style={styles.arrivedIconContainer}>
-                  <MaterialIcons name="check-circle" size={24} color="#BC001F" />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.arrivedStatusTitle}>Driver Arrived at Pickup</Text>
-                  <Text style={styles.arrivedStatusSubtext}>
-                    Waiting for passenger to board. Press Start Ride when ready.
-                  </Text>
-                </View>
-              </View>
-            )}
-
-            {/* Divider */}
-            <View style={styles.sheetDivider} />
-
-            {/* Route Details Timeline */}
-            <View style={styles.vvRouteContainer}>
-              <View style={styles.vvRouteItem}>
-                <View style={styles.pickupDotOuter}>
-                  <View style={styles.pickupDotInner} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.routeHeaderLabel}>PICKUP</Text>
-                  <Text style={styles.vvRouteAddress} numberOfLines={1}>
-                    {from || 'Kathmandu, Nepal'}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.routeConnectorDashed} />
-
-              <View style={styles.vvRouteItem}>
-                <View style={styles.dropoffSquareOuter}>
-                  <View style={styles.dropoffSquareInner} />
-                </View>
-                <View style={{ flex: 1, marginLeft: 12 }}>
-                  <Text style={styles.routeHeaderLabel}>DROP-OFF</Text>
-                  <Text style={styles.vvRouteAddress} numberOfLines={1}>
-                    {to || 'Lalitpur, Nepal'}
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Ride Progress Bar */}
-            <View style={{ marginVertical: 12 }}>
+            {/* 1. Header Row: Ride Progress Title + Bold Primary Red Percentage at Top */}
+            <View style={{ marginBottom: 10 }}>
               <View style={styles.vvHeaderRow}>
-                <Text style={styles.routeHeaderLabel}>RIDE PROGRESS</Text>
+                <Text style={styles.vvHeaderTitle}>Ride Progress</Text>
                 <Text style={styles.vvHeaderPercent}>{Math.round(progress)}%</Text>
               </View>
               <View style={styles.vvProgressTrack}>
@@ -3229,28 +3167,97 @@ const RideTrackerScreen = () => {
               </View>
             </View>
 
-            {/* Communication Actions (Call / Message) */}
-            <View style={styles.driverCommRow}>
+            {/* Passenger Info & Fare Header Card */}
+            <View style={styles.driverPassengerCard}>
+              <View style={styles.vvAvatarContainer}>
+                <MaterialIcons name="person" size={28} color="#485F84" />
+                <View style={styles.vvVerifiedBadge}>
+                  <MaterialIcons name="check-circle" size={12} color="#BC001F" />
+                </View>
+              </View>
+              <View style={{ flex: 1, marginLeft: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={styles.driverPassengerName}>{otherUserName || 'Purna Shah'}</Text>
+                  <Text style={styles.driverFareText}>NPR {parseFloat(actualFare).toFixed(0)}</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+                  <View style={styles.driverRatingRow}>
+                    <MaterialIcons name="star" size={13} color="#5F5E5E" />
+                    <Text style={styles.driverRatingText}>4.9 • 124 Rides</Text>
+                  </View>
+                  <View style={styles.driverCategoryBadge}>
+                    <Text style={styles.driverCategoryBadgeText}>{vehicle || 'Taxi Economy'}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
+            {/* Driver Arrived Status Card (Arrival Confirmation UI) */}
+            {driverArrived && (
+              <View style={styles.arrivedStatusCard}>
+                <View style={styles.arrivedIconContainer}>
+                  <MaterialIcons name="check-circle" size={20} color="#BC001F" />
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.arrivedStatusTitle}>Driver Arrived at Pickup</Text>
+                  <Text style={styles.arrivedStatusSubtext}>
+                    Waiting for passenger to board.
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            {/* Route Details Timeline */}
+            <View style={styles.vvRouteContainer}>
+              <View style={styles.vvRouteItem}>
+                <View style={styles.pickupDotOuter}>
+                  <View style={styles.pickupDotInner} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.routeHeaderLabel}>PICKUP</Text>
+                  <Text style={styles.vvRouteAddress} numberOfLines={1}>
+                    {from || 'Kathmandu, Nepal'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.routeConnectorDashed} />
+
+              <View style={styles.vvRouteItem}>
+                <View style={styles.dropoffSquareOuter}>
+                  <View style={styles.dropoffSquareInner} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 10 }}>
+                  <Text style={styles.routeHeaderLabel}>DROP-OFF</Text>
+                  <Text style={styles.vvRouteAddress} numberOfLines={1}>
+                    {to || 'Lalitpur, Nepal'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Action Buttons (Call / Message matching passenger view) */}
+            <View style={styles.vvActionRow}>
               <TouchableOpacity
-                style={styles.driverCommButton}
+                style={styles.vvCallButton}
                 onPress={handleCallPress}
                 activeOpacity={0.85}
               >
-                <MaterialIcons name="call" size={20} color="#1A1B1F" style={{ marginRight: 8 }} />
-                <Text style={styles.driverCommButtonText}>Call</Text>
+                <MaterialIcons name="call" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.vvCallButtonText}>Call</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.driverCommButton}
+                style={styles.vvMessageButton}
                 onPress={handleMessageOtherUser}
                 activeOpacity={0.85}
               >
-                <MaterialIcons name="chat" size={20} color="#1A1B1F" style={{ marginRight: 8 }} />
-                <Text style={styles.driverCommButtonText}>Message</Text>
+                <MaterialIcons name="chat-bubble-outline" size={18} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.vvMessageButtonText}>Message</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Primary Action Buttons (Arrived / Start / Complete) */}
+            {/* Primary Action Buttons (Arrived / Complete) */}
             {rideStatus === 'accepted' && !driverArrived && (
               <TouchableOpacity
                 style={styles.primaryRedCTA}
@@ -3296,14 +3303,15 @@ const RideTrackerScreen = () => {
               </TouchableOpacity>
             )}
 
-            {/* Secondary Cancel Ride Action */}
+            {/* Secondary Cancel Ride Action (Outline style) */}
             <TouchableOpacity
-              style={styles.secondaryCancelCTA}
+              style={styles.vvCancelOutlineButton}
               onPress={handleCancelRide}
               disabled={cancelling}
               activeOpacity={0.85}
             >
-              <Text style={styles.secondaryCancelCTAText}>Cancel Ride</Text>
+              <MaterialIcons name="cancel" size={18} color="#B7102A" style={{ marginRight: 6 }} />
+              <Text style={styles.vvCancelOutlineText}>Cancel Ride</Text>
             </TouchableOpacity>
           </ScrollView>
         )}
@@ -3341,7 +3349,7 @@ const RideTrackerScreen = () => {
                         paddingVertical: 12,
                         paddingHorizontal: 12,
                         borderWidth: 1,
-                        borderColor: isSelected ? '#075B5E' : '#E5E7EB',
+                        borderColor: isSelected ? '#BC001F' : '#E5E7EB',
                         borderRadius: 8,
                         marginBottom: 8,
                         backgroundColor: isSelected ? '#F0F7F7' : '#FFF',
@@ -3353,7 +3361,7 @@ const RideTrackerScreen = () => {
                         height: 18,
                         borderRadius: 9,
                         borderWidth: 2,
-                        borderColor: isSelected ? '#075B5E' : '#D1D5DB',
+                        borderColor: isSelected ? '#BC001F' : '#D1D5DB',
                         marginRight: 10,
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -3363,13 +3371,13 @@ const RideTrackerScreen = () => {
                             width: 10,
                             height: 10,
                             borderRadius: 5,
-                            backgroundColor: '#075B5E',
+                            backgroundColor: '#BC001F',
                           }} />
                         )}
                       </View>
                       <Text style={{
                         fontSize: 14,
-                        color: isSelected ? '#075B5E' : '#374151',
+                        color: isSelected ? '#BC001F' : '#374151',
                         fontWeight: isSelected ? '600' : '400',
                         flex: 1,
                       }} numberOfLines={2}>
@@ -3387,7 +3395,7 @@ const RideTrackerScreen = () => {
                   width: '100%',
                   minHeight: 60,
                   borderWidth: 1,
-                  borderColor: '#075B5E',
+                  borderColor: '#BC001F',
                   borderRadius: 8,
                   padding: 10,
                   fontSize: 14,
@@ -3500,7 +3508,7 @@ const styles = StyleSheet.create({
     top: 40,
     left: 20,
     zIndex: 10,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     borderRadius: 20,
     padding: 8,
   },
@@ -3515,10 +3523,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#075B5E',
+    borderColor: '#BC001F',
   },
   simulateButtonText: {
-    color: '#075B5E',
+    color: '#BC001F',
     marginLeft: 4,
     fontWeight: '600',
   },
@@ -3560,7 +3568,7 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
   },
   progressText: {
     marginTop: 8,
@@ -3678,7 +3686,7 @@ const styles = StyleSheet.create({
   modalButton: {
     width: '100%',
     padding: 12,
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     borderRadius: 8,
     alignItems: 'center',
   },
@@ -3745,40 +3753,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
-    marginTop: 4,
+    marginBottom: 6,
+    marginTop: 0,
   },
   vvHeaderTitle: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '700',
     color: '#191C1D',
   },
   vvHeaderPercent: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: '800',
     color: '#B7102A',
     letterSpacing: -1,
   },
   vvProgressTrack: {
     width: '100%',
-    height: 8,
+    height: 6,
     backgroundColor: '#E7E8E9',
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   vvProgressFill: {
     height: '100%',
     backgroundColor: '#B7102A',
-    borderRadius: 4,
+    borderRadius: 3,
   },
   vvSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   vvSubText: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#5B403F',
     fontWeight: '500',
   },
@@ -3786,14 +3794,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F3F4F5',
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 16,
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
   },
   vvAvatarContainer: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#E1E3E4',
     justifyContent: 'center',
     alignItems: 'center',
@@ -3807,7 +3815,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   vvDriverName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     color: '#191C1D',
   },
@@ -3828,113 +3836,114 @@ const styles = StyleSheet.create({
     marginLeft: 3,
   },
   vvVehicleDetails: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#5B403F',
-    marginTop: 3,
+    marginTop: 2,
   },
   vvRouteContainer: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 12,
-    marginBottom: 16,
+    borderRadius: 12,
+    paddingVertical: 6,
+    marginBottom: 10,
   },
   vvRouteItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
   vvRouteLabel: {
-    fontSize: 11,
+    fontSize: 10,
     color: '#8F6F6E',
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   vvRouteAddress: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: '#191C1D',
-    marginTop: 2,
+    marginTop: 1,
   },
   vvRouteConnectorLine: {
     width: 2,
-    height: 18,
+    height: 12,
     backgroundColor: '#E4BEBC',
     marginLeft: 9,
-    marginVertical: 2,
+    marginVertical: 1,
   },
   vvFareRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    paddingVertical: 8,
     borderTopWidth: 1,
     borderTopColor: '#E7E8E9',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   vvFareText: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: '#191C1D',
   },
   vvCashBadge: {
     backgroundColor: '#BBD3FD',
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   vvCashBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '700',
     color: '#445A7F',
   },
   vvActionRow: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
+    gap: 8,
+    marginTop: 2,
+    marginBottom: 4,
   },
   vvCallButton: {
     flex: 1,
-    height: 48,
+    height: 38,
     backgroundColor: '#485F84',
-    borderRadius: 12,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#485F84',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
   },
   vvCallButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
   vvMessageButton: {
     flex: 1,
-    height: 48,
+    height: 38,
     backgroundColor: '#445A7F',
-    borderRadius: 12,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#445A7F',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
   },
   vvMessageButtonText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
   vvCancelOutlineButton: {
     width: '100%',
-    height: 48,
-    borderRadius: 12,
+    height: 38,
+    borderRadius: 8,
     borderWidth: 1.5,
     borderColor: '#B7102A',
     backgroundColor: '#FFFFFF',
@@ -3942,11 +3951,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 4,
-    marginBottom: 16,
+    marginBottom: 6,
   },
   vvCancelOutlineText: {
     color: '#B7102A',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
   unreadBadge: {
@@ -3970,7 +3979,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   passengerSheetContent: {
-    paddingBottom: 24,
+    paddingBottom: 48,
   },
   passengerHeaderRow: {
     flexDirection: 'row',
@@ -4024,7 +4033,7 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     borderWidth: 1.5,
     borderColor: '#E8F5F5',
-    shadowColor: '#075B5E',
+    shadowColor: '#BC001F',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.05,
     shadowRadius: 10,
@@ -4046,7 +4055,7 @@ const styles = StyleSheet.create({
   passengerEtaTime: {
     fontSize: 34,
     fontWeight: '800',
-    color: '#075B5E',
+    color: '#BC001F',
   },
   passengerEtaVisualContainer: {
     alignItems: 'center',
@@ -4058,17 +4067,17 @@ const styles = StyleSheet.create({
   },
   passengerEtaVisualText: {
     fontSize: 10,
-    color: '#075B5E',
+    color: '#BC001F',
     fontWeight: '700',
     marginTop: 4,
     textAlign: 'center',
   },
   passengerComingButton: {
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
     borderRadius: 24,
     paddingVertical: 12,
     alignItems: 'center',
-    shadowColor: '#075B5E',
+    shadowColor: '#BC001F',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 6,
@@ -4102,7 +4111,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     overflow: 'hidden',
     borderWidth: 1.5,
-    borderColor: '#075B5E',
+    borderColor: '#BC001F',
   },
   passengerRatingBadge: {
     position: 'absolute',
@@ -4169,7 +4178,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#F7FCFC',
     borderStyle: 'dashed',
     borderWidth: 1.5,
-    borderColor: '#075B5E',
+    borderColor: '#BC001F',
     borderRadius: 12,
     padding: 14,
     marginVertical: 6,
@@ -4221,7 +4230,7 @@ const styles = StyleSheet.create({
   passengerPaymentValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#075B5E',
+    color: '#BC001F',
   },
   passengerTripContainer: {
     marginTop: 2,
@@ -4305,7 +4314,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 8,
     alignItems: 'center',
-    backgroundColor: '#075B5E',
+    backgroundColor: '#BC001F',
   },
   devButtonText: {
     color: '#fff',
@@ -4484,21 +4493,21 @@ const styles = StyleSheet.create({
   },
   primaryRedCTA: {
     backgroundColor: '#BC001F',
-    paddingVertical: 16,
-    borderRadius: 16,
+    height: 38,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 6,
+    marginVertical: 4,
     shadowColor: '#BC001F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 3,
+    elevation: 2,
   },
   primaryRedCTAText: {
     color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 14,
+    fontWeight: '700',
   },
   secondaryCancelCTA: {
     backgroundColor: 'transparent',

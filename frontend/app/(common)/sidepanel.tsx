@@ -8,6 +8,7 @@ import { useRouter } from "expo-router"
 import { userRoleManager } from '@/services/userRoleManager';
 import webSocketService from '@/services/websocketService';
 import { logoutAndResetNavigation } from '../(auth)/login';
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 
 const { width, height: screenHeight } = Dimensions.get("window")
 
@@ -22,6 +23,7 @@ type SidePanelProps = {
 }
 
 const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInProgress, onChangeRole, activeItem = "home", onLeaveDriverMode }) => {
+  const insets = useSafeAreaInsets()
   const slideAnim = useRef(new Animated.Value(-width * 0.75)).current
   const router = useRouter()
 
@@ -109,10 +111,13 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
 
   if (!visible) return null
 
+  const topPadding = insets.top > 0 ? insets.top + 16 : 40;
+  const bottomPadding = insets.bottom > 0 ? insets.bottom + 12 : 24;
+
   return (
     <View style={styles.modalOverlay}>
       <TouchableOpacity style={styles.modalBackground} onPress={onClose} />
-      <Animated.View style={[styles.sidePanel, { transform: [{ translateX: slideAnim }] }]}>
+      <Animated.View style={[styles.sidePanel, { paddingTop: topPadding, transform: [{ translateX: slideAnim }] }]}>
         <View style={styles.sidePanelHeader}>
           <Text style={styles.sidePanelTitle}>Menu</Text>
           <TouchableOpacity onPress={onClose}>
@@ -129,14 +134,14 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
                 style={[styles.menuItem, isActive && styles.activeMenuItem]}
                 onPress={item.action}
               >
-                <Icon name={item.icon} size={24} color={isActive ? "#075B5E" : "#333"} />
+                <Icon name={item.icon} size={24} color={isActive ? "#BC001F" : "#333"} />
                 <Text style={[styles.menuText, isActive && styles.activeMenuText]}>{item.name}</Text>
               </TouchableOpacity>
             );
           })}
         </View>
 
-        <View style={styles.bottomButtons}>
+        <View style={[styles.bottomButtons, { bottom: bottomPadding }]}>
           <TouchableOpacity
             style={[styles.roleButton, rideInProgress && styles.buttonDisabled]}
             onPress={handleChangeRole}
@@ -203,10 +208,10 @@ const styles = StyleSheet.create({
   },
   activeMenuItem: {
     backgroundColor: "#e6f2f2",
-    borderLeftColor: "#075B5E",
+    borderLeftColor: "#BC001F",
   },
   activeMenuText: {
-    color: "#075B5E",
+    color: "#BC001F",
     fontWeight: "600",
   },
   bottomButtons: {
@@ -220,7 +225,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   roleButton: {
-    backgroundColor: "#075B5E",
+    backgroundColor: "#BC001F",
     borderRadius: 12,
     paddingVertical: 16,
     paddingHorizontal: 20,
