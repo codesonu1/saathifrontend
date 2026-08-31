@@ -8,6 +8,11 @@
     "scheme": "saathi",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/adaptive-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "updates": {
       "enabled": false,
       "checkAutomatically": "NEVER",
@@ -53,7 +58,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#ffffff"
+          "image": "./assets/images/adaptive-icon.png",
+          "backgroundColor": "#ffffff",
+          "imageWidth": 200
         }
       ],
       [
