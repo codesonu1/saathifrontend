@@ -18,6 +18,7 @@ import apiClient, { initializeApiClient } from '@/services/apiClient';
 import SidePanel from '../(common)/sidepanel';
 import DriverBottomNav from '@/components/DriverBottomNav';
 import AppModal from '@/components/ui/AppModal';
+import notificationService from '@/services/notificationService';
 
 const { width } = Dimensions.get('window');
 
@@ -44,6 +45,9 @@ const DriverEarningsScreen = () => {
   const [sidePanelVisible, setSidePanelVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [totalCreditsAdded, setTotalCreditsAdded] = useState<number>(0);
 
   const [earningsData, setEarningsData] = useState<EarningsBreakdown>({
     todayEarnings: 0,
@@ -80,12 +84,26 @@ const DriverEarningsScreen = () => {
     try {
       await initializeApiClient();
 
-      // 1. Fetch completed driver rides
+      // 1. Fetch live user profile to get exact live wallet deposit balance from Admin
+      try {
+        const userResponse = await apiClient.get('/users/me');
+        if (userResponse.data?.data) {
+          const u = userResponse.data.data;
+          const liveBal = u.walletBalance ?? u.wallet ?? u.balance ?? 0;
+          const numericLiveBal = Number(liveBal) || 0;
+          setWalletBalance(numericLiveBal);
+          await notificationService.checkAndNotifyDriverBalance(numericLiveBal);
+        }
+      } catch (userErr) {
+        console.warn('[Earnings] Failed to fetch current driver balance:', userErr);
+      }
+
+      // 2. Fetch completed driver rides
       const ridesResponse = await apiClient.get('rides/driver?status=completed');
       const completedRides = ridesResponse.data?.data || [];
 
-      // 2. Fetch wallet transactions (for commission debit fees)
-      let walletTransactions = [];
+      // 3. Fetch wallet transactions (for admin credits and commission debits)
+      let walletTransactions: any[] = [];
       try {
         const walletResponse = await apiClient.get('wallet-transactions');
         walletTransactions = walletResponse.data?.data || [];
@@ -93,8 +111,24 @@ const DriverEarningsScreen = () => {
         console.log('[Earnings] Wallet transactions check error:', err);
       }
 
-      // 3. Fetch reward transactions (for bonus earnings)
-      let rewardTransactions = [];
+      // Compute total credits added by Admin vs debits
+      let creditsSum = 0;
+      let debitsSum = 0;
+      if (Array.isArray(walletTransactions)) {
+        walletTransactions.forEach((tx: any) => {
+          const type = (tx.type || '').toLowerCase();
+          const amount = Math.abs(Number(tx.amount) || 0);
+          if (type === 'credit' || type === 'deposit') {
+            creditsSum += amount;
+          } else if (type === 'debit' || type === 'commission') {
+            debitsSum += amount;
+          }
+        });
+      }
+      setTotalCreditsAdded(creditsSum);
+
+      // 4. Fetch reward transactions (for bonus earnings)
+      let rewardTransactions: any[] = [];
       try {
         const rewardResponse = await apiClient.get('reward-transactions');
         rewardTransactions = rewardResponse.data?.data || [];
@@ -145,7 +179,7 @@ const DriverEarningsScreen = () => {
       });
 
       // Calculate commission paid
-      const commission = walletTransactions.reduce((total: number, tx: any) => {
+      const commission = debitsSum > 0 ? debitsSum : walletTransactions.reduce((total: number, tx: any) => {
         const desc = (tx.desc || tx.description || '').toLowerCase();
         const type = (tx.type || '').toLowerCase();
         if (desc.includes('commission') && type === 'debit') {
@@ -250,6 +284,62 @@ const DriverEarningsScreen = () => {
               <Text style={styles.heroMetricText}>{earningsData.todayRides} rides today</Text>
             </View>
             <Text style={styles.heroPayoutStatus}>Updated live</Text>
+          </View>
+        </View>
+
+        {/* Dynamic Driver Wallet & Deposit Account Card */}
+        <View style={styles.walletDepositCard}>
+          <View style={styles.walletCardHeader}>
+            <View style={styles.walletTitleRow}>
+              <View style={styles.walletIconCircle}>
+                <MaterialIcons name="account-balance-wallet" size={22} color="#059669" />
+              </View>
+              <View>
+                <Text style={styles.walletSublabel}>DRIVER WALLET DEPOSIT</Text>
+                <Text style={styles.walletAmountText}>
+                  रू {walletBalance.toFixed(0)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Dynamic Status Badge */}
+            <View style={[
+              styles.walletStatusBadge,
+              walletBalance >= 50 ? styles.walletStatusActive : styles.walletStatusLow
+            ]}>
+              <View style={[
+                styles.walletStatusDot,
+                { backgroundColor: walletBalance >= 50 ? '#10B981' : '#EF4444' }
+              ]} />
+              <Text style={[
+                styles.walletStatusText,
+                { color: walletBalance >= 50 ? '#065F46' : '#991B1B' }
+              ]}>
+                {walletBalance >= 50 ? 'Active & Eligible' : 'Low Deposit (< रू 50)'}
+              </Text>
+            </View>
+          </View>
+
+          {/* Wallet Balance Details */}
+          <View style={styles.walletBreakdownContainer}>
+            <View style={styles.walletStatItem}>
+              <Text style={styles.walletStatLabel}>Admin Top-ups / Added</Text>
+              <Text style={styles.walletStatCredit}>+ रू {Math.round(totalCreditsAdded)}</Text>
+            </View>
+            <View style={styles.walletStatDivider} />
+            <View style={styles.walletStatItem}>
+              <Text style={styles.walletStatLabel}>Platform Commission Deductions</Text>
+              <Text style={styles.walletStatDebit}>- रू {Math.round(earningsData.commission)}</Text>
+            </View>
+          </View>
+
+          <View style={styles.walletNoticeRow}>
+            <MaterialIcons name="info-outline" size={14} color="#6B7280" />
+            <Text style={styles.walletNoticeText}>
+              {walletBalance >= 50 
+                ? 'Your deposit balance is healthy. You can accept incoming rides.'
+                : 'Minimum deposit of रू 50 required to accept passenger ride offers.'}
+            </Text>
           </View>
         </View>
 
@@ -485,6 +575,118 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#5D3F3D',
     fontWeight: '500',
+  },
+  walletDepositCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 20,
+    elevation: 3,
+    borderLeftWidth: 4,
+    borderLeftColor: '#059669',
+  },
+  walletCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  walletTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  walletIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#ECFDF5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  walletSublabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#6B7280',
+    letterSpacing: 0.7,
+  },
+  walletAmountText: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#059669',
+    marginTop: 2,
+  },
+  walletStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 5,
+  },
+  walletStatusActive: {
+    backgroundColor: '#D1FAE5',
+  },
+  walletStatusLow: {
+    backgroundColor: '#FEE2E2',
+  },
+  walletStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  walletStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  walletBreakdownContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginBottom: 10,
+  },
+  walletStatItem: {
+    flex: 1,
+  },
+  walletStatLabel: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    color: '#64748B',
+    marginBottom: 2,
+  },
+  walletStatCredit: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  walletStatDebit: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#DC2626',
+  },
+  walletStatDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 10,
+  },
+  walletNoticeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingTop: 4,
+  },
+  walletNoticeText: {
+    fontSize: 11.5,
+    color: '#64748B',
+    flex: 1,
   },
   gridRow: {
     flexDirection: 'row',

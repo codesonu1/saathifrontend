@@ -1316,6 +1316,9 @@ const RideTrackerScreen = () => {
           setIsLoadingDetails(false);
           
           // Initialize simulated driver movement (arriving & ongoing trip progress)
+          const mockPickup = { lat: 27.7007, lng: 85.3123 };
+          const mockDropoff = { lat: 27.6713, lng: 85.4282 };
+          const mockDriver = { lat: 27.7100, lng: 85.3200 };
           let step = 0;
           let phase = 1; // 1: Arriving, 2: Ongoing
           
@@ -2691,7 +2694,7 @@ const RideTrackerScreen = () => {
   const handleCallPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     const phone = userRole === 'driver'
-      ? (rideDetails?.passenger?.mobile || passengerMobile || '')
+      ? (rideDetails?.passenger?.mobile || (params.passengerPhone as string) || '')
       : (rideDetails?.driver?.mobile || (rideDetails as any)?.driverProfile?.mobile || '+977-9841234567');
     
     const cleanPhone = phone.replace(/[^0-9+]/g, '') || '+977-9841234567';
@@ -2705,7 +2708,7 @@ const RideTrackerScreen = () => {
       <View style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#BC001F" />
         <View style={styles.mapContainer}>
-          {rideStatus !== 'completed' && rideStatus !== 'cancelled' && (
+          {rideStatus !== 'completed' && (rideStatus as string) !== 'cancelled' && (
             <TouchableOpacity 
               style={[styles.backButton, { top: Math.max((insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44)) + 8, 42) }]} 
               onPress={handleBackButtonPress}
@@ -2772,7 +2775,8 @@ const RideTrackerScreen = () => {
                       setSimulating,
                       userRole,
                       rideStatusRef,
-                      rideStartTime
+                      rideStartTime,
+                      []
                     );
                     
                     // Reached dropoff! Complete ride locally and transition to rating screen

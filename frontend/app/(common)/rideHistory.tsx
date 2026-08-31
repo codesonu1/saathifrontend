@@ -308,7 +308,7 @@ const RideHistoryScreen = () => {
   const totalDriverEarnings = useMemo(() => {
     const rawTotal = allRides.reduce((acc, r) => {
       if (r.status === 'completed') {
-        const fare = Number(r.acceptedOffer?.offerAmount || r.offerPrice || 0);
+        const fare = Number((r as any).acceptedOffer?.offerAmount || r.offerPrice || 0);
         return acc + (isNaN(fare) ? 0 : fare);
       }
       return acc;
@@ -326,7 +326,7 @@ const RideHistoryScreen = () => {
       const passengerName = ride.passenger
         ? `${ride.passenger.firstName} ${ride.passenger.lastName}`.trim()
         : 'Passenger';
-      const fareAmount = Math.round(ride.acceptedOffer?.offerAmount || ride.offerPrice || 0);
+      const fareAmount = Math.round((ride as any).acceptedOffer?.offerAmount || ride.offerPrice || 0);
 
       return (
         <TouchableOpacity
@@ -402,7 +402,7 @@ const RideHistoryScreen = () => {
                 {isCancelled ? 'NPR 0' : `NPR ${fareAmount}`}
               </Text>
               <Text style={styles.paymentMethodText}>
-                {ride.paymentMethod || 'Cash Payment'}
+                {(ride as any).paymentMethod || 'Cash Payment'}
               </Text>
             </View>
           </View>
@@ -488,7 +488,7 @@ const RideHistoryScreen = () => {
               {isCancelled ? '0' : Math.round(ride.offerPrice || 0)}
             </Text>
             <Text style={styles.paymentMethodText}>
-              {ride.paymentMethod || 'Cash Payment'}
+              {(ride as any).paymentMethod || 'Cash Payment'}
             </Text>
           </View>
         </View>

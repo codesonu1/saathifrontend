@@ -33,6 +33,7 @@ import { userRoleManager, useUserRole } from '@/services/userRoleManager';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import RaiseFareModal from '../../components/ui/RaiseFareModal';
+import notificationService from '@/services/notificationService';
 import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get('window');
@@ -124,10 +125,12 @@ const DriverSection = () => {
   const [showRaiseFareModal, setShowRaiseFareModal] = useState(false);
   const [selectedRideForRaise, setSelectedRideForRaise] = useState<Ride | null>(null);
   const [raiseFareLoading, setRaiseFareLoading] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [showLowBalanceModal, setShowLowBalanceModal] = useState<boolean>(false);
   const offerTimersRef = React.useRef<{ [rideId: string]: number }>({});
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
 
-  // 1-second live ticker to auto-expire driver offers after 2 minutes (120s) of no passenger response
+  // 1-second live ticker to auto-expire driver offers after 60 seconds of no passenger response
   useEffect(() => {
     const ticker = setInterval(() => {
       const now = Date.now();
@@ -135,8 +138,7 @@ const DriverSection = () => {
 
       Object.keys(offerTimersRef.current).forEach(rideId => {
         const createdAt = offerTimersRef.current[rideId];
-        if (createdAt && (now - createdAt >= 120000)) {
-          console.log(`DriverSection: Offer for ride ${rideId} expired after 2 minutes`);
+        if (createdAt && (now - createdAt >= 60000)) {
           delete offerTimersRef.current[rideId];
 
           setOfferLoading(prev => ({ ...prev, [rideId]: false }));
@@ -145,12 +147,31 @@ const DriverSection = () => {
           setPendingOfferId(null);
           setSelectedRideForRaise(null);
           setRaiseFareLoading(false);
-          showToast('Offer expired - no response from passenger after 2 minutes', 'info');
+          showToast('Offer expired - no response from passenger after 60 seconds', 'info');
         }
       });
     }, 1000);
 
     return () => clearInterval(ticker);
+  }, []);
+
+  const fetchWalletBalance = async () => {
+    try {
+      const response = await apiClient.get('/users/me');
+      const user = response.data?.data;
+      if (user) {
+        const bal = user.walletBalance ?? user.wallet ?? user.balance ?? 0;
+        const numericBal = Number(bal) || 0;
+        setWalletBalance(numericBal);
+        await notificationService.checkAndNotifyDriverBalance(numericBal);
+      }
+    } catch (e) {
+      console.warn('[DriverSection] Failed to fetch wallet balance:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchWalletBalance();
   }, []);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -502,7 +523,12 @@ const DriverSection = () => {
       };
       webSocketService.on('offerRejected', offerRejectedListener, 'driver');
       
-
+      const walletUpdatedListener = async (data: any) => {
+        if (!isMounted) return;
+        console.log('DriverSection: walletUpdated socket event received:', data);
+        await fetchWalletBalance();
+      };
+      webSocketService.on('walletUpdated', walletUpdatedListener, 'driver');
       
       // Cleanup function
       return () => {
@@ -512,6 +538,7 @@ const DriverSection = () => {
         if (offerCreatedListener) webSocketService.off('offerCreated', offerCreatedListener, 'driver');
         if (passengerCancelledListener) webSocketService.off('passengerCancelledRide', passengerCancelledListener, 'driver');
         if (offerRejectedListener) webSocketService.off('offerRejected', offerRejectedListener, 'driver');
+        webSocketService.off('walletUpdated', walletUpdatedListener, 'driver');
       };
       
     } catch (error) {
@@ -667,6 +694,12 @@ const DriverSection = () => {
   };
 
   const handleMakeOffer = async (ride: Ride) => {
+    // Check minimum wallet balance threshold (< रू 50)
+    if (walletBalance < 50) {
+      setShowLowBalanceModal(true);
+      return;
+    }
+
     // Prevent accepting multiple offers
     if (acceptedOfferId) {
       showToast('You have already accepted an offer. Please complete that ride first.', 'error');
@@ -749,6 +782,12 @@ const DriverSection = () => {
 
   // --- RAISE FARE HANDLERS ---
   const handleRaiseFare = (ride: Ride) => {
+    // Check minimum wallet balance threshold (< रू 50)
+    if (walletBalance < 50) {
+      setShowLowBalanceModal(true);
+      return;
+    }
+
     // Prevent making multiple offers for the same ride
     if (pendingOfferRideId === ride._id) {
       showToast('You have already made an offer for this ride. Please wait for passenger response.', 'error');
@@ -911,8 +950,19 @@ const DriverSection = () => {
     setShowBackConfirmation(false);
   };
 
-  const renderRideItem = ({ item }: { item: Ride }) => (
-    <View style={styles.rideCard}>
+  const renderRideItem = ({ item }: { item: Ride }) => {
+    const createdAtTime = item.createdAt ? new Date(item.createdAt).getTime() : nowTimestamp;
+    const elapsedSeconds = Math.max(0, Math.floor((nowTimestamp - createdAtTime) / 1000));
+    const remainingSeconds = Math.max(0, 60 - elapsedSeconds);
+    const progressPercent = Math.min(100, Math.max(0, (remainingSeconds / 60) * 100));
+
+    return (
+      <View style={styles.rideCard}>
+      {/* 60s Expiration Countdown Progress Bar */}
+      <View style={styles.cardCountdownBarContainer}>
+        <View style={[styles.cardCountdownBar, { width: `${progressPercent}%` }]} />
+      </View>
+
       <View style={styles.rideHeader}>
         <View style={styles.passengerInfo}>
           <ProfileImage 
@@ -1005,7 +1055,8 @@ const DriverSection = () => {
         </TouchableOpacity>
       </View>
     </View>
-  );
+    );
+  };
 
   // Periodic location update when online
   useEffect(() => {
@@ -1187,25 +1238,43 @@ const DriverSection = () => {
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>Driver Section</Text>
           </View>
+          <View style={styles.headerRightControls}>
+            <TouchableOpacity 
+              style={styles.walletHeaderBadge}
+              onPress={() => router.push('/(driver)/earnings')}
+              activeOpacity={0.8}
+            >
+              <MaterialIcons name="account-balance-wallet" size={16} color="#059669" />
+              <Text style={styles.walletHeaderBalance}>रू {walletBalance.toFixed(0)}</Text>
+            </TouchableOpacity>
+
+            <View style={styles.statusContainer}>
+              <Text style={styles.statusText}>{isOnline ? 'Online' : 'Offline'}</Text>
+              <View style={[styles.statusDot, isOnline && styles.statusDotOnline]} />
+            </View>
+          </View>
           <View style={styles.headerBackground}>
             <View style={styles.headerCircle} />
           </View>
         </View>
 
-
-        {/* KYC Not Complete Message */}
-        {!kycStatus && (
+        {/* KYC Not Complete Message - Only show if specifically unverified */}
+        {kycStatus !== null && kycStatus !== 'approved' && kycStatus !== 'verified' && (
           <View style={styles.kycIncompleteContainer}>
             <MaterialIcons name="warning" size={20} color="#FF9800" />
             <Text style={styles.kycIncompleteText}>
-              Complete your KYC verification to start accepting rides
+              {kycStatus === 'pending' 
+                ? 'Your KYC is under review by admin.' 
+                : 'Complete your KYC verification to start accepting rides.'}
             </Text>
             <TouchableOpacity 
               style={styles.kycActionButton}
               onPress={() => router.push('/(driver)/registration')}
               disabled={loading}
             >
-              <Text style={styles.kycActionButtonText}>Start KYC</Text>
+              <Text style={styles.kycActionButtonText}>
+                {kycStatus === 'pending' ? 'View Status' : 'Start KYC'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1216,12 +1285,6 @@ const DriverSection = () => {
             <MapView
               style={styles.map}
               initialRegion={{
-                latitude: currentLocation.lat,
-                longitude: currentLocation.lng,
-                latitudeDelta: 0.01,
-                longitudeDelta: 0.01,
-              }}
-              region={{
                 latitude: currentLocation.lat,
                 longitude: currentLocation.lng,
                 latitudeDelta: 0.01,
@@ -1416,6 +1479,20 @@ const DriverSection = () => {
           type="info"
         />
 
+        <ConfirmationModal
+          visible={showLowBalanceModal}
+          title="Low Wallet Balance"
+          message={`Your current wallet deposit is रू ${walletBalance.toFixed(0)}. Minimum रू 50 required to accept rides or make counter offers. Please recharge your wallet.`}
+          confirmText="View Wallet"
+          cancelText="Close"
+          onConfirm={() => {
+            setShowLowBalanceModal(false);
+            router.push('/(driver)/earnings');
+          }}
+          onCancel={() => setShowLowBalanceModal(false)}
+          type="primary"
+        />
+
         <RaiseFareModal
           visible={showRaiseFareModal}
           onClose={() => {
@@ -1493,6 +1570,27 @@ const styles = StyleSheet.create({
   menuButton: {
     padding: 8,
   },
+  headerRightControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  walletHeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ECFDF5',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    gap: 4,
+  },
+  walletHeaderBalance: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#059669',
+  },
   statusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1510,6 +1608,20 @@ const styles = StyleSheet.create({
   },
   statusDotOnline: {
     backgroundColor: '#4CAF50',
+  },
+  cardCountdownBarContainer: {
+    width: '100%',
+    height: 3,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 1.5,
+    overflow: 'hidden',
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  cardCountdownBar: {
+    height: '100%',
+    backgroundColor: '#BC001F',
+    borderRadius: 1.5,
   },
   mapContainer: {
     height: 250,

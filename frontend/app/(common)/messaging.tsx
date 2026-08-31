@@ -72,7 +72,7 @@ const MessagingScreen = () => {
 
   // --- WebSocket Setup ---
   useEffect(() => {
-    if (!rideId || !userId) return;
+    if (!rideId) return;
     
     let isMounted = true;
     setLoading(true);
@@ -82,6 +82,10 @@ const MessagingScreen = () => {
 
     async function connectSocket() {
       try {
+        const activeUserId = userId || (await getCurrentUserId());
+        if (activeUserId && !userId) {
+          setUserId(activeUserId);
+        }
         console.log('Messaging: Checking ride WebSocket connection for rideId:', rideId);
         
         // Check if already connected to the same ride

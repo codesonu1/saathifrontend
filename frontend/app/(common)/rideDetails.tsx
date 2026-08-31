@@ -1,6 +1,6 @@
 "use client"
 
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, StatusBar, ScrollView, Alert, ActivityIndicator, Image } from "react-native"
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, StatusBar, ScrollView, Alert, ActivityIndicator, Image, Platform } from "react-native"
 import MapView, { Marker, Polyline } from 'react-native-maps'
 import Icon from "react-native-vector-icons/MaterialIcons"
 import ProfileImage from '../../components/ProfileImage';

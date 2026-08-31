@@ -57,7 +57,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
     type: 'info',
   });
 
-  const searchTimeoutRef = useRef<number | null>(null);
+  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isPickupField = Boolean(
     (placeholder && (placeholder.toLowerCase().includes('current') || placeholder.toLowerCase().includes('pickup') || placeholder.toLowerCase().includes('from') || placeholder.toLowerCase().includes('kathmandu'))) ||
@@ -340,6 +340,7 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
             renderItem={renderSearchResult}
             keyExtractor={(item, index) => item.place_id || `place_${index}`}
             style={styles.resultsList}
+            keyboardShouldPersistTaps="handled"
             ListEmptyComponent={
               !loading && searchQuery.trim().length >= 2 ? (
                 <View style={styles.emptyState}>
@@ -348,47 +349,50 @@ const LocationSearch: React.FC<LocationSearchProps> = ({
                 </View>
               ) : null
             }
-            ListHeaderComponent={
-              <>
-                {recentLocations.length > 0 && (
-                  <View style={styles.savedAddressesSection}>
-                    <Text style={styles.sectionTitle}>{recentSectionTitle}</Text>
-                    {recentLocations.map((place, idx) => (
-                      <TouchableOpacity
-                        key={place.place_id || `rec_${idx}`}
-                        style={styles.savedAddress}
-                        onPress={() => handlePlaceSelect(place)}
-                      >
-                        <MaterialIcons name="location-on" size={20} color="#B7102A" />
-                        <View style={styles.savedAddressText}>
-                          <Text style={styles.savedAddressName}>{place.name}</Text>
-                          <Text style={styles.savedAddressAddress}>{place.structured_formatting?.secondary_text || place.address}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                    <View style={styles.divider} />
-                  </View>
-                )}
-                {showSavedAddresses && savedAddresses.length > 0 && (
-                  <View style={styles.savedAddressesSection}>
-                    <Text style={styles.sectionTitle}>Saved Addresses</Text>
-                    {savedAddresses.map((address) => (
-                      <TouchableOpacity
-                        key={address._id || address.name}
-                        style={styles.savedAddress}
-                        onPress={() => handleSavedAddressSelect(address)}
-                      >
-                        <MaterialIcons name="bookmark" size={20} color="#BC001F" />
-                        <View style={styles.savedAddressText}>
-                          <Text style={styles.savedAddressName}>{address.name}</Text>
-                          <Text style={styles.savedAddressAddress}>{address.address}</Text>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                    <View style={styles.divider} />
-                  </View>
-                )}
-              </>
+            ListHeaderComponent={null}
+            ListFooterComponent={
+              searchQuery.trim().length === 0 ? (
+                <>
+                  {recentLocations.length > 0 && (
+                    <View style={styles.savedAddressesSection}>
+                      <Text style={styles.sectionTitle}>{recentSectionTitle}</Text>
+                      {recentLocations.map((place, idx) => (
+                        <TouchableOpacity
+                          key={place.place_id || `rec_${idx}`}
+                          style={styles.savedAddress}
+                          onPress={() => handlePlaceSelect(place)}
+                        >
+                          <MaterialIcons name="location-on" size={20} color="#B7102A" />
+                          <View style={styles.savedAddressText}>
+                            <Text style={styles.savedAddressName}>{place.name}</Text>
+                            <Text style={styles.savedAddressAddress}>{place.structured_formatting?.secondary_text || place.address}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                      <View style={styles.divider} />
+                    </View>
+                  )}
+                  {showSavedAddresses && savedAddresses.length > 0 && (
+                    <View style={styles.savedAddressesSection}>
+                      <Text style={styles.sectionTitle}>Saved Addresses</Text>
+                      {savedAddresses.map((address) => (
+                        <TouchableOpacity
+                          key={address._id || address.name}
+                          style={styles.savedAddress}
+                          onPress={() => handleSavedAddressSelect(address)}
+                        >
+                          <MaterialIcons name="bookmark" size={20} color="#BC001F" />
+                          <View style={styles.savedAddressText}>
+                            <Text style={styles.savedAddressName}>{address.name}</Text>
+                            <Text style={styles.savedAddressAddress}>{address.address}</Text>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                      <View style={styles.divider} />
+                    </View>
+                  )}
+                </>
+              ) : null
             }
           />
         </View>

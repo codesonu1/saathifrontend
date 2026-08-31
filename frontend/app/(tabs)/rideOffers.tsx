@@ -191,7 +191,7 @@ const RideOffersScreen = () => {
   const [proposedFare, setProposedFare] = useState<number>(0);
   const [raisingFare, setRaisingFare] = useState<boolean>(false);
   const initialTimestampRef = useRef<number>(Date.now());
-  const [secondsRemaining, setSecondsRemaining] = useState<number>(120);
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(60);
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
 
   const currentFareNum = parseFloat(rideFare || fare || '0');
@@ -213,6 +213,8 @@ const RideOffersScreen = () => {
   useEffect(() => {
     const ticker = setInterval(() => {
       setNowTimestamp(Date.now());
+      const elapsed = Math.floor((Date.now() - initialTimestampRef.current) / 1000);
+      setSecondsRemaining(Math.max(0, 60 - elapsed));
     }, 1000);
     return () => clearInterval(ticker);
   }, []);
@@ -231,9 +233,9 @@ const RideOffersScreen = () => {
 
   const getOfferExpiryText = (createdAt: Date | string | number) => {
     const createdTime = new Date(createdAt).getTime();
-    if (isNaN(createdTime)) return 'Expires in 02:00';
+    if (isNaN(createdTime)) return 'Expires in 01:00';
     const elapsedSecs = Math.floor((nowTimestamp - createdTime) / 1000);
-    const remainingSecs = Math.max(0, 120 - elapsedSecs);
+    const remainingSecs = Math.max(0, 60 - elapsedSecs);
     if (remainingSecs <= 0) return 'Expired';
     const m = Math.floor(remainingSecs / 60);
     const s = remainingSecs % 60;
@@ -306,7 +308,7 @@ const RideOffersScreen = () => {
   useEffect(() => {
     if (!rideId) {
       showToast('No ride ID provided', 'error');
-      router.push('/(tabs)/');
+      router.push('/(tabs)' as any);
       return;
     }
     loadOffers();
@@ -502,7 +504,7 @@ const RideOffersScreen = () => {
         setRideCancelled(true);
         showToast('Ride request cancelled', 'info');
         setTimeout(() => {
-          router.replace('/(tabs)/');
+          router.replace('/(tabs)' as any);
         }, 800);
       } else {
         showToast('Unable to cancel ride request', 'error');
@@ -561,7 +563,7 @@ const RideOffersScreen = () => {
           if (cancelledRideId === rideId) {
             showToast('Ride request has been cancelled', 'info');
             setTimeout(() => {
-              router.push('/(tabs)/');
+              router.push('/(tabs)' as any);
             }, 1500);
           }
         }
@@ -710,7 +712,7 @@ const RideOffersScreen = () => {
           <View style={{ flex: 1 }}>
             <Text style={styles.raiseFareTitle}>No driver offers received yet</Text>
             <Text style={styles.raiseFareSubtitle}>
-              2 minutes passed with no responses. You can increase your offer or keep waiting at your current price.
+              60 seconds passed with no responses. You can increase your offer or keep waiting at your current price.
             </Text>
           </View>
         </View>
@@ -721,7 +723,7 @@ const RideOffersScreen = () => {
           <Text style={styles.currentOfferValue}>रू {currentFareNum.toFixed(0)}</Text>
         </View>
 
-        {/* Interactive Price Stepper (- / Proposed Amount / +) */}
+        {/* Interactive Price Stepper (- / Direct TextInput / +) */}
         <View style={styles.stepperContainer}>
           <TouchableOpacity
             style={[
@@ -737,7 +739,19 @@ const RideOffersScreen = () => {
 
           <View style={styles.proposedFareBox}>
             <Text style={styles.proposedFarePrefix}>रू</Text>
-            <Text style={styles.proposedFareValue}>{activeProposedFare.toFixed(0)}</Text>
+            <TextInput
+              style={styles.proposedFareInput}
+              value={activeProposedFare > 0 ? String(Math.round(activeProposedFare)) : ''}
+              onChangeText={(text) => {
+                const numericVal = parseFloat(text.replace(/[^0-9]/g, '')) || 0;
+                setProposedFare(numericVal);
+              }}
+              keyboardType="numeric"
+              placeholder={String(currentFareNum)}
+              placeholderTextColor="#999999"
+              selectTextOnFocus
+              maxLength={6}
+            />
           </View>
 
           <TouchableOpacity
@@ -920,7 +934,7 @@ const RideOffersScreen = () => {
           style={styles.activeTabItem}
           onPress={() => {
             setShowCancelConfirmation(false);
-            router.push('/(tabs)/');
+            router.push('/(tabs)' as any);
           }}
         >
           <Ionicons name="home" size={18} color="#FFFFFF" />
@@ -1417,6 +1431,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '800',
     color: '#191C1D',
+  },
+  proposedFareInput: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#191C1D',
+    minWidth: 70,
+    textAlign: 'center',
+    padding: 0,
   },
   quickAddRow: {
     flexDirection: 'row',

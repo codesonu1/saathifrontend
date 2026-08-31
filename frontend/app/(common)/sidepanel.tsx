@@ -84,7 +84,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
       if (newRole === "driver") {
         router.push("/(driver)");
       } else {
-        router.push("/(tabs)/");
+        router.push("/(tabs)" as any);
       }
       onClose();
     } else {

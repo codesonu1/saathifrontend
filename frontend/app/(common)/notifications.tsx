@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,44 +9,30 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+
+import { notificationService, NotificationItem, NotificationType } from '@/services/notificationService';
+import { userRoleManager } from '@/services/userRoleManager';
 import websocketService from '@/services/websocketService';
 import apiClient from '@/services/apiClient';
 import Toast from '../../components/ui/Toast';
-import { userRoleManager, useUserRole } from '@/services/userRoleManager';
-import * as Haptics from 'expo-haptics';
 
-interface NotificationItem {
-  id: string;
-  type: string;
-  title: string;
-  message: string;
-  time: string;
-  icon: string;
-  iconColor: string;
-  unread: boolean;
-  createdAt?: Date;
-}
+type FilterTab = 'all' | 'rides' | 'wallet';
 
-const PASSENGER_NOTIFICATIONS: NotificationItem[] = [];
-
-const DRIVER_NOTIFICATIONS: NotificationItem[] = [];
-
-const Notifications = () => {
+const NotificationsScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
-  const bottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 10);
-  const userRole = useUserRole();
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const topPadding = Math.max(insets.top + (Platform.OS === 'android' ? 8 : 4), 36);
+  const bottomPadding = Math.max(insets.bottom + 16, 24);
 
-  useEffect(() => {
-    setNotifications([]);
-  }, [userRole]);
+  const [currentRole, setCurrentRole] = useState<'driver' | 'passenger'>('passenger');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [activeTab, setActiveTab] = useState<FilterTab>('all');
   
   const [toast, setToast] = useState<{
     visible: boolean;
@@ -65,203 +51,356 @@ const Notifications = () => {
     else Haptics.selectionAsync();
   };
 
-  const hideToast = () => setToast(prev => ({ ...prev, visible: false }));
+  const hideToast = () => setToast((prev) => ({ ...prev, visible: false }));
 
-  const handleBackPress = () => {
-    router.back();
-  };
+  const loadNotifications = useCallback(async () => {
+    try {
+      const role = await userRoleManager.getRole();
+      setCurrentRole(role);
+      if (role === 'passenger' && activeTab === 'wallet') {
+        setActiveTab('all');
+      }
+      const items = await notificationService.getNotifications(role);
+      setNotifications(items);
+    } catch (error) {
+      console.warn('[Notifications] Error loading items:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeTab]);
 
-  const handleMarkAllRead = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setNotifications(prev => prev.map(n => ({ ...n, unread: false })));
-    showToast('All notifications marked as read', 'success');
-  };
-
-  const handleClearAll = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setNotifications([]);
-    showToast('All notifications cleared', 'info');
-  };
-
-  const toggleNotificationRead = (id: string) => {
-    Haptics.selectionAsync();
-    setNotifications(prev =>
-      prev.map(n => (n.id === id ? { ...n, unread: !n.unread } : n))
-    );
-  };
-
-  const deleteNotification = (id: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setNotifications(prev => prev.filter(n => n.id !== id));
-    showToast('Notification deleted', 'info');
-  };
-
-  // Get current user ID on component mount
   useEffect(() => {
-    const getCurrentUser = async () => {
+    loadNotifications();
+    const unsubscribe = notificationService.subscribe(() => {
+      loadNotifications();
+    });
+    return () => unsubscribe();
+  }, [loadNotifications]);
+
+  // Fetch current user & initialize role
+  useEffect(() => {
+    const fetchUser = async () => {
       try {
-        setLoading(true);
-        const response = await apiClient.get('me');
-        if (response.data.data && response.data.data.id) {
-          setCurrentUserId(response.data.data.id);
-          console.log('Notifications: Current user ID set:', response.data.data.id);
+        const role = userRoleManager.getRole();
+        setCurrentRole(role);
+
+        const response = await apiClient.get('/users/me');
+        if (response.data?.data?._id || response.data?.data?.id) {
+          const uId = response.data.data._id || response.data.data.id;
+          setCurrentUserId(uId);
+
+          // Driver balance check (triggers single non-looping notification when low or zero)
+          if (role === 'driver') {
+            const bal = response.data.data.walletBalance ?? response.data.data.wallet ?? response.data.data.balance ?? 100;
+            await notificationService.checkAndNotifyDriverBalance(Number(bal) || 0);
+          }
         }
-      } catch (error) {
-        console.error('Notifications: Failed to get current user:', error);
-      } finally {
-        setLoading(false);
+      } catch (err) {
+        console.warn('[Notifications] Failed to load current user:', err);
       }
     };
-    getCurrentUser();
+    fetchUser();
   }, []);
 
+  // Listen to live WebSocket events to capture real-time notifications
   useEffect(() => {
     let isMounted = true;
-    let rideCompletedListener: any;
 
-    async function setupWebSocket() {
+    const setupSocketListeners = async () => {
       try {
-        const userRole = await userRoleManager.getRole();
-        if (userRole === 'driver') {
-          await websocketService.connect(undefined, 'driver');
-        } else {
-          await websocketService.connect(undefined, 'passenger');
-        }
-        
-        rideCompletedListener = (data: any) => {
-          if (!currentUserId) {
-            console.log('Notifications: No current user ID available, skipping notification');
-            return;
-          }
+        const role = userRoleManager.getRole();
+        setCurrentRole(role);
 
+        // Driver-only notifications
+        if (role === 'driver') {
+          const handleNewRideRequest = (data: any) => {
+            if (!isMounted) return;
+            const ride = data?.data || data;
+            notificationService.addNotification({
+              type: 'ride_request',
+              title: 'New Ride Request Nearby',
+              message: `Pickup: ${ride?.pickUp?.location || ride?.pickUpLocation || 'Nearby'} • Fare: रू ${ride?.offerPrice || ride?.fare || 150}`,
+              role: 'driver',
+              actionRoute: '/(driver)/driverSection',
+            });
+          };
+
+          const handleOfferAccepted = (data: any) => {
+            if (!isMounted) return;
+            const ride = data?.data?.ride || data?.ride || data?.data;
+            notificationService.addNotification({
+              type: 'ride_accepted',
+              title: 'Ride Offer Accepted',
+              message: 'Passenger accepted your offer! Tap to view live trip route.',
+              role: 'driver',
+              actionRoute: '/(common)/rideTracker',
+              actionParams: { rideId: ride?._id || data?.rideId },
+            });
+          };
+
+          const handleWalletUpdated = (data: any) => {
+            if (!isMounted) return;
+            const payload = data?.data || data;
+            const isCredit = payload?.type === 'credit' || payload?.amount > 0;
+            notificationService.addNotification({
+              type: isCredit ? 'wallet_credit' : 'wallet_debit',
+              title: isCredit ? 'Wallet Balance Credited' : 'Wallet Deduction',
+              message: isCredit
+                ? `रू ${payload?.amount || 0} has been added to your account by Admin.`
+                : `रू ${payload?.amount || 0} deducted for ride commission.`,
+              role: 'driver',
+            });
+          };
+
+          websocketService.on('newRideRequest', handleNewRideRequest, 'driver');
+          websocketService.on('offerAccepted', handleOfferAccepted, 'driver');
+          websocketService.on('walletUpdated', handleWalletUpdated, 'driver');
+        }
+
+        // Passenger-only notifications
+        if (role === 'passenger') {
+          const handleDriverArrived = (data: any) => {
+            if (!isMounted) return;
+            notificationService.addNotification({
+              type: 'driver_arrived',
+              title: 'Driver Has Arrived',
+              message: 'Your driver has arrived at the pickup location.',
+              role: 'passenger',
+              actionRoute: '/(common)/rideTracker',
+              actionParams: { rideId: data?.rideId },
+            });
+          };
+          websocketService.on('driverArrived', handleDriverArrived, 'ride');
+        }
+
+        // Shared completion notification
+        const handleRideCompleted = (data: any) => {
+          if (!isMounted) return;
           const rideData = data?.data || data;
-          const ridePassengerId = rideData?.passengerId || rideData?.passenger?.id || rideData?.passenger?._id;
-          const rideDriverId = rideData?.driverId || rideData?.driver?.id || rideData?.driver?._id;
-          
-          console.log('Notifications: Ride completed event received:', data);
-          
-          const isMyRide = ridePassengerId === currentUserId || rideDriverId === currentUserId;
-          
-          if (isMyRide && isMounted) {
-            console.log('Notifications: Adding notification for my completed ride');
-            const newNotif: NotificationItem = {
-              id: 'live_' + Date.now(),
-              type: 'ride_completed',
-              title: 'Ride Completed',
-              message: userRole === 'driver'
-                ? (data.message || `You completed the ride successfully. Earned रू ${rideData?.acceptedOffer?.offerAmount || 150}.`)
-                : (data.message || `Your trip has been completed successfully.`),
-              time: 'Just now',
-              icon: 'check-circle',
-              iconColor: '#4CAF50',
-              unread: true,
-              createdAt: new Date(),
-            };
-            setNotifications(prev => [newNotif, ...prev]);
-            showToast('New notification: Ride Completed', 'info');
-          }
+          const isDriver = role === 'driver';
+          notificationService.addNotification({
+            type: 'ride_completed',
+            title: 'Trip Completed',
+            message: isDriver
+              ? `Ride completed successfully. Earned रू ${rideData?.acceptedOffer?.offerAmount || rideData?.offerPrice || 150}.`
+              : 'You have arrived at your destination. Thank you for riding with Saathi.',
+            role: isDriver ? 'driver' : 'passenger',
+            actionRoute: '/(tabs)/rideRate',
+            actionParams: { rideId: rideData?._id || data?.rideId },
+          });
         };
 
-        websocketService.on('rideCompleted', rideCompletedListener);
-        websocketService.on('error', (err) => {
-          showToast('WebSocket error: ' + (err?.message || 'Unknown error'), 'error');
-        });
+        websocketService.on('rideCompleted', handleRideCompleted);
       } catch (err) {
-        showToast('WebSocket connection failed', 'error');
+        console.warn('[Notifications] Socket setup error:', err);
       }
-    }
+    };
 
-    if (currentUserId) {
-      setupWebSocket();
-    }
+    setupSocketListeners();
 
     return () => {
       isMounted = false;
-      if (rideCompletedListener) {
-        websocketService.off('rideCompleted', rideCompletedListener);
-      }
-      websocketService.off('error');
     };
-  }, [currentUserId]);
+  }, []);
 
-  const renderNotificationItem = ({ item }: { item: NotificationItem }) => (
-    <TouchableOpacity
-      style={[styles.card, item.unread && styles.unreadCard]}
-      onPress={() => toggleNotificationRead(item.id)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.iconContainer, { backgroundColor: item.iconColor + '15' }]}>
-        <Icon name={item.icon} size={24} color={item.iconColor} />
-      </View>
-      <View style={styles.textContainer}>
-        <View style={styles.cardHeader}>
-          <Text style={[styles.cardTitle, item.unread && styles.unreadText]}>{item.title}</Text>
-          <Text style={styles.timeText}>{item.time}</Text>
+  const handleMarkAllRead = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await notificationService.markAllAsRead(currentRole);
+    showToast('All marked as read', 'success');
+  };
+
+  const handleClearAll = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await notificationService.clearAll(currentRole);
+    showToast('All notifications cleared', 'info');
+  };
+
+  const handleNotificationPress = async (item: NotificationItem) => {
+    Haptics.selectionAsync();
+    await notificationService.markAsRead(item.id);
+    
+    if (item.actionRoute) {
+      router.push({
+        pathname: item.actionRoute as any,
+        params: item.actionParams,
+      });
+    }
+  };
+
+  const handleDeleteItem = async (id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await notificationService.deleteNotification(id);
+    showToast('Notification removed', 'info');
+  };
+
+  const filteredNotifications = notifications.filter((item) => {
+    if (activeTab === 'rides') {
+      return (
+        item.type === 'ride_request' ||
+        item.type === 'ride_accepted' ||
+        item.type === 'driver_arrived' ||
+        item.type === 'ride_started' ||
+        item.type === 'ride_completed' ||
+        item.type === 'ride_cancelled'
+      );
+    }
+    if (activeTab === 'wallet') {
+      return (
+        item.type === 'wallet_credit' ||
+        item.type === 'wallet_low' ||
+        item.type === 'wallet_zero' ||
+        item.type === 'wallet_debit'
+      );
+    }
+    return true;
+  });
+
+  const unreadCount = notifications.filter((n) => n.unread).length;
+
+  const renderItem = ({ item }: { item: NotificationItem }) => {
+    const isUnread = item.unread;
+    const timeFormatted = item.createdAt 
+      ? getTimeAgo(item.createdAt)
+      : item.time;
+
+    return (
+      <TouchableOpacity
+        style={[styles.card, isUnread && styles.unreadCard]}
+        onPress={() => handleNotificationPress(item)}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: `${item.iconColor}14` }]}>
+          <MaterialIcons name={item.icon as any} size={22} color={item.iconColor} />
         </View>
-        <Text style={styles.messageText} numberOfLines={2}>{item.message}</Text>
-      </View>
-      <View style={styles.actionContainer}>
-        {item.unread && <View style={styles.unreadDot} />}
-        <TouchableOpacity
-          style={styles.deleteButton}
-          onPress={() => deleteNotification(item.id)}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Icon name="delete-outline" size={18} color="#999" />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+
+        <View style={styles.textContainer}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={[styles.cardTitle, isUnread && styles.unreadTitle]} numberOfLines={1}>
+              {item.title}
+            </Text>
+            <Text style={styles.timeText}>{timeFormatted}</Text>
+          </View>
+          <Text style={styles.messageText} numberOfLines={2}>
+            {item.message}
+          </Text>
+        </View>
+
+        <View style={styles.actionContainer}>
+          {isUnread && <View style={styles.unreadDot} />}
+          <TouchableOpacity
+            style={styles.deleteButton}
+            onPress={() => handleDeleteItem(item.id)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="trash-outline" size={16} color="#94A3B8" />
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <Icon name="notifications-none" size={72} color="#CCC" />
-      <Text style={styles.emptyTitle}>You are all caught up!</Text>
-      <Text style={styles.emptySubtitle}>No new notifications at the moment.</Text>
+    <View style={styles.emptyStateContainer}>
+      <View style={styles.emptyIconCircle}>
+        <Ionicons name="notifications-off-outline" size={36} color="#94A3B8" />
+      </View>
+      <Text style={styles.emptyTitle}>No Notifications</Text>
+      <Text style={styles.emptySubtitle}>
+        {activeTab === 'all'
+          ? "You're all caught up! Important updates about rides and wallet will appear here."
+          : `No ${activeTab} notifications at the moment.`}
+      </Text>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#fff" />
-      
-      <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding, marginTop: 0 }]}>
-        <TouchableOpacity onPress={handleBackPress} style={styles.backButton}>
-          <Icon name="arrow-back" size={24} color="#333" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {/* Notch-Safe Header */}
+      <View style={[styles.header, { paddingTop: topPadding }]}>
+        <TouchableOpacity 
+          onPress={() => router.back()} 
+          style={styles.backButton}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={22} color="#0F172A" />
         </TouchableOpacity>
+
         <Text style={styles.headerTitle}>Notifications</Text>
+
         {notifications.length > 0 && (
-          <TouchableOpacity onPress={handleClearAll} style={styles.clearAllButton}>
+          <TouchableOpacity onPress={handleClearAll} style={styles.clearAllBtn}>
             <Text style={styles.clearAllText}>Clear All</Text>
           </TouchableOpacity>
         )}
       </View>
 
+      {/* Filter Tabs */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'all' && styles.activeTabButton]}
+          onPress={() => {
+            Haptics.selectionAsync();
+            setActiveTab('all');
+          }}
+        >
+          <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
+            All {unreadCount > 0 ? `(${unreadCount})` : ''}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabButton, activeTab === 'rides' && styles.activeTabButton]}
+          onPress={() => {
+            Haptics.selectionAsync();
+            setActiveTab('rides');
+          }}
+        >
+          <Text style={[styles.tabText, activeTab === 'rides' && styles.activeTabText]}>
+            Rides
+          </Text>
+        </TouchableOpacity>
+
+        {currentRole === 'driver' && (
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'wallet' && styles.activeTabButton]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setActiveTab('wallet');
+            }}
+          >
+            <Text style={[styles.tabText, activeTab === 'wallet' && styles.activeTabText]}>
+              Wallet & Credit
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {unreadCount > 0 && (
+          <TouchableOpacity 
+            style={styles.markReadAction} 
+            onPress={handleMarkAllRead}
+          >
+            <Ionicons name="checkmark-done" size={16} color="#BC001F" style={{ marginRight: 4 }} />
+            <Text style={styles.markReadActionText}>Mark Read</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Notifications List */}
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#BC001F" />
         </View>
       ) : (
-        <View style={{ flex: 1 }}>
-          {notifications.length > 0 && (
-            <View style={styles.subHeader}>
-              <Text style={styles.countText}>
-                {notifications.filter(n => n.unread).length} Unread
-              </Text>
-              <TouchableOpacity onPress={handleMarkAllRead}>
-                <Text style={styles.markReadText}>Mark all as read</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          <FlatList
-            data={notifications}
-            renderItem={renderNotificationItem}
-            keyExtractor={item => item.id}
-            contentContainerStyle={[styles.listContent, { paddingBottom: bottomPadding }]}
-            ListEmptyComponent={renderEmptyState}
-          />
-        </View>
+        <FlatList
+          data={filteredNotifications}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={[styles.listContent, { paddingBottom: bottomPadding }]}
+          ListEmptyComponent={renderEmptyState}
+          showsVerticalScrollIndicator={false}
+        />
       )}
 
       <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />
@@ -269,149 +408,198 @@ const Notifications = () => {
   );
 };
 
+function getTimeAgo(timestamp: number): string {
+  const diffSecs = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (diffSecs < 60) return 'Just now';
+  const diffMins = Math.floor(diffSecs / 60);
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays}d ago`;
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: '#F8FAFC',
   },
   header: {
-    marginTop: 33,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    backgroundColor: '#fff',
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#E9ECEF',
+    borderBottomColor: '#E2E8F0',
   },
   backButton: {
-    padding: 4,
+    padding: 6,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#0F172A',
     flex: 1,
-    marginLeft: 12,
+    marginLeft: 8,
   },
-  clearAllButton: {
+  clearAllBtn: {
     paddingVertical: 6,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
   },
   clearAllText: {
-    color: '#EA2F14',
-    fontSize: 14,
-    fontWeight: '500',
+    color: '#64748B',
+    fontSize: 13,
+    fontWeight: '600',
   },
-  subHeader: {
+  tabBar: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#F8F9FA',
+    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 8,
   },
-  countText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#666',
+  tabButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#F1F5F9',
   },
-  markReadText: {
-    fontSize: 14,
-    fontWeight: '500',
+  activeTabButton: {
+    backgroundColor: '#0F172A',
+  },
+  tabText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  activeTabText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  markReadAction: {
+    marginLeft: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  markReadActionText: {
     color: '#BC001F',
+    fontSize: 12,
+    fontWeight: '600',
   },
   listContent: {
     padding: 16,
-    paddingBottom: 32,
+    flexGrow: 1,
   },
   card: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    alignItems: 'flex-start',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    alignItems: 'center',
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: '#E9ECEF',
+    borderColor: '#E2E8F0',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 2,
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
   },
   unreadCard: {
-    backgroundColor: '#F0F9FF',
-    borderColor: '#B8E6E8',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#CBD5E1',
+    borderLeftWidth: 3,
+    borderLeftColor: '#BC001F',
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
+    marginTop: 2,
   },
   textContainer: {
     flex: 1,
-    justifyContent: 'center',
   },
-  cardHeader: {
+  cardHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'baseline',
+    alignItems: 'center',
     marginBottom: 4,
   },
   cardTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: '#444',
+    color: '#334155',
+    flex: 1,
+    marginRight: 8,
   },
-  unreadText: {
-    color: '#000',
+  unreadTitle: {
     fontWeight: '700',
+    color: '#0F172A',
   },
   timeText: {
     fontSize: 11,
-    color: '#999',
+    color: '#94A3B8',
+    fontWeight: '500',
   },
   messageText: {
     fontSize: 13,
-    color: '#666',
+    color: '#64748B',
     lineHeight: 18,
   },
   actionContainer: {
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     marginLeft: 8,
-    gap: 8,
+    alignSelf: 'stretch',
   },
   unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
     backgroundColor: '#BC001F',
   },
   deleteButton: {
+    marginTop: 'auto',
     padding: 4,
   },
-  emptyState: {
+  emptyStateContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 80,
+    paddingHorizontal: 24,
+  },
+  emptyIconCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 16,
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginBottom: 6,
   },
   emptySubtitle: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 13,
+    color: '#64748B',
     textAlign: 'center',
+    lineHeight: 18,
   },
   loadingContainer: {
     flex: 1,
@@ -420,4 +608,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Notifications;
+export default NotificationsScreen;
