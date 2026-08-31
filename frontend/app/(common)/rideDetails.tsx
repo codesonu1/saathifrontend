@@ -2,7 +2,7 @@
 
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, StatusBar, ScrollView, Alert, ActivityIndicator, Image, Platform } from "react-native"
 import MapView, { Marker, Polyline } from 'react-native-maps'
-import Icon from "react-native-vector-icons/MaterialIcons"
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import ProfileImage from '../../components/ProfileImage';
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useState, useEffect, useRef } from "react"

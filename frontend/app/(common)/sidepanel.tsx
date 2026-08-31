@@ -3,7 +3,7 @@
 import type React from "react"
 import { useRef, useEffect } from "react"
 import { View, Text, TouchableOpacity, StyleSheet, Animated, Dimensions } from "react-native"
-import Icon from "react-native-vector-icons/MaterialIcons"
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import { useRouter } from "expo-router"
 import { userRoleManager } from '@/services/userRoleManager';
 import webSocketService from '@/services/websocketService';
@@ -134,7 +134,7 @@ const SidePanel: React.FC<SidePanelProps> = ({ visible, onClose, role, rideInPro
                 style={[styles.menuItem, isActive && styles.activeMenuItem]}
                 onPress={item.action}
               >
-                <Icon name={item.icon} size={24} color={isActive ? "#BC001F" : "#333"} />
+                <Icon name={item.icon as any} size={24} color={isActive ? "#BC001F" : "#333"} />
                 <Text style={[styles.menuText, isActive && styles.activeMenuText]}>{item.name}</Text>
               </TouchableOpacity>
             );

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image, Alert, Dimensions, StatusBar, KeyboardAvoidingView, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useDriverRegistration } from '@/context/DriverRegistrationContext';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';

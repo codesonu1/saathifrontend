@@ -1,7 +1,7 @@
 "use client"
 
 import { View, Text, TouchableOpacity, StyleSheet, Linking, StatusBar, ScrollView, Platform } from "react-native"
-import Icon from "react-native-vector-icons/MaterialIcons"
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import { useRouter } from "expo-router"
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Constants from 'expo-constants';
@@ -143,7 +143,7 @@ export default function Support() {
             {supportOptions.map((option) => (
               <TouchableOpacity key={option.id} style={styles.optionCard} onPress={option.action}>
                 <View style={[styles.optionIcon, { backgroundColor: `${option.color}15` }]}>
-                  <Icon name={option.icon} size={24} color={option.color} />
+                  <Icon name={option.icon as any} size={24} color={option.color} />
                 </View>
                 <View style={styles.optionContent}>
                   <Text style={styles.optionTitle}>{option.title}</Text>
@@ -178,7 +178,7 @@ export default function Support() {
             {socialPlatforms.map((social) => (
               <TouchableOpacity key={social.name} style={styles.socialCard} onPress={() => handleLinkPress(social.url)}>
                 <View style={[styles.socialIcon, { backgroundColor: `${social.color}15` }]}>
-                  <Icon name={social.icon} size={24} color={social.color} />
+                  <Icon name={social.icon as any} size={24} color={social.color} />
                 </View>
                 <Text style={styles.socialName}>{social.name}</Text>
               </TouchableOpacity>

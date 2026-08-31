@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions, StatusBar, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useDriverRegistration } from '@/context/DriverRegistrationContext';

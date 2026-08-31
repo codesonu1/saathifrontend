@@ -13,7 +13,7 @@ import {
 } from "react-native"
 import { useRouter } from "expo-router"
 import { useSearchParams } from "expo-router/build/hooks"
-import Icon from "react-native-vector-icons/MaterialIcons"
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import apiClient from '@/services/apiClient'
 import ConfirmationModal from "../../components/ui/ConfirmationModal"
 import AsyncStorage from "@react-native-async-storage/async-storage"

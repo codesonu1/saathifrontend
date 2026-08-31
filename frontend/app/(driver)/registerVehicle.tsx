@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, ChevronRight} from 'lucide-react-native';
-import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useDriverRegistration } from '@/context/DriverRegistrationContext';
 import apiClient from '@/services/apiClient';
 import AppModal from '../../components/ui/AppModal';

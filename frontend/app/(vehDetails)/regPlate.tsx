@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Dimensions, StatusBar, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons as Icon } from '@expo/vector-icons';
 import { useDriverRegistration } from '@/context/DriverRegistrationContext';
 import AppModal from '../../components/ui/AppModal';
 

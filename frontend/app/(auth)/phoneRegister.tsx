@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Button } from 'react-native-paper';
 import { useRouter } from 'expo-router';
-import Icon from 'react-native-vector-icons/FontAwesome';
+import { FontAwesome as Icon } from '@expo/vector-icons';
 import apiClient from '@/services/apiClient';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';

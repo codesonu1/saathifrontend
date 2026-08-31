@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, TextInput, StatusBar, SafeAreaView, Animated, KeyboardAvoidingView, Platform, ScrollView } from "react-native"
-import Icon from "react-native-vector-icons/MaterialIcons"
+import { MaterialIcons as Icon } from '@expo/vector-icons'
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { rideService } from '@/services/rideService'

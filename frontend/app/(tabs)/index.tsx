@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { View, Text, StyleSheet, Dimensions, TouchableOpacity, ActivityIndicator, StatusBar, Platform, ScrollView, KeyboardAvoidingView, Animated, PanResponder, Switch, Keyboard, TextInput as RNTextInput } from "react-native"
 import { TextInput } from "react-native-paper"
-import Icon from "react-native-vector-icons/MaterialIcons"
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons'
+import { Ionicons, MaterialIcons, MaterialIcons as Icon, FontAwesome5 } from '@expo/vector-icons'
 import * as Location from 'expo-location'
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
