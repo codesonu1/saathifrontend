@@ -155,23 +155,66 @@ const DriverSection = () => {
     return () => clearInterval(ticker);
   }, []);
 
-  const fetchWalletBalance = async () => {
+  const extractBalanceFromUser = (target: any): number => {
+    if (!target) return 0;
+    const u = target.data?.user || target.data || target.user || target;
+    const candidate =
+      u.walletBalance ??
+      (typeof u.wallet === 'object' ? u.wallet?.balance : u.wallet) ??
+      u.balance ??
+      u.driver?.walletBalance ??
+      (typeof u.driver?.wallet === 'object' ? u.driver?.wallet?.balance : u.driver?.wallet) ??
+      u.driverProfile?.walletBalance ??
+      0;
+    return Number(candidate) || 0;
+  };
+
+  const fetchWalletBalance = async (): Promise<number> => {
     try {
       const response = await apiClient.get('/users/me');
-      const user = response.data?.data;
-      if (user) {
-        const bal = user.walletBalance ?? user.wallet ?? user.balance ?? 0;
-        const numericBal = Number(bal) || 0;
-        setWalletBalance(numericBal);
-        await notificationService.checkAndNotifyDriverBalance(numericBal);
+      let numericBal = extractBalanceFromUser(response.data);
+
+      // Fallback: check wallet-transactions ledger if profile balance returns 0
+      if (numericBal <= 0) {
+        try {
+          const txRes = await apiClient.get('wallet-transactions');
+          const txs = txRes.data?.data || [];
+          if (Array.isArray(txs) && txs.length > 0) {
+            let total = 0;
+            txs.forEach((tx: any) => {
+              const type = (tx.type || '').toLowerCase();
+              const amount = Number(tx.amount) || 0;
+              if (type === 'credit' || type === 'deposit' || type === 'topup' || type === 'admin_credit') {
+                total += amount;
+              } else if (type === 'debit' || type === 'commission' || type === 'withdrawal') {
+                total -= amount;
+              }
+            });
+            if (total > numericBal) {
+              numericBal = total;
+            }
+          }
+        } catch (txErr) {
+          // Ignore fallback error
+        }
       }
+
+      setWalletBalance(numericBal);
+      await notificationService.checkAndNotifyDriverBalance(numericBal);
+      return numericBal;
     } catch (e) {
       console.warn('[DriverSection] Failed to fetch wallet balance:', e);
+      return walletBalance;
     }
   };
 
   useEffect(() => {
     fetchWalletBalance();
+    // Auto-sync wallet balance with Admin every 15s
+    const walletSyncInterval = setInterval(() => {
+      fetchWalletBalance();
+    }, 15000);
+    return () => clearInterval(walletSyncInterval);
   }, []);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
@@ -555,6 +598,7 @@ const DriverSection = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    await fetchWalletBalance();
     if (isOnline) {
       await loadMyRides();
     }
@@ -694,8 +738,21 @@ const DriverSection = () => {
   };
 
   const handleMakeOffer = async (ride: Ride) => {
+    // Dynamic live balance verification:
+    let currentBal = walletBalance;
+    if (currentBal < 50) {
+      try {
+        const freshBal = await fetchWalletBalance();
+        if (typeof freshBal === 'number') {
+          currentBal = freshBal;
+        }
+      } catch (e) {
+        console.warn('Failed to verify fresh balance:', e);
+      }
+    }
+
     // Check minimum wallet balance threshold (< रू 50)
-    if (walletBalance < 50) {
+    if (currentBal < 50) {
       setShowLowBalanceModal(true);
       return;
     }
@@ -781,9 +838,22 @@ const DriverSection = () => {
   };
 
   // --- RAISE FARE HANDLERS ---
-  const handleRaiseFare = (ride: Ride) => {
+  const handleRaiseFare = async (ride: Ride) => {
+    // Dynamic live balance verification:
+    let currentBal = walletBalance;
+    if (currentBal < 50) {
+      try {
+        const freshBal = await fetchWalletBalance();
+        if (typeof freshBal === 'number') {
+          currentBal = freshBal;
+        }
+      } catch (e) {
+        console.warn('Failed to verify fresh balance:', e);
+      }
+    }
+
     // Check minimum wallet balance threshold (< रू 50)
-    if (walletBalance < 50) {
+    if (currentBal < 50) {
       setShowLowBalanceModal(true);
       return;
     }

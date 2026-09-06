@@ -87,13 +87,17 @@ const DriverEarningsScreen = () => {
       // 1. Fetch live user profile to get exact live wallet deposit balance from Admin
       try {
         const userResponse = await apiClient.get('/users/me');
-        if (userResponse.data?.data) {
-          const u = userResponse.data.data;
-          const liveBal = u.walletBalance ?? u.wallet ?? u.balance ?? 0;
-          const numericLiveBal = Number(liveBal) || 0;
-          setWalletBalance(numericLiveBal);
-          await notificationService.checkAndNotifyDriverBalance(numericLiveBal);
-        }
+        const target = userResponse.data?.data?.user || userResponse.data?.data || userResponse.data?.user || userResponse.data;
+        let liveBal =
+          target?.walletBalance ??
+          (typeof target?.wallet === 'object' ? target?.wallet?.balance : target?.wallet) ??
+          target?.balance ??
+          target?.driver?.walletBalance ??
+          (typeof target?.driver?.wallet === 'object' ? target?.driver?.wallet?.balance : target?.driver?.wallet) ??
+          0;
+        let numericLiveBal = Number(liveBal) || 0;
+        setWalletBalance(numericLiveBal);
+        await notificationService.checkAndNotifyDriverBalance(numericLiveBal);
       } catch (userErr) {
         console.warn('[Earnings] Failed to fetch current driver balance:', userErr);
       }
