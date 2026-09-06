@@ -34,6 +34,7 @@ import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import RaiseFareModal from '../../components/ui/RaiseFareModal';
 import notificationService from '@/services/notificationService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get('window');
@@ -217,10 +218,33 @@ const DriverSection = () => {
     return () => clearInterval(walletSyncInterval);
   }, []);
 
-  // Refresh balance every time driver screen gains focus (e.g. returning from earnings or other screens)
+  useEffect(() => {
+    const restoreOnline = async () => {
+      try {
+        const saved = await AsyncStorage.getItem('@saathi_driver_is_online');
+        if (saved === 'true') {
+          console.log('DriverSection: Restoring persisted online status');
+          setIsOnline(true);
+          onlineTargetRef.current = true;
+        }
+      } catch (e) {
+        console.warn('Failed to restore online state:', e);
+      }
+    };
+    restoreOnline();
+  }, []);
+
+  // Refresh balance & restore online state every time driver screen gains focus (e.g. returning from earnings or other screens)
   useFocusEffect(
     useCallback(() => {
       fetchWalletBalance();
+      AsyncStorage.getItem('@saathi_driver_is_online').then((val) => {
+        if (val === 'true') {
+          setIsOnline(true);
+          onlineTargetRef.current = true;
+          loadMyRides();
+        }
+      }).catch(() => {});
     }, [])
   );
 
@@ -676,11 +700,14 @@ const DriverSection = () => {
             longitude: location.longitude
           }, 'driver');
           
+          await AsyncStorage.setItem('@saathi_driver_is_online', 'true');
+
           if (onlineTargetRef.current === newStatus) {
             showToast('You are now online!', 'success');
           }
         } catch (error: any) {
           console.error('Driver: Failed to go online:', error.message);
+          await AsyncStorage.removeItem('@saathi_driver_is_online');
           if (onlineTargetRef.current === newStatus) {
             showToast('Failed to go online. Please check your connection and try again.', 'error');
             setIsOnline(false); // Revert
@@ -688,6 +715,7 @@ const DriverSection = () => {
           }
         }
       } else {
+        await AsyncStorage.removeItem('@saathi_driver_is_online');
         // Going offline - notify passengers
         if (pendingOfferRideId && pendingOfferId) {
           const driverId = await getCurrentUserId();
@@ -729,6 +757,7 @@ const DriverSection = () => {
       }
     } catch (error) {
       console.error('Driver: Error toggling online status:', error);
+      await AsyncStorage.removeItem('@saathi_driver_is_online');
       if (onlineTargetRef.current === newStatus) {
         showToast('Error changing online status', 'error');
         setIsOnline(!newStatus); // Revert on error
