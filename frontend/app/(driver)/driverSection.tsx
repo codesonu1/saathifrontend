@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -17,7 +17,7 @@ import {
   BackHandler,
 } from 'react-native';
 import * as Location from 'expo-location';
-import { useRouter, usePathname, useLocalSearchParams } from 'expo-router';
+import { useRouter, usePathname, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { MapPin, Navigation, Clock, User, Car, Map } from 'lucide-react-native';
@@ -216,6 +216,13 @@ const DriverSection = () => {
     }, 15000);
     return () => clearInterval(walletSyncInterval);
   }, []);
+
+  // Refresh balance every time driver screen gains focus (e.g. returning from earnings or other screens)
+  useFocusEffect(
+    useCallback(() => {
+      fetchWalletBalance();
+    }, [])
+  );
 
   const showToast = (message: string, type: 'success' | 'error' | 'info') => {
     setToast({ visible: true, message, type });
