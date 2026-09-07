@@ -172,32 +172,39 @@ const DriverSection = () => {
 
   const fetchWalletBalance = async (): Promise<number> => {
     try {
-      const response = await apiClient.get('/users/me');
-      let numericBal = extractBalanceFromUser(response.data);
+      let numericBal = 0;
 
-      // Fallback: check wallet-transactions ledger if profile balance returns 0
-      if (numericBal <= 0) {
-        try {
-          const txRes = await apiClient.get('wallet-transactions');
-          const txs = txRes.data?.data || [];
-          if (Array.isArray(txs) && txs.length > 0) {
-            let total = 0;
-            txs.forEach((tx: any) => {
-              const type = (tx.type || '').toLowerCase();
-              const amount = Number(tx.amount) || 0;
-              if (type === 'credit' || type === 'deposit' || type === 'topup' || type === 'admin_credit') {
-                total += amount;
-              } else if (type === 'debit' || type === 'commission' || type === 'withdrawal') {
-                total -= amount;
-              }
-            });
-            if (total > numericBal) {
-              numericBal = total;
+      // 1. Fetch user profile
+      try {
+        const response = await apiClient.get('/users/me');
+        numericBal = extractBalanceFromUser(response.data);
+      } catch (e) {
+        // Ignore user error
+      }
+
+      // 2. Fetch and compute dynamic ledger balance from wallet-transactions (Admin Credits - Commission Debits)
+      try {
+        const txRes = await apiClient.get('wallet-transactions');
+        const txs = txRes.data?.data || [];
+        if (Array.isArray(txs) && txs.length > 0) {
+          let credits = 0;
+          let debits = 0;
+          txs.forEach((tx: any) => {
+            const type = (tx.type || '').toLowerCase();
+            const amount = Math.abs(Number(tx.amount) || 0);
+            if (type === 'credit' || type === 'deposit' || type === 'topup' || type === 'admin_credit') {
+              credits += amount;
+            } else if (type === 'debit' || type === 'commission' || type === 'withdrawal') {
+              debits += amount;
             }
+          });
+          const ledgerBal = credits - debits;
+          if (numericBal <= 0 || ledgerBal > 0) {
+            numericBal = Math.max(0, ledgerBal);
           }
-        } catch (txErr) {
-          // Ignore fallback error
         }
+      } catch (txErr) {
+        // Ignore fallback error
       }
 
       setWalletBalance(numericBal);

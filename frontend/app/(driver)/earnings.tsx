@@ -83,6 +83,7 @@ const DriverEarningsScreen = () => {
   const fetchEarnings = async () => {
     try {
       await initializeApiClient();
+      let numericLiveBal = 0;
 
       // 1. Fetch live user profile to get exact live wallet deposit balance from Admin
       try {
@@ -95,9 +96,7 @@ const DriverEarningsScreen = () => {
           target?.driver?.walletBalance ??
           (typeof target?.driver?.wallet === 'object' ? target?.driver?.wallet?.balance : target?.driver?.wallet) ??
           0;
-        let numericLiveBal = Number(liveBal) || 0;
-        setWalletBalance(numericLiveBal);
-        await notificationService.checkAndNotifyDriverBalance(numericLiveBal);
+        numericLiveBal = Number(liveBal) || 0;
       } catch (userErr) {
         console.warn('[Earnings] Failed to fetch current driver balance:', userErr);
       }
@@ -122,14 +121,20 @@ const DriverEarningsScreen = () => {
         walletTransactions.forEach((tx: any) => {
           const type = (tx.type || '').toLowerCase();
           const amount = Math.abs(Number(tx.amount) || 0);
-          if (type === 'credit' || type === 'deposit') {
+          if (type === 'credit' || type === 'deposit' || type === 'topup' || type === 'admin_credit') {
             creditsSum += amount;
-          } else if (type === 'debit' || type === 'commission') {
+          } else if (type === 'debit' || type === 'commission' || type === 'withdrawal') {
             debitsSum += amount;
           }
         });
       }
       setTotalCreditsAdded(creditsSum);
+
+      // Set exact dynamic wallet balance (matches Admin Panel: Credits - Debits)
+      const calculatedNetWallet = creditsSum - debitsSum;
+      const finalWalletDeposit = numericLiveBal > 0 ? numericLiveBal : Math.max(0, calculatedNetWallet);
+      setWalletBalance(finalWalletDeposit);
+      await notificationService.checkAndNotifyDriverBalance(finalWalletDeposit);
 
       // 4. Fetch reward transactions (for bonus earnings)
       let rewardTransactions: any[] = [];
