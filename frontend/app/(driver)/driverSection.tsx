@@ -83,10 +83,10 @@ const DriverSection = () => {
   // Get current user role from global manager
   const insets = useSafeAreaInsets();
   const rawTop = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44);
-  const topPadding = Math.max(rawTop + 8, 36);
+  const topPadding = rawTop + 8;
 
-  // Driver mode states
-  const [isOnline, setIsOnline] = useState(false);
+  // Driver mode states - synchronously initialized from memory state
+  const [isOnline, setIsOnline] = useState<boolean>(() => userRoleManager.getDriverOnline());
   const onlineTargetRef = React.useRef(isOnline);
   
   // Keep onlineTargetRef updated when isOnline changes via other flows
@@ -98,7 +98,7 @@ const DriverSection = () => {
   const [myRides, setMyRides] = useState<Ride[]>([]);
   const [currentRide, setCurrentRide] = useState<Ride | null>(null);
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => !userRoleManager.getDriverOnline());
   const [refreshing, setRefreshing] = useState(false);
   const [stopLocationTracking, setStopLocationTracking] = useState<(() => void) | null>(null);
   const [kycStatus, setKycStatus] = useState<'pending' | 'approved' | 'rejected' | 'verified' | null>(null);
@@ -228,11 +228,13 @@ const DriverSection = () => {
   useEffect(() => {
     const restoreOnline = async () => {
       try {
-        const saved = await AsyncStorage.getItem('@saathi_driver_is_online');
+        const saved = (await AsyncStorage.getItem('@saathi_driver_is_online')) || (await AsyncStorage.getItem('driverOnlineState'));
         if (saved === 'true') {
           console.log('DriverSection: Restoring persisted online status');
+          await userRoleManager.setDriverOnline(true);
           setIsOnline(true);
           onlineTargetRef.current = true;
+          setLoading(false);
         }
       } catch (e) {
         console.warn('Failed to restore online state:', e);
@@ -245,13 +247,23 @@ const DriverSection = () => {
   useFocusEffect(
     useCallback(() => {
       fetchWalletBalance();
-      AsyncStorage.getItem('@saathi_driver_is_online').then((val) => {
-        if (val === 'true') {
-          setIsOnline(true);
-          onlineTargetRef.current = true;
-          loadMyRides();
-        }
-      }).catch(() => {});
+      const currentOnline = userRoleManager.getDriverOnline();
+      if (currentOnline) {
+        setIsOnline(true);
+        onlineTargetRef.current = true;
+        setLoading(false);
+        loadMyRides();
+      } else {
+        AsyncStorage.getItem('@saathi_driver_is_online').then((val) => {
+          if (val === 'true') {
+            userRoleManager.setDriverOnline(true);
+            setIsOnline(true);
+            onlineTargetRef.current = true;
+            setLoading(false);
+            loadMyRides();
+          }
+        }).catch(() => {});
+      }
     }, [])
   );
 
@@ -267,30 +279,31 @@ const DriverSection = () => {
   };
 
   useEffect(() => {
+    let cleanupSocket: (() => void) | null = null;
     if (isOnline) {
       startLocationTracking();
       loadMyRides();
-      setupWebSocket();
+      setupWebSocket().then((cleanup) => {
+        if (typeof cleanup === 'function') cleanupSocket = cleanup;
+      }).catch(() => {});
     } else {
-      setAvailableRides([]);
-      setMyRides([]);
-      // Stop location tracking when going offline
-      if (stopLocationTracking) {
-        stopLocationTracking();
-        setStopLocationTracking(null);
+      if (!userRoleManager.getDriverOnline()) {
+        setAvailableRides([]);
+        setMyRides([]);
+        // Stop location tracking when explicitly going offline
+        if (stopLocationTracking) {
+          stopLocationTracking();
+          setStopLocationTracking(null);
+        }
+        // Disconnect WebSocket when explicitly going offline
+        webSocketService.disconnect('driver');
       }
-      // Disconnect WebSocket when going offline
-      webSocketService.disconnect();
     }
 
     return () => {
-      // Clean up all event listeners when the effect re-runs or component unmounts
-      webSocketService.off('newRideRequest');
-      webSocketService.off('offerAccepted');
-      webSocketService.off('offerRejected');
-      webSocketService.off('rideCancelled');
-      webSocketService.off('rideUnavailable');
-      webSocketService.off('rideStatusUpdate');
+      if (cleanupSocket) {
+        cleanupSocket();
+      }
     };
   }, [isOnline]);
 
@@ -708,6 +721,7 @@ const DriverSection = () => {
           }, 'driver');
           
           await AsyncStorage.setItem('@saathi_driver_is_online', 'true');
+          await userRoleManager.setDriverOnline(true);
 
           if (onlineTargetRef.current === newStatus) {
             showToast('You are now online!', 'success');
@@ -715,6 +729,7 @@ const DriverSection = () => {
         } catch (error: any) {
           console.error('Driver: Failed to go online:', error.message);
           await AsyncStorage.removeItem('@saathi_driver_is_online');
+          await userRoleManager.setDriverOnline(false);
           if (onlineTargetRef.current === newStatus) {
             showToast('Failed to go online. Please check your connection and try again.', 'error');
             setIsOnline(false); // Revert
@@ -723,6 +738,7 @@ const DriverSection = () => {
         }
       } else {
         await AsyncStorage.removeItem('@saathi_driver_is_online');
+        await userRoleManager.setDriverOnline(false);
         // Going offline - notify passengers
         if (pendingOfferRideId && pendingOfferId) {
           const driverId = await getCurrentUserId();
@@ -765,6 +781,7 @@ const DriverSection = () => {
     } catch (error) {
       console.error('Driver: Error toggling online status:', error);
       await AsyncStorage.removeItem('@saathi_driver_is_online');
+      await userRoleManager.setDriverOnline(false);
       if (onlineTargetRef.current === newStatus) {
         showToast('Error changing online status', 'error');
         setIsOnline(!newStatus); // Revert on error
@@ -1347,7 +1364,7 @@ const DriverSection = () => {
         <StatusBar barStyle="light-content" backgroundColor="#BC001F" />
         
         {/* Header */}
-        <View style={[styles.header, { paddingTop: topPadding, height: 60 + topPadding, marginTop: 0 }]}>
+        <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>Driver Section</Text>
           </View>
@@ -1365,9 +1382,6 @@ const DriverSection = () => {
               <Text style={styles.statusText}>{isOnline ? 'Online' : 'Offline'}</Text>
               <View style={[styles.statusDot, isOnline && styles.statusDotOnline]} />
             </View>
-          </View>
-          <View style={styles.headerBackground}>
-            <View style={styles.headerCircle} />
           </View>
         </View>
 
@@ -1631,12 +1645,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
   },
   header: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 10,
-    paddingVertical: 16,
-    marginTop: 30,
+    paddingHorizontal: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EFEDF3',
+    zIndex: 10,
   },
   headerLeft: {
     flexDirection: 'row',
@@ -1654,31 +1671,12 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    marginTop: 8,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
-    color: '#000',
-    marginLeft: 20,
-  },
-  headerBackground: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#BC001F',
-    opacity: 0.1,
-    zIndex: -1,
-  },
-  headerCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#BC001F',
-    opacity: 0.1,
+    fontWeight: '700',
+    color: '#1E293B',
+    marginLeft: 4,
   },
   menuButton: {
     padding: 8,

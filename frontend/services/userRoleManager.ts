@@ -8,7 +8,7 @@ class UserRoleManager {
   private isDriverOnline = false;
   private onlineListeners: ((online: boolean) => void)[] = [];
   private static STORAGE_KEY = 'userRole';
-  private static DRIVER_ONLINE_KEY = 'driverOnlineState';
+  private static DRIVER_ONLINE_KEY = '@saathi_driver_is_online';
 
   // Call this once at app start
   async init() {
@@ -17,12 +17,13 @@ class UserRoleManager {
     if (stored === 'driver' || stored === 'passenger') {
       this.role = stored;
     }
-    const storedOnline = await AsyncStorage.getItem(UserRoleManager.DRIVER_ONLINE_KEY);
+    const storedOnline = (await AsyncStorage.getItem(UserRoleManager.DRIVER_ONLINE_KEY)) || (await AsyncStorage.getItem('driverOnlineState'));
     if (storedOnline === 'true') {
       this.isDriverOnline = true;
     }
     this.initialized = true;
     this.listeners.forEach((listener) => listener(this.role));
+    this.onlineListeners.forEach((listener) => listener(this.isDriverOnline));
   }
 
   async setRole(newRole: "driver" | "passenger") {
@@ -37,7 +38,13 @@ class UserRoleManager {
 
   async setDriverOnline(online: boolean) {
     this.isDriverOnline = online;
-    await AsyncStorage.setItem(UserRoleManager.DRIVER_ONLINE_KEY, online ? 'true' : 'false');
+    if (online) {
+      await AsyncStorage.setItem(UserRoleManager.DRIVER_ONLINE_KEY, 'true');
+      await AsyncStorage.setItem('driverOnlineState', 'true');
+    } else {
+      await AsyncStorage.removeItem(UserRoleManager.DRIVER_ONLINE_KEY);
+      await AsyncStorage.removeItem('driverOnlineState');
+    }
     this.onlineListeners.forEach((listener) => listener(online));
   }
 
@@ -51,6 +58,13 @@ class UserRoleManager {
       this.listeners = this.listeners.filter((l) => l !== listener);
     };
   }
+
+  subscribeOnline(listener: (online: boolean) => void) {
+    this.onlineListeners.push(listener);
+    return () => {
+      this.onlineListeners = this.onlineListeners.filter((l) => l !== listener);
+    };
+  }
 }
 
 export const userRoleManager = new UserRoleManager();
@@ -62,7 +76,6 @@ export async function getCurrentUserRole(): Promise<"driver" | "passenger"> {
   return 'passenger';
 }
 
-
 export function useUserRole() {
   const [role, setRole] = useState(userRoleManager.getRole());
   useEffect(() => {
@@ -70,4 +83,13 @@ export function useUserRole() {
     return unsubscribe;
   }, []);
   return role;
+}
+
+export function useDriverOnline() {
+  const [online, setOnline] = useState(userRoleManager.getDriverOnline());
+  useEffect(() => {
+    const unsubscribe = userRoleManager.subscribeOnline(setOnline);
+    return unsubscribe;
+  }, []);
+  return online;
 }

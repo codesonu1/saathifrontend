@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, Animated, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, Animated, StyleSheet, Dimensions, Platform, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 interface ToastProps {
   visible: boolean;
@@ -17,21 +18,27 @@ const Toast: React.FC<ToastProps> = ({
   onHide, 
   duration = 3000 
 }) => {
-  const translateY = useRef(new Animated.Value(-100)).current;
+  const insets = useSafeAreaInsets();
+  const topSafeOffset = insets.top > 0
+    ? insets.top + (Platform.OS === 'android' ? 10 : 8)
+    : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 10 : 48);
+
+  const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     if (visible) {
-      // Show toast
+      // Show toast with smooth spring animation
       Animated.parallel([
-        Animated.timing(translateY, {
+        Animated.spring(translateY, {
           toValue: 0,
-          duration: 300,
           useNativeDriver: true,
+          tension: 40,
+          friction: 8,
         }),
         Animated.timing(opacity, {
           toValue: 1,
-          duration: 300,
+          duration: 250,
           useNativeDriver: true,
         }),
       ]).start();
@@ -48,13 +55,13 @@ const Toast: React.FC<ToastProps> = ({
   const hideToast = () => {
     Animated.parallel([
       Animated.timing(translateY, {
-        toValue: -100,
-        duration: 300,
+        toValue: -120,
+        duration: 250,
         useNativeDriver: true,
       }),
       Animated.timing(opacity, {
         toValue: 0,
-        duration: 300,
+        duration: 250,
         useNativeDriver: true,
       }),
     ]).start(() => {
@@ -100,6 +107,7 @@ const Toast: React.FC<ToastProps> = ({
       style={[
         styles.container,
         {
+          top: topSafeOffset,
           transform: [{ translateY }],
           opacity,
           backgroundColor: toastStyle.backgroundColor,
@@ -121,21 +129,22 @@ const Toast: React.FC<ToastProps> = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 40,
-    left: 32,
-    right: 32,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    left: 16,
+    right: 16,
+    maxWidth: 480,
+    alignSelf: 'center',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     shadowColor: '#000',
     shadowOffset: {
       width: 0,
       height: 4,
     },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 8,
-    zIndex: 1000,
+    elevation: 9999,
+    zIndex: 99999,
   },
   content: {
     flexDirection: 'row',
@@ -144,7 +153,7 @@ const styles = StyleSheet.create({
   message: {
     color: '#FFFFFF',
     fontSize: 13,
-    fontWeight: '400',
+    fontWeight: '500',
     marginLeft: 8,
     flex: 1,
   },

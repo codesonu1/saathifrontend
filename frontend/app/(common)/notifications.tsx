@@ -102,106 +102,7 @@ const NotificationsScreen = () => {
     fetchUser();
   }, []);
 
-  // Listen to live WebSocket events to capture real-time notifications
-  useEffect(() => {
-    let isMounted = true;
 
-    const setupSocketListeners = async () => {
-      try {
-        const role = userRoleManager.getRole();
-        setCurrentRole(role);
-
-        // Driver-only notifications
-        if (role === 'driver') {
-          const handleNewRideRequest = (data: any) => {
-            if (!isMounted) return;
-            const ride = data?.data || data;
-            notificationService.addNotification({
-              type: 'ride_request',
-              title: 'New Ride Request Nearby',
-              message: `Pickup: ${ride?.pickUp?.location || ride?.pickUpLocation || 'Nearby'} • Fare: रू ${ride?.offerPrice || ride?.fare || 150}`,
-              role: 'driver',
-              actionRoute: '/(driver)/driverSection',
-            });
-          };
-
-          const handleOfferAccepted = (data: any) => {
-            if (!isMounted) return;
-            const ride = data?.data?.ride || data?.ride || data?.data;
-            notificationService.addNotification({
-              type: 'ride_accepted',
-              title: 'Ride Offer Accepted',
-              message: 'Passenger accepted your offer! Tap to view live trip route.',
-              role: 'driver',
-              actionRoute: '/(common)/rideTracker',
-              actionParams: { rideId: ride?._id || data?.rideId },
-            });
-          };
-
-          const handleWalletUpdated = (data: any) => {
-            if (!isMounted) return;
-            const payload = data?.data || data;
-            const isCredit = payload?.type === 'credit' || payload?.amount > 0;
-            notificationService.addNotification({
-              type: isCredit ? 'wallet_credit' : 'wallet_debit',
-              title: isCredit ? 'Wallet Balance Credited' : 'Wallet Deduction',
-              message: isCredit
-                ? `रू ${payload?.amount || 0} has been added to your account by Admin.`
-                : `रू ${payload?.amount || 0} deducted for ride commission.`,
-              role: 'driver',
-            });
-          };
-
-          websocketService.on('newRideRequest', handleNewRideRequest, 'driver');
-          websocketService.on('offerAccepted', handleOfferAccepted, 'driver');
-          websocketService.on('walletUpdated', handleWalletUpdated, 'driver');
-        }
-
-        // Passenger-only notifications
-        if (role === 'passenger') {
-          const handleDriverArrived = (data: any) => {
-            if (!isMounted) return;
-            notificationService.addNotification({
-              type: 'driver_arrived',
-              title: 'Driver Has Arrived',
-              message: 'Your driver has arrived at the pickup location.',
-              role: 'passenger',
-              actionRoute: '/(common)/rideTracker',
-              actionParams: { rideId: data?.rideId },
-            });
-          };
-          websocketService.on('driverArrived', handleDriverArrived, 'ride');
-        }
-
-        // Shared completion notification
-        const handleRideCompleted = (data: any) => {
-          if (!isMounted) return;
-          const rideData = data?.data || data;
-          const isDriver = role === 'driver';
-          notificationService.addNotification({
-            type: 'ride_completed',
-            title: 'Trip Completed',
-            message: isDriver
-              ? `Ride completed successfully. Earned रू ${rideData?.acceptedOffer?.offerAmount || rideData?.offerPrice || 150}.`
-              : 'You have arrived at your destination. Thank you for riding with Saathi.',
-            role: isDriver ? 'driver' : 'passenger',
-            actionRoute: '/(tabs)/rideRate',
-            actionParams: { rideId: rideData?._id || data?.rideId },
-          });
-        };
-
-        websocketService.on('rideCompleted', handleRideCompleted);
-      } catch (err) {
-        console.warn('[Notifications] Socket setup error:', err);
-      }
-    };
-
-    setupSocketListeners();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const handleMarkAllRead = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -235,22 +136,10 @@ const NotificationsScreen = () => {
 
   const filteredNotifications = notifications.filter((item) => {
     if (activeTab === 'rides') {
-      return (
-        item.type === 'ride_request' ||
-        item.type === 'ride_accepted' ||
-        item.type === 'driver_arrived' ||
-        item.type === 'ride_started' ||
-        item.type === 'ride_completed' ||
-        item.type === 'ride_cancelled'
-      );
+      return item.type === 'ride_completed' || item.type === 'rating_received';
     }
     if (activeTab === 'wallet') {
-      return (
-        item.type === 'wallet_credit' ||
-        item.type === 'wallet_low' ||
-        item.type === 'wallet_zero' ||
-        item.type === 'wallet_debit'
-      );
+      return item.type.startsWith('wallet_');
     }
     return true;
   });
@@ -306,8 +195,10 @@ const NotificationsScreen = () => {
       </View>
       <Text style={styles.emptyTitle}>No Notifications</Text>
       <Text style={styles.emptySubtitle}>
-        {activeTab === 'all'
-          ? "You're all caught up! Important updates about rides and wallet will appear here."
+        {currentRole === 'passenger'
+          ? "You're all caught up! Completed ride receipts and summaries will appear here."
+          : activeTab === 'all'
+          ? "You're all caught up! Trip completions, ratings, and wallet updates will appear here."
           : `No ${activeTab} notifications at the moment.`}
       </Text>
     </View>
@@ -336,33 +227,33 @@ const NotificationsScreen = () => {
         )}
       </View>
 
-      {/* Filter Tabs */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'all' && styles.activeTabButton]}
-          onPress={() => {
-            Haptics.selectionAsync();
-            setActiveTab('all');
-          }}
-        >
-          <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
-            All {unreadCount > 0 ? `(${unreadCount})` : ''}
-          </Text>
-        </TouchableOpacity>
+      {/* Filter Tabs for Driver */}
+      {currentRole === 'driver' && (
+        <View style={styles.tabBar}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'all' && styles.activeTabButton]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setActiveTab('all');
+            }}
+          >
+            <Text style={[styles.tabText, activeTab === 'all' && styles.activeTabText]}>
+              All {unreadCount > 0 ? `(${unreadCount})` : ''}
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tabButton, activeTab === 'rides' && styles.activeTabButton]}
-          onPress={() => {
-            Haptics.selectionAsync();
-            setActiveTab('rides');
-          }}
-        >
-          <Text style={[styles.tabText, activeTab === 'rides' && styles.activeTabText]}>
-            Rides
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'rides' && styles.activeTabButton]}
+            onPress={() => {
+              Haptics.selectionAsync();
+              setActiveTab('rides');
+            }}
+          >
+            <Text style={[styles.tabText, activeTab === 'rides' && styles.activeTabText]}>
+              Rides & Ratings
+            </Text>
+          </TouchableOpacity>
 
-        {currentRole === 'driver' && (
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'wallet' && styles.activeTabButton]}
             onPress={() => {
@@ -374,18 +265,18 @@ const NotificationsScreen = () => {
               Wallet & Credit
             </Text>
           </TouchableOpacity>
-        )}
 
-        {unreadCount > 0 && (
-          <TouchableOpacity 
-            style={styles.markReadAction} 
-            onPress={handleMarkAllRead}
-          >
-            <Ionicons name="checkmark-done" size={16} color="#BC001F" style={{ marginRight: 4 }} />
-            <Text style={styles.markReadActionText}>Mark Read</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+          {unreadCount > 0 && (
+            <TouchableOpacity 
+              style={styles.markReadAction} 
+              onPress={handleMarkAllRead}
+            >
+              <Ionicons name="checkmark-done" size={16} color="#BC001F" style={{ marginRight: 4 }} />
+              <Text style={styles.markReadActionText}>Mark Read</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* Notifications List */}
       {loading ? (

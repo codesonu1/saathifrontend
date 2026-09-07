@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   BackHandler,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   KeyboardAvoidingView,
@@ -20,11 +19,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const CODE_LENGTH = 6;
 
 const VerifyScreen = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const topPadding = insets.top > 0 ? insets.top + 8 : (Platform.OS === 'android' ? 36 : 16);
+  const bottomPadding = insets.bottom > 0 ? insets.bottom + 12 : 24;
   const { mobile } = useLocalSearchParams();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -160,7 +163,7 @@ const VerifyScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
 
       <KeyboardAvoidingView
@@ -168,7 +171,10 @@ const VerifyScreen = () => {
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: topPadding, paddingBottom: bottomPadding }
+          ]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -293,7 +299,7 @@ const VerifyScreen = () => {
         onCancel={handleCancelBack}
         type="warning"
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -313,7 +319,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'android' ? 12 : 6,
+    paddingTop: 0,
     paddingBottom: 20,
   },
   backButton: {

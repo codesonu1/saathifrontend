@@ -75,9 +75,10 @@ const ProfileSettingsScreen = () => {
   const getFullImageUrl = (imageUrl: string | null | undefined) => {
     if (!imageUrl)
       return 'https://www.shutterstock.com/image-vector/default-avatar-photo-placeholder-grey-600nw-2007531536.jpg';
-    if (imageUrl.startsWith('http')) return imageUrl;
+    let clean = imageUrl.replace(/^undefined\/?/, '');
+    if (clean.startsWith('http')) return clean;
     const base = ASSET_BASE_URL.replace(/\/+$/, '');
-    const path = imageUrl.startsWith('/') ? imageUrl : `/${imageUrl}`;
+    const path = clean.startsWith('/') ? clean : `/${clean}`;
     return `${base}${path}`;
   };
 
@@ -376,7 +377,7 @@ const ProfileSettingsScreen = () => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" translucent={false} />
 
-      <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding }]}>
+      <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -391,7 +392,14 @@ const ProfileSettingsScreen = () => {
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPadding }]} showsVerticalScrollIndicator={false}>
         <View style={styles.heroSection}>
           <View style={styles.avatarWrapper}>
-            <Image style={styles.avatarImage} source={{ uri: imageUri }} />
+            <Image 
+              style={styles.avatarImage} 
+              source={{ uri: imageUri || 'https://www.shutterstock.com/image-vector/default-avatar-photo-placeholder-grey-600nw-2007531536.jpg' }} 
+              onError={() => {
+                console.warn('Failed to load avatar from URL, falling back to default:', imageUri);
+                setImageUri('https://www.shutterstock.com/image-vector/default-avatar-photo-placeholder-grey-600nw-2007531536.jpg');
+              }}
+            />
             <TouchableOpacity
               style={styles.editBadge}
               onPress={handleImageUpload}

@@ -76,10 +76,14 @@ const ProfileImage: React.FC<ProfileImageProps> = ({
   };
 
   const isValidImageUrl = (url: string) => {
-    return url && 
-           (url.startsWith('http') || url.startsWith('data:image')) && 
-           !url.includes('dicebear.com') && // Skip placeholder images
-           !imageError;
+    return Boolean(
+      url && 
+      !url.includes('undefined') &&
+      !url.includes('null') &&
+      (url.startsWith('http') || url.startsWith('data:image') || url.startsWith('file://')) && 
+      !url.includes('dicebear.com') && 
+      !imageError
+    );
   };
 
   // Reset error state when photoUrl changes

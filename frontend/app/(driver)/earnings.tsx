@@ -39,7 +39,7 @@ interface EarningsBreakdown {
 const DriverEarningsScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44);
   const bottomPadding = 90 + (insets.bottom > 0 ? insets.bottom : 10);
 
   const [sidePanelVisible, setSidePanelVisible] = useState(false);
@@ -251,7 +251,7 @@ const DriverEarningsScreen = () => {
       <StatusBar barStyle="dark-content" backgroundColor="#FAF8FE" translucent={false} />
 
       {/* Header */}
-      <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding }]}>
+      <View style={styles.header}>
         <View style={{ width: 24 }} />
         <Text style={styles.headerTitle}>Earnings</Text>
         <TouchableOpacity

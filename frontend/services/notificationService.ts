@@ -82,16 +82,20 @@ class NotificationService {
     if (!role) return [...this.notifications];
     
     if (role === 'passenger') {
-      // Passengers only see passenger-specific notifications (no wallet/credit or driver requests)
+      // Passenger ONLY sees: Trip Completed
       return this.notifications.filter(
-        (n) => n.role === 'passenger' && !n.type.startsWith('wallet_')
+        (n) => n.role === 'passenger' && n.type === 'ride_completed'
       );
     }
 
     if (role === 'driver') {
-      // Drivers see driver notifications and wallet alerts
+      // Driver ONLY sees: Trip Completed, Passenger Rating, and Wallet Low / Zero / Credit Alerts
       return this.notifications.filter(
-        (n) => n.role === 'driver' || n.type.startsWith('wallet_')
+        (n) =>
+          n.role === 'driver' &&
+          (n.type === 'ride_completed' ||
+           n.type === 'rating_received' ||
+           n.type.startsWith('wallet_'))
       );
     }
 
@@ -112,8 +116,25 @@ class NotificationService {
   }): Promise<NotificationItem> {
     await this.init();
 
-    // Auto-infer role if not provided
-    const targetRole = params.role || (params.type.startsWith('wallet_') || params.type === 'ride_request' || params.type === 'ride_accepted' ? 'driver' : 'passenger');
+    // Auto-infer target role
+    const targetRole =
+      params.role ||
+      (params.type.startsWith('wallet_') ||
+       params.type === 'rating_received' ||
+       params.type === 'ride_request' ||
+       params.type === 'ride_accepted'
+        ? 'driver'
+        : 'passenger');
+
+    // ONLY store important notifications in persistent inbox:
+    // - Passenger: Trip Completed
+    // - Driver: Trip Completed, Rating Received, Wallet Low/Zero/Credit
+    const isAllowedForStorage =
+      (targetRole === 'passenger' && params.type === 'ride_completed') ||
+      (targetRole === 'driver' &&
+        (params.type === 'ride_completed' ||
+         params.type === 'rating_received' ||
+         params.type.startsWith('wallet_')));
 
     const { icon, iconColor } = this.getDefaultVisuals(params.type, params.icon, params.iconColor);
 
@@ -132,9 +153,11 @@ class NotificationService {
       createdAt: Date.now(),
     };
 
-    this.notifications = [newNotif, ...this.notifications];
-    await this.save();
-    this.notifyListeners();
+    if (isAllowedForStorage) {
+      this.notifications = [newNotif, ...this.notifications];
+      await this.save();
+      this.notifyListeners();
+    }
 
     if (params.showBanner !== false) {
       DeviceEventEmitter.emit('showInteractiveNotification', {
@@ -164,7 +187,7 @@ class NotificationService {
   async markAllAsRead(role?: 'driver' | 'passenger'): Promise<void> {
     await this.init();
     this.notifications = this.notifications.map((n) => {
-      if (!role || !n.role || n.role === 'all' || n.role === role) {
+      if (!role || n.role === role) {
         return { ...n, unread: false };
       }
       return n;
@@ -185,19 +208,15 @@ class NotificationService {
     if (!role) {
       this.notifications = [];
     } else {
-      this.notifications = this.notifications.filter(
-        (n) => n.role && n.role !== 'all' && n.role !== role
-      );
+      this.notifications = this.notifications.filter((n) => n.role !== role);
     }
     await this.save();
     this.notifyListeners();
   }
 
   async getUnreadCount(role?: 'driver' | 'passenger'): Promise<number> {
-    await this.init();
-    return this.notifications.filter(
-      (n) => n.unread && (!role || !n.role || n.role === 'all' || n.role === role)
-    ).length;
+    const list = await this.getNotifications(role);
+    return list.filter((n) => n.unread).length;
   }
 
   /**

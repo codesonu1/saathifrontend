@@ -13,8 +13,8 @@ interface DriverBottomNavProps {
 const DriverBottomNav: React.FC<DriverBottomNavProps> = ({ activeTab, onEarningsPress }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const bottomPadding = insets.bottom > 0 ? insets.bottom : 6;
-  const navHeight = 56 + bottomPadding;
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 8);
+  const navHeight = 58 + bottomPadding;
   const [isDriverRegistered, setIsDriverRegistered] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -136,7 +136,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: Platform.OS === 'ios' ? 76 : 64,
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
@@ -145,19 +144,19 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 16,
     borderTopWidth: 1,
     borderTopColor: '#EFEDF3',
-    paddingBottom: Platform.OS === 'ios' ? 16 : 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 12,
-    elevation: 10,
+    elevation: 12,
     zIndex: 999,
   },
   navItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 6,
+    paddingTop: 8,
+    paddingBottom: 4,
   },
   navLabel: {
     fontSize: 12,

@@ -6,7 +6,6 @@ import {
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   KeyboardAvoidingView,
@@ -108,7 +107,7 @@ const PhoneLoginScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" />
 
       <KeyboardAvoidingView
@@ -223,7 +222,7 @@ const PhoneLoginScreen = () => {
         onCancel={handleCancelBack}
         type="warning"
       />
-    </SafeAreaView>
+    </View>
   );
 };
 
@@ -240,7 +239,7 @@ const styles = StyleSheet.create({
   },
   headerBar: {
     width: '100%',
-    paddingTop: Platform.OS === 'android' ? 12 : 6,
+    paddingTop: 0,
     paddingBottom: 8,
     alignItems: 'flex-start',
   },

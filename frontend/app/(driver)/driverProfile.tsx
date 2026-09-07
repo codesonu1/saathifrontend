@@ -33,7 +33,7 @@ const DEFAULT_BASE_URL = Constants.expoConfig?.extra?.DEFAULT_BASE_URL || 'https
 const DriverProfileScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44);
   const bottomPadding = 90 + (insets.bottom > 0 ? insets.bottom : 10);
 
   const [sidePanelVisible, setSidePanelVisible] = useState(false);
@@ -106,8 +106,11 @@ const DriverProfileScreen = () => {
   const getFullImageUrl = (imageUrl: string | null | undefined) => {
     if (!imageUrl)
       return 'https://www.shutterstock.com/image-vector/default-avatar-photo-placeholder-grey-600nw-2007531536.jpg';
-    if (imageUrl.startsWith('http')) return imageUrl;
-    return `${ASSET_BASE_URL}${imageUrl}`;
+    let clean = imageUrl.replace(/^undefined\/?/, '');
+    if (clean.startsWith('http')) return clean;
+    const base = ASSET_BASE_URL.replace(/\/+$/, '');
+    const path = clean.startsWith('/') ? clean : `/${clean}`;
+    return `${base}${path}`;
   };
 
   useEffect(() => {
@@ -248,12 +251,13 @@ const DriverProfileScreen = () => {
     });
 
     if (!pickerResult.canceled) {
+      const selectedUri = pickerResult.assets[0].uri;
+      setImageUri(selectedUri);
       setUploading(true);
       try {
-        const uri = pickerResult.assets[0].uri;
         const formData = new FormData();
         formData.append('file', {
-          uri: uri,
+          uri: selectedUri,
           type: 'image/jpeg',
           name: 'profile.jpg',
         } as any);
@@ -263,17 +267,22 @@ const DriverProfileScreen = () => {
         });
 
         if (uploadResponse.data.statusCode === 201) {
-          const imageUrl = uploadResponse.data.data.url;
-          let fixedImageUrl = imageUrl;
-          if (imageUrl.includes('localhost:3000')) {
-            fixedImageUrl = imageUrl.replace(DEFAULT_BASE_URL, ASSET_BASE_URL);
+          const rawUrl = uploadResponse.data.data.url;
+          let cleanUrl = rawUrl.replace(/^undefined\/?/, '');
+          if (cleanUrl.includes('localhost:3000')) {
+            cleanUrl = cleanUrl.replace(DEFAULT_BASE_URL, ASSET_BASE_URL);
+          }
+          if (!cleanUrl.startsWith('http')) {
+            const base = ASSET_BASE_URL.replace(/\/+$/, '');
+            cleanUrl = `${base}/${cleanUrl.replace(/^\/+/, '')}`;
           }
 
-          const profileUpdateData = { photo: fixedImageUrl };
+          const profileUpdateData = { photo: cleanUrl };
           const profileResponse = await apiClient.patch('me', profileUpdateData);
 
           if (profileResponse.data.statusCode === 200) {
-            const newUrl = getFullImageUrl(profileResponse.data.data.photo);
+            const newPhotoPath = profileResponse.data.data.photo || cleanUrl;
+            const newUrl = getFullImageUrl(newPhotoPath);
             setImageUri(newUrl);
             initialDataRef.current.imageUri = newUrl;
             showModal('success', 'Success', 'Profile photo updated successfully');
@@ -301,13 +310,14 @@ const DriverProfileScreen = () => {
   }
 
   const fullNameDisplay = `${name} ${lastName}`.trim() || 'Vardan Shah';
+  const DEFAULT_AVATAR = 'https://www.shutterstock.com/image-vector/default-avatar-photo-placeholder-grey-600nw-2007531536.jpg';
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FAF8FE" translucent={false} />
 
       {/* Fixed Top Header */}
-      <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding }]}>
+      <View style={styles.header}>
         <View style={{ width: 24 }} />
         <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity
@@ -326,7 +336,14 @@ const DriverProfileScreen = () => {
         {/* Profile Avatar & Header Section */}
         <View style={styles.avatarSection}>
           <View style={styles.avatarWrapper}>
-            <Image style={styles.avatarImage} source={{ uri: imageUri }} />
+            <Image 
+              style={styles.avatarImage} 
+              source={{ uri: imageUri || DEFAULT_AVATAR }} 
+              onError={() => {
+                console.warn('Failed to load avatar from URL, falling back to default:', imageUri);
+                setImageUri(DEFAULT_AVATAR);
+              }}
+            />
             <TouchableOpacity
               style={styles.editBadge}
               onPress={handleImageUpload}
