@@ -82,8 +82,7 @@ const DriverSection = () => {
   
   // Get current user role from global manager
   const insets = useSafeAreaInsets();
-  const rawTop = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44);
-  const topPadding = rawTop + 8;
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0);
 
   // Driver mode states - synchronously initialized from memory state
   const [isOnline, setIsOnline] = useState<boolean>(() => userRoleManager.getDriverOnline());
@@ -174,10 +173,13 @@ const DriverSection = () => {
     try {
       let numericBal = 0;
 
-      // 1. Fetch user profile
+      // 1. Fetch user profile from live me endpoint
       try {
-        const response = await apiClient.get('/users/me');
-        numericBal = extractBalanceFromUser(response.data);
+        const response = await apiClient.get('me');
+        const userBal = extractBalanceFromUser(response.data?.data || response.data);
+        if (typeof userBal === 'number' && userBal > 0) {
+          numericBal = userBal;
+        }
       } catch (e) {
         // Ignore user error
       }
@@ -200,7 +202,7 @@ const DriverSection = () => {
           });
           const ledgerBal = credits - debits;
           if (numericBal <= 0 || ledgerBal > 0) {
-            numericBal = Math.max(0, ledgerBal);
+            numericBal = Math.max(numericBal, ledgerBal);
           }
         }
       } catch (txErr) {
@@ -615,8 +617,25 @@ const DriverSection = () => {
           // showToast(data.message || 'Error processing offer rejection', 'error');
         }
       };
-      webSocketService.on('offerRejected', offerRejectedListener, 'driver');
-      
+      // Listen for ride unavailable (accepted by another driver)
+      const rideUnavailableListener = (data: any) => {
+        if (!isMounted) return;
+        const unavailableRideId = data?.data?.id || data?.data?.rideId || data?.id || data?.rideId;
+        console.log('DriverSection: rideUnavailable event received for ride:', unavailableRideId);
+        if (unavailableRideId) {
+          setAvailableRides(prev => prev.filter(r => r._id !== unavailableRideId));
+          if (pendingOfferRideId === unavailableRideId) {
+            setPendingOfferRideId(null);
+            setPendingOfferId(null);
+            setSelectedRideForRaise(null);
+            setRaiseFareLoading(false);
+            setOfferLoading(prev => ({ ...prev, [unavailableRideId]: false }));
+            showToast('Ride was accepted by another driver', 'info');
+          }
+        }
+      };
+      webSocketService.on('rideUnavailable', rideUnavailableListener, 'driver');
+
       const walletUpdatedListener = async (data: any) => {
         if (!isMounted) return;
         console.log('DriverSection: walletUpdated socket event received:', data);
@@ -632,6 +651,7 @@ const DriverSection = () => {
         if (offerCreatedListener) webSocketService.off('offerCreated', offerCreatedListener, 'driver');
         if (passengerCancelledListener) webSocketService.off('passengerCancelledRide', passengerCancelledListener, 'driver');
         if (offerRejectedListener) webSocketService.off('offerRejected', offerRejectedListener, 'driver');
+        webSocketService.off('rideUnavailable', rideUnavailableListener, 'driver');
         webSocketService.off('walletUpdated', walletUpdatedListener, 'driver');
       };
       
@@ -1360,11 +1380,11 @@ const DriverSection = () => {
   }, [isOnline, loading]);
 
   return (
-    <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#BC001F" />
+    <View style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={true} />
         
         {/* Header */}
-        <View style={styles.header}>
+        <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding }]}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>Driver Section</Text>
           </View>
@@ -1635,7 +1655,7 @@ const DriverSection = () => {
         />
 
         <DriverBottomNav activeTab="home" />
-      </SafeAreaView>
+      </View>
   );
 };
 

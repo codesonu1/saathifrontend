@@ -1,59 +1,28 @@
-import React, { useState, useEffect } from 'react';
+﻿import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import apiClient from '@/services/apiClient';
 
-interface DriverBottomNavProps {
-  activeTab: 'home' | 'activity' | 'earnings' | 'account';
-  onEarningsPress?: () => void;
+interface PassengerBottomNavProps {
+  activeTab: 'home' | 'history' | 'notifications' | 'profile';
 }
 
-const DriverBottomNav: React.FC<DriverBottomNavProps> = ({ activeTab, onEarningsPress }) => {
+const PassengerBottomNav: React.FC<PassengerBottomNavProps> = ({ activeTab }) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [isDriverRegistered, setIsDriverRegistered] = useState<boolean | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
-    const checkRegistrationStatus = async () => {
-      try {
-        const response = await apiClient.get('driver-profile');
-        if (isMounted) {
-          const hasProfile = Boolean(response?.data?.data && (response.data.data._id || response.data.data.id));
-          setIsDriverRegistered(hasProfile);
-        }
-      } catch (err) {
-        if (isMounted) setIsDriverRegistered(false);
-      }
-    };
-    checkRegistrationStatus();
-    return () => { isMounted = false; };
-  }, []);
-
-  const handleTabPress = (tab: 'home' | 'activity' | 'earnings' | 'account') => {
+  const handleTabPress = (tab: 'home' | 'history' | 'notifications' | 'profile') => {
     if (tab === activeTab) return;
 
-    // Block tab presses if driver registration is incomplete
-    if (isDriverRegistered === false) {
-      console.log('[DriverBottomNav] Driver registration incomplete. Blocking navigation to', tab);
-      router.push('/(driver)/registration' as any);
-      return;
-    }
-
     if (tab === 'home') {
-      router.push('/(driver)/driverSection' as any);
-    } else if (tab === 'activity') {
+      router.push('/(tabs)' as any);
+    } else if (tab === 'history') {
       router.push('/(common)/rideHistory' as any);
-    } else if (tab === 'earnings') {
-      if (onEarningsPress) {
-        onEarningsPress();
-      } else {
-        router.push('/(driver)/earnings' as any);
-      }
-    } else if (tab === 'account') {
-      router.push('/(driver)/driverProfile' as any);
+    } else if (tab === 'notifications') {
+      router.push('/(common)/notifications' as any);
+    } else if (tab === 'profile') {
+      router.push('/(common)/profile' as any);
     }
   };
 
@@ -76,8 +45,8 @@ const DriverBottomNav: React.FC<DriverBottomNavProps> = ({ activeTab, onEarnings
         </TouchableOpacity>
       )}
 
-      {/* History / Activity Tab */}
-      {activeTab === 'activity' ? (
+      {/* History Tab */}
+      {activeTab === 'history' ? (
         <TouchableOpacity style={styles.activeTabItem} activeOpacity={0.85}>
           <Ionicons name="time" size={18} color="#FFFFFF" />
           <Text style={styles.activeTabText}>History</Text>
@@ -85,7 +54,7 @@ const DriverBottomNav: React.FC<DriverBottomNavProps> = ({ activeTab, onEarnings
       ) : (
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => handleTabPress('activity')}
+          onPress={() => handleTabPress('history')}
           activeOpacity={0.75}
         >
           <Ionicons name="time-outline" size={20} color="#5B403F" />
@@ -93,25 +62,25 @@ const DriverBottomNav: React.FC<DriverBottomNavProps> = ({ activeTab, onEarnings
         </TouchableOpacity>
       )}
 
-      {/* Earnings Tab */}
-      {activeTab === 'earnings' ? (
+      {/* Notifications Tab */}
+      {activeTab === 'notifications' ? (
         <TouchableOpacity style={styles.activeTabItem} activeOpacity={0.85}>
-          <Ionicons name="wallet" size={18} color="#FFFFFF" />
-          <Text style={styles.activeTabText}>Earnings</Text>
+          <Ionicons name="notifications" size={18} color="#FFFFFF" />
+          <Text style={styles.activeTabText}>Notifications</Text>
         </TouchableOpacity>
       ) : (
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => handleTabPress('earnings')}
+          onPress={() => handleTabPress('notifications')}
           activeOpacity={0.75}
         >
-          <Ionicons name="wallet-outline" size={20} color="#5B403F" />
-          <Text style={styles.tabText}>Earnings</Text>
+          <Ionicons name="notifications-outline" size={20} color="#5B403F" />
+          <Text style={styles.tabText}>Notifications</Text>
         </TouchableOpacity>
       )}
 
-      {/* Profile / Account Tab */}
-      {activeTab === 'account' ? (
+      {/* Profile Tab */}
+      {activeTab === 'profile' ? (
         <TouchableOpacity style={styles.activeTabItem} activeOpacity={0.85}>
           <Ionicons name="person" size={18} color="#FFFFFF" />
           <Text style={styles.activeTabText}>Profile</Text>
@@ -119,7 +88,7 @@ const DriverBottomNav: React.FC<DriverBottomNavProps> = ({ activeTab, onEarnings
       ) : (
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => handleTabPress('account')}
+          onPress={() => handleTabPress('profile')}
           activeOpacity={0.75}
         >
           <Ionicons name="person-outline" size={20} color="#5B403F" />
@@ -130,7 +99,7 @@ const DriverBottomNav: React.FC<DriverBottomNavProps> = ({ activeTab, onEarnings
   );
 };
 
-export default DriverBottomNav;
+export default PassengerBottomNav;
 
 const styles = StyleSheet.create({
   bottomTabBar: {

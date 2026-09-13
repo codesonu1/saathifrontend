@@ -219,6 +219,8 @@ class NotificationService {
     return list.filter((n) => n.unread).length;
   }
 
+  private lastBalanceAlertTime = 0;
+
   /**
    * Checks driver balance and sends a one-time non-looping notification:
    * - Once when balance is low (< रू 50)
@@ -238,10 +240,17 @@ class NotificationService {
         return;
       }
 
+      // Enforce a 30-minute in-memory cooldown to completely prevent looping/spamming
+      const now = Date.now();
+      if (now - this.lastBalanceAlertTime < 30 * 60 * 1000) {
+        return;
+      }
+
       if (numBal <= 0) {
         // Zero balance: check if already notified
         const alreadyNotifiedZero = await AsyncStorage.getItem(NotificationService.ZERO_NOTIF_KEY);
         if (!alreadyNotifiedZero) {
+          this.lastBalanceAlertTime = now;
           await this.addNotification({
             type: 'wallet_zero',
             title: 'Zero Wallet Balance Alert',
@@ -260,6 +269,7 @@ class NotificationService {
         // Low balance (< 50): check if already notified
         const alreadyNotifiedLow = await AsyncStorage.getItem(NotificationService.LOW_NOTIF_KEY);
         if (!alreadyNotifiedLow) {
+          this.lastBalanceAlertTime = now;
           await this.addNotification({
             type: 'wallet_low',
             title: 'Low Wallet Balance',

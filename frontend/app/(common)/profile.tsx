@@ -30,7 +30,7 @@ const DEFAULT_BASE_URL = Constants.expoConfig?.extra?.DEFAULT_BASE_URL || 'https
 const ProfileSettingsScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0);
   const bottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 10);
 
   const activeRole = useUserRole();
@@ -100,21 +100,6 @@ const ProfileSettingsScreen = () => {
         setMobile(fetchedMobile);
         setImageUri(photoUrl);
 
-        // Bind Real Rating
-        if (typeof userData.rating === 'number' && userData.rating > 0) {
-          setRating(userData.rating);
-        } else {
-          setRating(null);
-        }
-
-        // Bind Real Review Count
-        const count = userData.totalReviews ?? userData.reviewsCount ?? userData.passengerRatingCount ?? userData.totalRides ?? null;
-        if (typeof count === 'number' && count >= 0) {
-          setTotalReviews(count);
-        } else {
-          setTotalReviews(null);
-        }
-
         // Bind Real Verification Status
         const verified = !!(
           userData.isVerified ||
@@ -123,6 +108,47 @@ const ProfileSettingsScreen = () => {
           userData.isPhoneVerified
         );
         setIsVerified(verified);
+
+        // Dynamically calculate passenger rating & review count from all-time ride history
+        try {
+          const ridesRes = await apiClient.get('/rides/passenger', {
+            params: { perPage: 1000 },
+          });
+          const rides = ridesRes.data?.data || ridesRes.data || [];
+          if (Array.isArray(rides)) {
+            const ratedRides = rides.filter(
+              (r: any) =>
+                r.passengerRating !== undefined &&
+                r.passengerRating !== null &&
+                Number(r.passengerRating) > 0
+            );
+            if (ratedRides.length > 0) {
+              setTotalReviews(ratedRides.length);
+              const avgRating =
+                ratedRides.reduce((sum: number, r: any) => sum + Number(r.passengerRating), 0) /
+                ratedRides.length;
+              if (avgRating > 0) {
+                setRating(Number(avgRating.toFixed(1)));
+              }
+            } else {
+              setTotalReviews(0);
+              const rawRating = userData.rating ?? userData.passengerRating ?? userData.avgRating;
+              if (typeof rawRating === 'number' && rawRating > 0) {
+                setRating(Number(rawRating.toFixed(1)));
+              } else {
+                setRating(5.0);
+              }
+            }
+          }
+        } catch (ridesErr) {
+          console.log('[PassengerProfile] Could not fetch passenger rides for reviews calculation:', ridesErr);
+          const rawRating = userData.rating ?? userData.passengerRating ?? userData.avgRating;
+          if (typeof rawRating === 'number' && rawRating > 0) {
+            setRating(Number(rawRating.toFixed(1)));
+          } else {
+            setRating(5.0);
+          }
+        }
 
         initialDataRef.current = {
           name: fetchedName,
@@ -141,21 +167,21 @@ const ProfileSettingsScreen = () => {
   }, [activeRole]);
 
   const isDirty =
-    name !== initialDataRef.current.name ||
-    lastName !== initialDataRef.current.lastName ||
-    email !== initialDataRef.current.email ||
-    imageUri !== initialDataRef.current.imageUri;
+    !loading &&
+    (name.trim() !== (initialDataRef.current.name || '').trim() ||
+      lastName.trim() !== (initialDataRef.current.lastName || '').trim() ||
+      email.trim().toLowerCase() !== (initialDataRef.current.email || '').trim().toLowerCase());
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updateUserDto = { firstName: name, lastName, email };
+      const updateUserDto = { firstName: name.trim(), lastName: lastName.trim(), email: email.trim() };
       const response = await apiClient.patch('me', updateUserDto);
       if (response.data.statusCode === 200) {
         initialDataRef.current = {
-          name,
-          lastName,
-          email,
+          name: name.trim(),
+          lastName: lastName.trim(),
+          email: email.trim(),
           imageUri,
         };
         showModal('success', 'Success', 'Profile updated successfully');
@@ -375,9 +401,9 @@ const ProfileSettingsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" translucent={false} />
+      <StatusBar barStyle="dark-content" backgroundColor="#F8F9FA" translucent={true} />
 
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topPadding + 4 }]}>
         <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
@@ -414,28 +440,23 @@ const ProfileSettingsScreen = () => {
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.heroName}>{fullNameDisplay}</Text>
-          {/* Rating & Verified Badges Row */}
-          <View style={styles.badgeRow}>
-            <View style={styles.ratingBadge}>
-              <MaterialIcons name="star" size={16} color="#FFB800" style={{ marginRight: 4 }} />
-              <Text style={styles.ratingText}>
-                {rating !== null ? rating.toFixed(1) : 'New'}
-              </Text>
-              <Text style={styles.ratingSubtext}>
-                {totalReviews !== null && totalReviews > 0
-                  ? ` (${totalReviews} ${totalReviews === 1 ? 'review' : 'reviews'})`
-                  : ' (No reviews yet)'}
+          {/* Name & Dynamic Rating Row */}
+          <View style={styles.heroNameRow}>
+            <Text style={styles.heroName}>{fullNameDisplay}</Text>
+            <View style={styles.heroRatingBadge}>
+              <MaterialIcons name="star" size={15} color="#FFB800" style={{ marginRight: 3 }} />
+              <Text style={styles.heroRatingText}>
+                {rating !== null ? Number(rating).toFixed(1) : '5.0'}
               </Text>
             </View>
-
-            {isVerified && (
-              <View style={styles.verifiedBadge}>
-                <MaterialIcons name="check-circle" size={15} color="#445A7F" style={{ marginRight: 4 }} />
-                <Text style={styles.verifiedText}>Verified Member</Text>
-              </View>
-            )}
           </View>
+
+          {isVerified && (
+            <View style={styles.verifiedBadge}>
+              <MaterialIcons name="check-circle" size={14} color="#445A7F" style={{ marginRight: 4 }} />
+              <Text style={styles.verifiedText}>Verified Member</Text>
+            </View>
+          )}
         </View>
 
         {/* Card 1: Account Details Form */}
@@ -607,8 +628,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 8 : 16,
-    paddingBottom: 16,
+    paddingBottom: 8,
     backgroundColor: '#F8F9FA',
   },
   backButton: {
@@ -631,7 +651,8 @@ const styles = StyleSheet.create({
   },
   heroSection: {
     alignItems: 'center',
-    marginVertical: 16,
+    marginTop: 4,
+    marginBottom: 14,
   },
   avatarWrapper: {
     position: 'relative',
@@ -661,34 +682,32 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 3,
   },
+  heroNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
   heroName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '700',
     color: '#191C1D',
-    marginBottom: 8,
   },
-  badgeRow: {
+  heroRatingBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    backgroundColor: '#FFF9E6',
+    borderWidth: 1,
+    borderColor: '#FFE58F',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
-  ratingBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F5',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 9999,
-  },
-  ratingText: {
+  heroRatingText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#191C1D',
-  },
-  ratingSubtext: {
-    fontSize: 12,
-    fontWeight: '400',
-    color: '#5B403F',
+    color: '#946C00',
   },
   verifiedBadge: {
     flexDirection: 'row',

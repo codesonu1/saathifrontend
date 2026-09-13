@@ -39,7 +39,7 @@ interface EarningsBreakdown {
 const DriverEarningsScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44);
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0);
   const bottomPadding = 90 + (insets.bottom > 0 ? insets.bottom : 10);
 
   const [sidePanelVisible, setSidePanelVisible] = useState(false);
@@ -87,7 +87,7 @@ const DriverEarningsScreen = () => {
 
       // 1. Fetch live user profile to get exact live wallet deposit balance from Admin
       try {
-        const userResponse = await apiClient.get('/users/me');
+        const userResponse = await apiClient.get('me');
         const target = userResponse.data?.data?.user || userResponse.data?.data || userResponse.data?.user || userResponse.data;
         let liveBal =
           target?.walletBalance ??
@@ -248,10 +248,10 @@ const DriverEarningsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAF8FE" translucent={false} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FAF8FE" translucent={true} />
 
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding }]}>
         <View style={{ width: 24 }} />
         <Text style={styles.headerTitle}>Earnings</Text>
         <TouchableOpacity

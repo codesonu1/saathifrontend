@@ -131,12 +131,20 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
 };
 
 const getActualDriverDistanceAndDuration = (offer: RideOffer, pickupLatStr?: string, pickupLngStr?: string) => {
-  const driverLat = (offer as any).driverLat || (offer.driver as any).latitude || (offer.driver as any).location?.coordinates?.[1];
-  const driverLng = (offer as any).driverLng || (offer.driver as any).longitude || (offer.driver as any).location?.coordinates?.[0];
+  const driverLat =
+    (offer as any).driverLat ||
+    (offer.driver as any)?.latitude ||
+    (offer.driver as any)?.curLoc?.coordinates?.[1] ||
+    (offer.driver as any)?.location?.coordinates?.[1];
+  const driverLng =
+    (offer as any).driverLng ||
+    (offer.driver as any)?.longitude ||
+    (offer.driver as any)?.curLoc?.coordinates?.[0] ||
+    (offer.driver as any)?.location?.coordinates?.[0];
   const pLat = parseFloat(pickupLatStr || '27.7172');
   const pLng = parseFloat(pickupLngStr || '85.3240');
 
-  if (driverLat && driverLng && !isNaN(driverLat) && !isNaN(driverLng)) {
+  if (driverLat && driverLng && !isNaN(driverLat) && !isNaN(driverLng) && (driverLat !== 0 || driverLng !== 0)) {
     const distKm = calculateDistance(driverLat, driverLng, pLat, pLng);
     const mins = Math.max(1, Math.round((distKm / 20) * 60));
     return `${mins} mins away (${distKm.toFixed(1)} km)`;
@@ -190,6 +198,7 @@ const RideOffersScreen = () => {
   const [newOfferInput, setNewOfferInput] = useState<string>('');
   const [proposedFare, setProposedFare] = useState<number>(0);
   const [raisingFare, setRaisingFare] = useState<boolean>(false);
+  const [autoAcceptEnabled, setAutoAcceptEnabled] = useState<boolean>(params.autoAccept !== 'false');
   const initialTimestampRef = useRef<number>(Date.now());
   const [secondsRemaining, setSecondsRemaining] = useState<number>(60);
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
@@ -328,7 +337,61 @@ const RideOffersScreen = () => {
     };
   }, [rideId, isFocused]);
 
-  const TEST_DRIVER_MODE = true;
+  const getOfferDistance = (offer: RideOffer): number => {
+    const driverLat =
+      (offer as any).driverLat ||
+      (offer.driver as any)?.latitude ||
+      (offer.driver as any)?.curLoc?.coordinates?.[1] ||
+      (offer.driver as any)?.location?.coordinates?.[1];
+    const driverLng =
+      (offer as any).driverLng ||
+      (offer.driver as any)?.longitude ||
+      (offer.driver as any)?.curLoc?.coordinates?.[0] ||
+      (offer.driver as any)?.location?.coordinates?.[0];
+    const pLat = parseFloat((params.pickupLat as string) || (params.pickUpLat as string) || '27.7172');
+    const pLng = parseFloat((params.pickupLng as string) || (params.pickUpLng as string) || '85.3240');
+
+    if (driverLat && driverLng && !isNaN(driverLat) && !isNaN(driverLng) && (driverLat !== 0 || driverLng !== 0)) {
+      return calculateDistance(driverLat, driverLng, pLat, pLng);
+    }
+    const hash = (offer._id || '').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return ((hash % 25) + 6) / 10;
+  };
+
+  const checkAndTriggerAutoAccept = (offersList: RideOffer[], currentTargetFare: number) => {
+    if (!autoAcceptEnabled || isNavigatingToTrackerRef.current || processing) {
+      return;
+    }
+
+    const eligibleOffers = offersList.filter(o => {
+      const statusOk = ['submitted', 'pending'].includes(String(o.status));
+      const priceMatches = typeof o.offeredPrice === 'number' && o.offeredPrice <= currentTargetFare;
+      return statusOk && priceMatches;
+    });
+
+    if (eligibleOffers.length === 0) return;
+
+    // Sort by distance (closest first), then by creation time (first to offer)
+    const sorted = [...eligibleOffers].sort((a, b) => {
+      const distA = getOfferDistance(a);
+      const distB = getOfferDistance(b);
+      if (Math.abs(distA - distB) > 0.05) {
+        return distA - distB;
+      }
+      const timeA = new Date(a.createdAt).getTime() || 0;
+      const timeB = new Date(b.createdAt).getTime() || 0;
+      return timeA - timeB;
+    });
+
+    const bestOffer = sorted[0];
+    if (bestOffer && bestOffer._id && !isNavigatingToTrackerRef.current) {
+      const driverObj = bestOffer.driver;
+      const driverFullName = driverObj ? `${driverObj.firstName || ''} ${driverObj.lastName || ''}`.trim() : 'Nearby Driver';
+      console.log('[AutoAccept] Auto-accepting best offer:', bestOffer._id, 'from driver:', driverFullName);
+      showToast(`Auto-accepting offer from ${driverFullName} (रू ${bestOffer.offeredPrice.toFixed(0)})!`, 'success');
+      handleAcceptOffer(bestOffer._id, bestOffer);
+    }
+  };
 
   const loadOffers = async () => {
     try {
@@ -336,27 +399,32 @@ const RideOffersScreen = () => {
       const data = await rideService.getRideOffers(rideId);
       console.log('Fetched offers from API:', data);
 
+      let currentPrice = currentFareNum;
+      // Safely fetch ride details to sync backend creation timestamp & offer price
+      try {
+        const details = await rideService.getRideDetails(rideId);
+        if (details) {
+          setRideDetails(details);
+          if (details.offerPrice) {
+            setRideFare(details.offerPrice.toString());
+            currentPrice = Number(details.offerPrice);
+          }
+          if (details.pickUpLocation) setFromAddress(details.pickUpLocation);
+          if (details.dropOffLocation) setToAddress(details.dropOffLocation);
+        }
+      } catch (err) {
+        console.log('Could not fetch ride details in loadOffers:', err);
+      }
+
       if (data && Array.isArray(data) && data.length > 0) {
         setOffers(data);
         if (data.length > previousOffersCount && previousOffersCount > 0) {
           showToast('New offer received!', 'info');
         }
         setPreviousOffersCount(data.length);
+        checkAndTriggerAutoAccept(data, currentPrice);
       } else {
         setOffers([]);
-      }
-
-      // Safely fetch ride details to sync backend creation timestamp & offer price
-      try {
-        const details = await rideService.getRideDetails(rideId);
-        if (details) {
-          setRideDetails(details);
-          if (details.offerPrice) setRideFare(details.offerPrice.toString());
-          if (details.pickUpLocation) setFromAddress(details.pickUpLocation);
-          if (details.dropOffLocation) setToAddress(details.dropOffLocation);
-        }
-      } catch (err) {
-        console.log('Could not fetch ride details in loadOffers:', err);
       }
     } catch (error: any) {
       console.error('Failed to load offers:', error);
@@ -428,8 +496,8 @@ const RideOffersScreen = () => {
     loadOffers();
   };
 
-  const handleAcceptOffer = async (offerId: string) => {
-    if (processing) return;
+  const handleAcceptOffer = async (offerId: string, offerObj?: RideOffer) => {
+    if (processing || isNavigatingToTrackerRef.current) return;
     setProcessing(true);
     setAcceptLoading(prev => ({ ...prev, [offerId]: true }));
     showToast('Accepting offer...', 'info');
@@ -438,9 +506,9 @@ const RideOffersScreen = () => {
       await rideService.acceptRideOffer(rideId, offerId);
       showToast('Offer accepted! Starting ride...', 'success');
 
-      const acceptedOfferObj = offers.find(o => o._id === offerId);
+      const acceptedOfferObj = offerObj || offers.find(o => o._id === offerId);
       const driverObj = acceptedOfferObj?.driver;
-      const driverFullName = driverObj ? `${driverObj.firstName} ${driverObj.lastName}` : 'Your Driver';
+      const driverFullName = driverObj ? `${driverObj.firstName || ''} ${driverObj.lastName || ''}`.trim() : 'Your Driver';
 
       await userRoleManager.setRole('passenger');
       isNavigatingToTrackerRef.current = true;
@@ -611,11 +679,17 @@ const RideOffersScreen = () => {
                 <Ionicons name="checkmark-circle" size={14} color="#1877F2" style={{ marginLeft: 4 }} />
               </View>
 
-              <View style={styles.compactMetaRow}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
                 <View style={styles.compactRatingBadge}>
-                  <Text style={styles.compactRatingText}>{(item.driver.rating || 4.8).toFixed(1)} ★</Text>
+                  <Text style={styles.compactRatingText}>{(item.driver.rating || 5.0).toFixed(1)} ★</Text>
                 </View>
-                <Text style={styles.compactRidesCount}>2.4k rides</Text>
+                <Text style={styles.compactRidesCount}>
+                  {(() => {
+                    const count = Number((item as any).driverProfile?.totalRides ?? (item.driver as any)?.totalRides ?? (item as any).totalRides ?? 0);
+                    if (count >= 1000) return `${(count / 1000).toFixed(1)}k rides`;
+                    return `${count} ${count === 1 ? 'ride' : 'rides'}`;
+                  })()}
+                </Text>
               </View>
             </View>
 
@@ -896,6 +970,29 @@ const RideOffersScreen = () => {
               Your Offer: रू {parseFloat(rideFare || fare || '223').toFixed(0)}
             </Text>
           </View>
+
+          <TouchableOpacity
+            style={[styles.pillChip, autoAcceptEnabled && styles.pillChipActive]}
+            onPress={() => {
+              const next = !autoAcceptEnabled;
+              setAutoAcceptEnabled(next);
+              showToast(next ? 'Auto-accept enabled' : 'Auto-accept disabled', 'info');
+              if (next && offers.length > 0) {
+                checkAndTriggerAutoAccept(offers, currentFareNum);
+              }
+            }}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={autoAcceptEnabled ? 'flash' : 'flash-outline'}
+              size={14}
+              color={autoAcceptEnabled ? '#059669' : '#8F6F6E'}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={[styles.pillChipText, autoAcceptEnabled && styles.pillChipTextActive]}>
+              Auto-Accept: {autoAcceptEnabled ? 'ON' : 'OFF'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Available Offers Section Header */}
@@ -1109,6 +1206,15 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#191C1D',
+  },
+  pillChipActive: {
+    backgroundColor: '#E6F4EA',
+    borderWidth: 1,
+    borderColor: '#059669',
+  },
+  pillChipTextActive: {
+    color: '#059669',
+    fontWeight: '700',
   },
   sectionHeader: {
     flexDirection: 'row',

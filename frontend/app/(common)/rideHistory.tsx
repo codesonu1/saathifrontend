@@ -8,15 +8,16 @@ import {
   StatusBar,
   ActivityIndicator,
   SectionList,
-  SafeAreaView,
   Platform,
-  TextInput,
+  RefreshControl,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUserRole } from '@/services/userRoleManager';
 import { rideService, Ride } from '@/services/rideService';
+import DriverBottomNav from '@/components/DriverBottomNav';
+import PassengerBottomNav from '@/components/PassengerBottomNav';
 
 const { width } = Dimensions.get('window');
 
@@ -41,13 +42,17 @@ interface SectionData {
 const RideHistoryScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'ios' ? 44 : 24);
+  const topPadding = Math.max(insets.top + (Platform.OS === 'android' ? 6 : 0), 28);
   const bottomPadding = 40 + (insets.bottom > 0 ? insets.bottom : 10);
   const userRole = useUserRole();
 
   const [allRides, setAllRides] = useState<Ride[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const formatSectionHeaderTitle = (dateVal: Date | string) => {
@@ -102,34 +107,70 @@ const RideHistoryScreen = () => {
     }));
   };
 
-  const fetchHistory = async () => {
-    setLoading(true);
+  const fetchHistory = async (pageNumber = 1, isRefresh = false) => {
+    if (isRefresh) {
+      setRefreshing(true);
+      setPage(1);
+      setHasMore(true);
+    } else if (pageNumber === 1) {
+      setLoading(true);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
     setError(null);
+
     try {
       let rides: Ride[] = [];
+      const perPage = 15;
       if (userRole === 'driver') {
-        rides = await rideService.getDriverRides();
+        rides = await rideService.getDriverRides(undefined, pageNumber, perPage);
       } else {
-        rides = await rideService.getPassengerRides();
+        rides = await rideService.getPassengerRides(undefined, pageNumber, perPage);
       }
 
-      // Filter exclusively for completed or cancelled rides
       const filteredRides = rides.filter(
         (r) => r.status === 'completed' || r.status === 'cancelled'
       );
 
-      setAllRides(filteredRides);
+      if (rides.length < perPage) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
+
+      if (pageNumber === 1 || isRefresh) {
+        setAllRides(filteredRides);
+      } else {
+        setAllRides((prev) => {
+          const existingIds = new Set(prev.map((r) => r._id));
+          const newUnique = filteredRides.filter((r) => !existingIds.has(r._id));
+          return [...prev, ...newUnique];
+        });
+      }
     } catch (err) {
       console.error('[RideHistory] Error fetching rides:', err);
-      setAllRides([]);
-      setError('Failed to load ride history');
+      if (pageNumber === 1) {
+        setAllRides([]);
+        setError('Failed to load ride history');
+      }
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      setRefreshing(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (!loading && !loadingMore && hasMore) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      fetchHistory(nextPage, false);
     }
   };
 
   useEffect(() => {
-    fetchHistory();
+    fetchHistory(1, false);
   }, [userRole]);
 
   useEffect(() => {
@@ -580,7 +621,7 @@ const RideHistoryScreen = () => {
           <View style={styles.centerContainer}>
             <MaterialIcons name="error-outline" size={48} color="#BA1A1A" />
             <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity style={styles.retryButton} onPress={fetchHistory}>
+            <TouchableOpacity style={styles.retryButton} onPress={() => fetchHistory(1, true)}>
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
           </View>
@@ -596,8 +637,37 @@ const RideHistoryScreen = () => {
                 <View style={styles.sectionHeaderLine} />
               </View>
             )}
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: 85 + (insets.bottom > 0 ? insets.bottom : 10) },
+            ]}
             showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => fetchHistory(1, true)}
+                colors={['#BC001F']}
+                tintColor="#BC001F"
+              />
+            }
+            onEndReached={handleLoadMore}
+            onEndReachedThreshold={0.3}
+            ListFooterComponent={
+              loadingMore ? (
+                <View style={styles.footerLoaderContainer}>
+                  <ActivityIndicator size="small" color="#BC001F" />
+                  <Text style={styles.footerLoaderText}>Loading more trips...</Text>
+                </View>
+              ) : !hasMore && allRides.length >= 10 ? (
+                <View style={styles.endOfListContainer}>
+                  <View style={styles.endOfListDot} />
+                  <Text style={styles.endOfListText}>All trips loaded</Text>
+                  <View style={styles.endOfListDot} />
+                </View>
+              ) : (
+                <View style={{ height: 24 }} />
+              )
+            }
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <View style={styles.emptyIconCircle}>
@@ -614,6 +684,13 @@ const RideHistoryScreen = () => {
           />
         )}
       </View>
+
+      {/* Role-Aware Bottom Navigation Bar */}
+      {userRole === 'driver' ? (
+        <DriverBottomNav activeTab="activity" />
+      ) : (
+        <PassengerBottomNav activeTab="history" />
+      )}
     </View>
   );
 };
@@ -955,5 +1032,35 @@ const styles = StyleSheet.create({
   },
   cancelledStatusText: {
     color: '#EA2F14',
+  },
+  footerLoaderContainer: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  footerLoaderText: {
+    fontSize: 13,
+    color: '#BC001F',
+    fontWeight: '600',
+  },
+  endOfListContainer: {
+    paddingVertical: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  endOfListDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#C5C6C8',
+  },
+  endOfListText: {
+    fontSize: 12,
+    color: '#8F6F6E',
+    fontWeight: '500',
   },
 });

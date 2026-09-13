@@ -1,12 +1,9 @@
-"use client"
-
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   TextInput,
   ScrollView,
@@ -15,35 +12,46 @@ import {
   Platform,
   Alert,
   Linking,
+  Keyboard,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import Toast from '../../components/ui/Toast';
 import ConfirmationModal from '../../components/ui/ConfirmationModal';
 import webSocketService from '@/services/websocketService';
 import ProfileImage from '../../components/ProfileImage';
-import { getCurrentUserId } from '@/services/apiClient';
+import apiClient, { getCurrentUserId } from '@/services/apiClient';
 
 const PRIMARY = '#BC001F';
 const SECONDARY = '#EA2F14';
 const BG = '#f8f9fa';
 
 const MessagingScreen = () => {
+  const insets = useSafeAreaInsets();
+  const topPadding = Math.max(insets.top + (Platform.OS === 'android' ? 8 : 4), 32);
+  const bottomPadding = Math.max(insets.bottom, 10);
+
   const params = useLocalSearchParams();
   const router = useRouter();
   const rideId = params.rideId as string;
   const [userId, setUserId] = useState<string | null>(params.userId as string || null);
-  const userRole = params.userRole as string; // 'driver' or 'passenger'
+  const userRole = (params.userRole as string) || 'passenger'; // 'driver' or 'passenger'
   const driverName = params.driverName as string || 'Driver';
   const passengerName = params.passengerName as string || 'Passenger';
-  const driverPhone = params.driverPhone as string || '';
-  const passengerPhone = params.passengerPhone as string || '';
+  const driverPhone = (params.driverPhone as string) || '';
+  const passengerPhone = (params.passengerPhone as string) || '';
   
   // Fix name display logic - show the other person's name, not "You"
-  const otherUserName = userRole === 'driver' ? 
+  const defaultOtherUserName = userRole === 'driver' ? 
     (passengerName === 'You' ? 'Passenger' : passengerName) : 
     (driverName === 'You' ? 'Driver' : driverName);
-  const otherUserPhone = userRole === 'driver' ? passengerPhone : driverPhone;
+  const defaultOtherUserPhone = userRole === 'driver' ? passengerPhone : driverPhone;
+  const defaultOtherRole = userRole === 'driver' ? 'Passenger' : 'Driver';
+
+  const [contactName, setContactName] = useState<string>(defaultOtherUserName);
+  const [contactPhone, setContactPhone] = useState<string>(defaultOtherUserPhone);
+  const [contactRole, setContactRole] = useState<string>(defaultOtherRole);
   
   const [messages, setMessages] = useState<any[]>([]);
   const [message, setMessage] = useState('');
@@ -63,12 +71,77 @@ const MessagingScreen = () => {
   const showToast = (message: string, type: 'info' | 'success' | 'error') => setToast({ visible: true, message, type });
   const hideToast = () => setToast(prev => ({ ...prev, visible: false }));
 
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Scroll to bottom when keyboard appears
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        setIsKeyboardVisible(true);
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: true });
+        }, 120);
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        setIsKeyboardVisible(false);
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
   // --- Ensure userId is available ---
   useEffect(() => {
     if (!userId) {
       getCurrentUserId().then(id => setUserId(id));
     }
   }, [userId]);
+
+  // --- Fetch Ride Details for Contact Name and Phone Number ---
+  useEffect(() => {
+    if (!rideId) return;
+    let isMounted = true;
+
+    async function fetchRideInfo() {
+      try {
+        console.log('Messaging: Fetching ride info for rideId:', rideId);
+        const response = await apiClient.get(`/rides/${rideId}`);
+        if (!isMounted) return;
+        const ride = response.data?.data || response.data;
+        if (ride) {
+          const activeUserId = userId || (await getCurrentUserId());
+          const isDriver = userRole === 'driver' || (ride.driverId && String(ride.driverId) === String(activeUserId));
+          
+          if (isDriver) {
+            const pName = ride.passenger ? `${ride.passenger.firstName || ''} ${ride.passenger.lastName || ''}`.trim() : '';
+            const pPhone = ride.passenger?.mobile || passengerPhone;
+            if (pName && pName !== 'You') setContactName(pName);
+            if (pPhone) setContactPhone(pPhone);
+            setContactRole('Passenger');
+          } else {
+            const dName = ride.driver ? `${ride.driver.firstName || ''} ${ride.driver.lastName || ''}`.trim() : '';
+            const dPhone = ride.driver?.mobile || driverPhone;
+            if (dName && dName !== 'You') setContactName(dName);
+            if (dPhone) setContactPhone(dPhone);
+            setContactRole('Driver');
+          }
+        }
+      } catch (e: any) {
+        console.log('Messaging: Could not fetch ride details for header:', e?.message || e);
+      }
+    }
+
+    fetchRideInfo();
+    return () => {
+      isMounted = false;
+    };
+  }, [rideId, userId, userRole, driverPhone, passengerPhone]);
 
   // --- WebSocket Setup ---
   useEffect(() => {
@@ -289,12 +362,42 @@ const MessagingScreen = () => {
   };
 
   // --- Phone call functionality ---
-  const handleCall = () => {
-    if (!otherUserPhone) {
-      showToast('Phone number not available', 'error');
+  const handleCall = async () => {
+    let phone = (contactPhone || defaultOtherUserPhone || '').trim();
+
+    // If phone is missing, try a quick on-demand fetch
+    if (!phone && rideId) {
+      try {
+        const response = await apiClient.get(`/rides/${rideId}`);
+        const ride = response.data?.data || response.data;
+        if (ride) {
+          const isDriver = contactRole === 'Passenger';
+          phone = (isDriver ? ride.passenger?.mobile : ride.driver?.mobile) || '';
+          if (phone) setContactPhone(phone);
+        }
+      } catch (err: any) {
+        console.warn('Messaging: On-demand phone fetch failed:', err?.message || err);
+      }
+    }
+
+    if (!phone) {
+      Alert.alert(
+        'Phone Number Unavailable',
+        `No contact number found for the ${contactRole.toLowerCase()}. Please continue communicating via in-app chat.`,
+        [{ text: 'OK' }]
+      );
       return;
     }
-    Linking.openURL(`tel:${otherUserPhone}`);
+
+    const cleanPhone = phone.replace(/[^0-9+]/g, '');
+    const url = `tel:${cleanPhone}`;
+
+    try {
+      await Linking.openURL(url);
+    } catch (err) {
+      console.error('Failed to open dialer for:', cleanPhone, err);
+      Alert.alert('Unable to Call', `Could not open the dialer for ${cleanPhone}. Please dial manually.`);
+    }
   };
 
   const formatTime = (timestamp: string) => {
@@ -332,13 +435,13 @@ const MessagingScreen = () => {
 
   // --- Header ---
   const renderHeader = () => (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: topPadding }]}>
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <MaterialIcons name="arrow-back" size={24} color="#333" />
       </TouchableOpacity>
       <View style={styles.headerInfo}>
-        <Text style={styles.headerName}>{otherUserName}</Text>
-        <Text style={styles.headerRole}>{userRole === 'driver' ? 'Passenger' : 'Driver'}</Text>
+        <Text style={styles.headerName}>{contactName}</Text>
+        <Text style={styles.headerRole}>{contactRole}</Text>
         <View style={styles.connectionStatus}>
           <View style={[styles.statusDot, { backgroundColor: isConnected ? '#4CAF50' : '#f44336' }]} />
           <Text style={[styles.statusText, { color: isConnected ? '#4CAF50' : '#f44336' }]}>
@@ -347,95 +450,96 @@ const MessagingScreen = () => {
         </View>
       </View>
       <TouchableOpacity 
-        style={[styles.callButton, !otherUserPhone && styles.callButtonDisabled]} 
+        style={styles.callButton} 
         onPress={handleCall}
-        disabled={!otherUserPhone}
+        activeOpacity={0.7}
       >
-        <MaterialIcons name="phone" size={24} color={otherUserPhone ? PRIMARY : '#ccc'} />
+        <MaterialIcons name="phone" size={22} color={PRIMARY} />
       </TouchableOpacity>
     </View>
   );
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#fff" />
         {renderHeader()}
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={PRIMARY} />
           <Text style={styles.loadingText}>Loading messages...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+      style={styles.container}
+      keyboardVerticalOffset={0}
+    >
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       {renderHeader()}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoidingView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.messagesList}
+        contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
       >
-        <ScrollView
-          ref={scrollViewRef}
-          style={styles.messagesList}
-          contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-          onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
-          keyboardShouldPersistTaps="handled"
+        {messages.length === 0 && (
+          <View style={styles.emptyState}>
+            <MaterialIcons name="chat-bubble-outline" size={48} color="#ccc" />
+            <Text style={styles.emptyStateTitle}>No messages yet</Text>
+            <Text style={styles.emptyStateSubtitle}>Start the conversation!</Text>
+          </View>
+        )}
+        {messages.map((msg, index) => renderMessage(msg, index))}
+        {otherTyping && (
+          <View style={styles.typingContainer}>
+            <View style={styles.typingBubble}>
+              <Text style={styles.typingText}>Typing...</Text>
+            </View>
+          </View>
+        )}
+      </ScrollView>
+      <View style={[styles.inputContainer, { paddingBottom: isKeyboardVisible ? 12 : bottomPadding }]}>
+        <TextInput
+          style={styles.input}
+          value={message}
+          onChangeText={text => {
+            setMessage(text);
+            setTyping(true);
+          }}
+          placeholder="Type a message..."
+          editable={!sending && isConnected}
+          onFocus={() => {
+            setTyping(true);
+            setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 150);
+          }}
+          onBlur={() => setTyping(false)}
+          onSubmitEditing={handleSend}
+          returnKeyType="send"
+          multiline={false}
+          maxLength={500}
+        />
+        <TouchableOpacity
+          style={[styles.sendButton, message.trim() && isConnected ? styles.sendButtonActive : styles.sendButtonInactive]}
+          onPress={handleSend}
+          disabled={sending || !message.trim() || !isConnected}
         >
-          {messages.length === 0 && (
-            <View style={styles.emptyState}>
-              <MaterialIcons name="chat-bubble-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyStateTitle}>No messages yet</Text>
-              <Text style={styles.emptyStateSubtitle}>Start the conversation!</Text>
-            </View>
-          )}
-          {messages.map((msg, index) => renderMessage(msg, index))}
-          {otherTyping && (
-            <View style={styles.typingContainer}>
-              <View style={styles.typingBubble}>
-                <Text style={styles.typingText}>Typing...</Text>
-              </View>
-            </View>
-          )}
-        </ScrollView>
-                <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            value={message}
-            onChangeText={text => {
-              setMessage(text);
-              setTyping(true);
-            }}
-            placeholder="Type a message..."
-            editable={!sending && isConnected}
-            onFocus={() => setTyping(true)}
-            onBlur={() => setTyping(false)}
-            onSubmitEditing={handleSend}
-            returnKeyType="send"
-            multiline={false}
-            maxLength={500}
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, message.trim() && isConnected ? styles.sendButtonActive : styles.sendButtonInactive]}
-            onPress={handleSend}
-            disabled={sending || !message.trim() || !isConnected}
-          >
-            <MaterialIcons name="send" size={22} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
+          <MaterialIcons name="send" size={22} color="#fff" />
+        </TouchableOpacity>
+      </View>
       
       {/* Toast */}
       {toast.visible && (
         <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />
       )}
       
-
-      
       {error && <Text style={styles.errorText}>{error}</Text>}
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -452,11 +556,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingBottom: 12,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e9ecef',
-    marginTop: 28,
   },
   backButton: {
     padding: 8,
@@ -492,12 +595,12 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   callButton: {
-    padding: 8,
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    backgroundColor: '#f0f0f0',
-  },
-  callButtonDisabled: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#FDE8EA',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   messagesList: {
     flex: 1,

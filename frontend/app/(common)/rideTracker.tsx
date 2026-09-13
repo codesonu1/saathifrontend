@@ -924,13 +924,41 @@ const RideTrackerScreen = () => {
         }
 
         try {
-        setDriverLocation(location);
+          setDriverLocation(location);
           setCompletedRoute(prev => {
             const newRoute = [...prev.slice(-100), location];
             return newRoute;
           });
 
-          // Backend will calculate progress automatically
+          // Dynamically compute real-time route progress towards dropoff
+          if (pickupLocationRef.current && dropoffLocationRef.current) {
+            const pLat = pickupLocationRef.current.lat;
+            const pLng = pickupLocationRef.current.lng;
+            const dLat = dropoffLocationRef.current.lat;
+            const dLng = dropoffLocationRef.current.lng;
+            const totalDist = calculateDistance(pLat, pLng, dLat, dLng);
+            const distToDropoff = calculateDistance(location.lat, location.lng, dLat, dLng);
+
+            if (totalDist > 0) {
+              let calcProg = 0;
+              if (distToDropoff < 0.05) {
+                calcProg = 100;
+              } else {
+                const covered = Math.max(0, totalDist - distToDropoff);
+                calcProg = Math.round((covered / totalDist) * 100);
+              }
+              calcProg = Math.max(0, Math.min(100, calcProg));
+              if (calcProg >= lastProgressRef.current) {
+                lastProgressRef.current = calcProg;
+                setProgress(calcProg);
+                Animated.timing(progressAnimation, {
+                  toValue: calcProg,
+                  duration: 500,
+                  useNativeDriver: false,
+                }).start();
+              }
+            }
+          }
 
           // Only send location updates if user is driver and ride is in progress
           if (userRole === 'driver' && rideStatusRef.current === 'in-progress' && rideStartedConfirmedRef.current && !simulating) {
@@ -939,8 +967,6 @@ const RideTrackerScreen = () => {
               return;
             }
             lastLocationUpdateRef.current = now;
-            
-            // Backend handles progress calculation including initial movement detection
             
             const payload = { latitude: location.lat, longitude: location.lng };
             
@@ -1143,24 +1169,25 @@ const RideTrackerScreen = () => {
         
         // --- PROGRESS UPDATE ---
         if (typeof data.progress === 'number') {
+          const isRideOngoing = (rideStatusRef.current === 'in-progress' || data.status === 'ongoing' || data.status === 'in-progress');
+          const validProg = isRideOngoing ? data.progress : 0;
           setProgress(prev => {
-            if (data.progress >= lastProgressRef.current) {
-              lastProgressRef.current = data.progress;
+            if (validProg >= lastProgressRef.current) {
+              lastProgressRef.current = validProg;
               progressStartedRef.current = true;
-              return data.progress;
+              return validProg;
             } else {
-              // Ignore backwards progress update
-              return prev;
+              return isRideOngoing ? prev : 0;
             }
           });
           setTimeout(() => {
             Animated.timing(progressAnimation, {
-              toValue: Math.max(data.progress, lastProgressRef.current),
+              toValue: Math.max(validProg, lastProgressRef.current),
               duration: 500,
               useNativeDriver: false,
             }).start();
           }, 0);
-          console.log('[handleRideLocationUpdated] Progress update received:', data.progress, 'userRole:', userRole);
+          console.log('[handleRideLocationUpdated] Progress update received:', validProg, 'userRole:', userRole);
         }
         // ... rest of handler ...
       },
@@ -3011,7 +3038,10 @@ const RideTrackerScreen = () => {
         )}
       </View>
       <View style={styles.bottomSheet}>
-        {userRole === 'passenger' ? (
+        {(() => {
+          const effectiveProgress = (rideStatus === 'accepted' || rideStatus === 'pending' || rideStatus === 'searching') ? 0 : Math.max(0, Math.min(100, Math.round(progress)));
+          
+          return userRole === 'passenger' ? (
           <ScrollView
             style={styles.passengerSheetScroll}
             contentContainerStyle={styles.passengerSheetContent}
@@ -3021,7 +3051,7 @@ const RideTrackerScreen = () => {
             {/* 1. Header Row: Ride Progress Title + Bold Primary Red Percentage */}
             <View style={styles.vvHeaderRow}>
               <Text style={styles.vvHeaderTitle}>Ride Progress</Text>
-              <Text style={styles.vvHeaderPercent}>{Math.round(progress)}%</Text>
+              <Text style={styles.vvHeaderPercent}>{effectiveProgress}%</Text>
             </View>
 
             {/* 2. Sleek Red Progress Bar */}
@@ -3045,7 +3075,7 @@ const RideTrackerScreen = () => {
               <Text style={styles.vvSubText}>
                 {rideStatus === 'accepted'
                   ? (driverArrived ? 'Driver has arrived at pickup' : `Arriving in approx. ${Math.max(1, Math.ceil((etaSeconds || 480) / 60))} mins`)
-                  : (progress >= 100 ? 'Arrived at destination' : `Arriving in approx. ${Math.max(1, Math.ceil((100 - progress) * 0.15))} mins`)}
+                  : (effectiveProgress >= 100 ? 'Arrived at destination' : `Arriving in approx. ${Math.max(1, Math.ceil((100 - effectiveProgress) * 0.15))} mins`)}
               </Text>
             </View>
 
@@ -3154,7 +3184,7 @@ const RideTrackerScreen = () => {
             <View style={{ marginBottom: 10 }}>
               <View style={styles.vvHeaderRow}>
                 <Text style={styles.vvHeaderTitle}>Ride Progress</Text>
-                <Text style={styles.vvHeaderPercent}>{Math.round(progress)}%</Text>
+                <Text style={styles.vvHeaderPercent}>{effectiveProgress}%</Text>
               </View>
               <View style={styles.vvProgressTrack}>
                 <Animated.View
@@ -3318,7 +3348,8 @@ const RideTrackerScreen = () => {
               <Text style={styles.vvCancelOutlineText}>Cancel Ride</Text>
             </TouchableOpacity>
           </ScrollView>
-        )}
+        );
+      })()}
       </View>
 
       <Toast visible={toast.visible} message={toast.message} type={toast.type} onHide={hideToast} />

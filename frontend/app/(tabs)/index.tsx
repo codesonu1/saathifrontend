@@ -550,6 +550,7 @@ const PassengerHomeScreen = () => {
           pickupLng: pLng.toString(),
           dropoffLat: dLat.toString(),
           dropoffLng: dLng.toString(),
+          autoAccept: autoAccept ? 'true' : 'false',
         },
       });
     } catch (error: any) {

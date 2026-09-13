@@ -281,35 +281,43 @@ class RideService {
     }
   }
 
-  // Get passenger rides
-  async getPassengerRides(status?: string): Promise<Ride[]> {
+  // Get passenger rides with pagination support
+  async getPassengerRides(status?: string, page: number = 1, perPage: number = 15): Promise<Ride[]> {
     try {
-      const params = status ? { status } : {};
+      const params: any = { page, perPage };
+      if (status) params.status = status;
       const response = await apiClient.get('/rides/passenger', { params });
       if (response.data.statusCode === 200) {
         // Transform the backend response to match our Ride interface
-        return response.data.data.map((ride: any) => ({
+        return (response.data.data || []).map((ride: any) => ({
           _id: ride._id,
           passenger: {
-            _id: ride.passengerId,
+            _id: ride.passengerId || ride.passenger?._id,
             firstName: ride.passenger?.firstName || '',
             lastName: ride.passenger?.lastName || '',
             mobile: ride.passenger?.mobile || '',
           },
+          driver: ride.driver ? {
+            _id: ride.driver._id || ride.driverId || '',
+            firstName: ride.driver.firstName || '',
+            lastName: ride.driver.lastName || '',
+            mobile: ride.driver.mobile || '',
+            rating: ride.driverProfile?.rating || ride.driver.rating || 0,
+          } : undefined,
           vehicleType: {
-            _id: ride.vehicleType,
-            name: ride.vehicle?.name || '',
+            _id: ride.vehicleType?._id || ride.vehicleType || '',
+            name: ride.vehicle?.name || ride.vehicleType?.name || '',
             basePrice: 0,
             pricePerKm: 0,
           },
-          pickUpLocation: ride.pickUp.location,
-          pickUpLat: ride.pickUp.coords.coordinates[1],
-          pickUpLng: ride.pickUp.coords.coordinates[0],
-          dropOffLocation: ride.dropOff.location,
-          dropOffLat: ride.dropOff.coords.coordinates[1],
-          dropOffLng: ride.dropOff.coords.coordinates[0],
-          offerPrice: ride.offerPrice,
-          status: ride.status.toLowerCase(),
+          pickUpLocation: ride.pickUp?.location || ride.pickUpLocation || '',
+          pickUpLat: ride.pickUp?.coords?.coordinates?.[1] || ride.pickUpLat || 0,
+          pickUpLng: ride.pickUp?.coords?.coordinates?.[0] || ride.pickUpLng || 0,
+          dropOffLocation: ride.dropOff?.location || ride.dropOffLocation || '',
+          dropOffLat: ride.dropOff?.coords?.coordinates?.[1] || ride.dropOffLat || 0,
+          dropOffLng: ride.dropOff?.coords?.coordinates?.[0] || ride.dropOffLng || 0,
+          offerPrice: ride.acceptedOffer?.offerAmount || ride.offerPrice || 0,
+          status: ride.status?.toLowerCase() || 'completed',
           comments: ride.comments,
           createdAt: new Date(ride.createdAt),
           updatedAt: new Date(ride.updatedAt || ride.createdAt),
@@ -322,42 +330,43 @@ class RideService {
     }
   }
 
-  // Get driver rides
-  async getDriverRides(status?: string): Promise<Ride[]> {
+  // Get driver rides with pagination support
+  async getDriverRides(status?: string, page: number = 1, perPage: number = 15): Promise<Ride[]> {
     try {
-      const params = status ? { status } : {};
+      const params: any = { page, perPage };
+      if (status) params.status = status;
       const response = await apiClient.get('/rides/driver', { params });
       if (response.data.statusCode === 200) {
         // Transform the backend response to match our Ride interface
-        return response.data.data.map((ride: any) => ({
+        return (response.data.data || []).map((ride: any) => ({
           _id: ride._id,
           passenger: {
-            _id: ride.passengerId,
+            _id: ride.passengerId || ride.passenger?._id,
             firstName: ride.passenger?.firstName || '',
             lastName: ride.passenger?.lastName || '',
             mobile: ride.passenger?.mobile || '',
           },
           driver: ride.driver ? {
-            _id: ride.driver._id,
-            firstName: ride.driver.firstName,
-            lastName: ride.driver.lastName,
-            mobile: ride.driver.mobile,
+            _id: ride.driver._id || ride.driverId || '',
+            firstName: ride.driver.firstName || '',
+            lastName: ride.driver.lastName || '',
+            mobile: ride.driver.mobile || '',
             rating: ride.driver.rating || ride.driverProfile?.rating || 0,
           } : undefined,
           vehicleType: {
-            _id: ride.vehicleType,
-            name: ride.vehicle?.name || '',
+            _id: ride.vehicleType?._id || ride.vehicleType || '',
+            name: ride.vehicle?.name || ride.vehicleType?.name || '',
             basePrice: 0,
             pricePerKm: 0,
           },
-          pickUpLocation: ride.pickUp.location,
-          pickUpLat: ride.pickUp.coords.coordinates[1],
-          pickUpLng: ride.pickUp.coords.coordinates[0],
-          dropOffLocation: ride.dropOff.location,
-          dropOffLat: ride.dropOff.coords.coordinates[1],
-          dropOffLng: ride.dropOff.coords.coordinates[0],
-          offerPrice: ride.offerPrice,
-          status: ride.status.toLowerCase(),
+          pickUpLocation: ride.pickUp?.location || ride.pickUpLocation || '',
+          pickUpLat: ride.pickUp?.coords?.coordinates?.[1] || ride.pickUpLat || 0,
+          pickUpLng: ride.pickUp?.coords?.coordinates?.[0] || ride.pickUpLng || 0,
+          dropOffLocation: ride.dropOff?.location || ride.dropOffLocation || '',
+          dropOffLat: ride.dropOff?.coords?.coordinates?.[1] || ride.dropOffLat || 0,
+          dropOffLng: ride.dropOff?.coords?.coordinates?.[0] || ride.dropOffLng || 0,
+          offerPrice: ride.acceptedOffer?.offerAmount || ride.offerPrice || 0,
+          status: ride.status?.toLowerCase() || 'completed',
           comments: ride.comments,
           createdAt: new Date(ride.createdAt),
           updatedAt: new Date(ride.updatedAt || ride.createdAt),

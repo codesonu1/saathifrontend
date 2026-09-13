@@ -84,14 +84,15 @@ const NotificationsScreen = () => {
         const role = userRoleManager.getRole();
         setCurrentRole(role);
 
-        const response = await apiClient.get('/users/me');
-        if (response.data?.data?._id || response.data?.data?.id) {
-          const uId = response.data.data._id || response.data.data.id;
+        const response = await apiClient.get('me');
+        const userData = response.data?.data || response.data;
+        if (userData?._id || userData?.id) {
+          const uId = userData._id || userData.id;
           setCurrentUserId(uId);
 
           // Driver balance check (triggers single non-looping notification when low or zero)
           if (role === 'driver') {
-            const bal = response.data.data.walletBalance ?? response.data.data.wallet ?? response.data.data.balance ?? 100;
+            const bal = userData.walletBalance ?? userData.wallet ?? userData.balance ?? 100;
             await notificationService.checkAndNotifyDriverBalance(Number(bal) || 0);
           }
         }

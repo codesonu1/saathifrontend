@@ -33,7 +33,7 @@ const DEFAULT_BASE_URL = Constants.expoConfig?.extra?.DEFAULT_BASE_URL || 'https
 const DriverProfileScreen = () => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 28) : 44);
+  const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0);
   const bottomPadding = 90 + (insets.bottom > 0 ? insets.bottom : 10);
 
   const [sidePanelVisible, setSidePanelVisible] = useState(false);
@@ -183,6 +183,36 @@ const DriverProfileScreen = () => {
         } catch (err) {
           console.log('[DriverProfile] /driver-profile check error (using fallback vehicle defaults):', err);
         }
+
+        // 3. Dynamically calculate review count & rating from driver's all-time ride history
+        try {
+          const ridesRes = await apiClient.get('/rides/driver', {
+            params: { perPage: 1000 },
+          });
+          const rides = ridesRes.data?.data || ridesRes.data || [];
+          if (Array.isArray(rides)) {
+            const ratedRides = rides.filter(
+              (r: any) =>
+                r.driverRating !== undefined &&
+                r.driverRating !== null &&
+                Number(r.driverRating) > 0
+            );
+            if (ratedRides.length > 0) {
+              setReviewCount(ratedRides.length);
+              const avgRating =
+                ratedRides.reduce((sum: number, r: any) => sum + Number(r.driverRating), 0) /
+                ratedRides.length;
+              if (avgRating > 0) {
+                setRating(Number(avgRating.toFixed(1)));
+              }
+            } else {
+              // 0 reviews received yet across all time
+              setReviewCount(0);
+            }
+          }
+        } catch (ridesErr) {
+          console.log('[DriverProfile] Could not fetch driver rides for reviews calculation:', ridesErr);
+        }
       } catch (err) {
         console.error('[DriverProfile] Failed to fetch driver data:', err);
         showModal('error', 'Error', 'Failed to load driver profile data. Please try again.');
@@ -195,10 +225,10 @@ const DriverProfileScreen = () => {
   }, []);
 
   const isDirty =
-    name !== initialDataRef.current.name ||
-    lastName !== initialDataRef.current.lastName ||
-    email !== initialDataRef.current.email ||
-    imageUri !== initialDataRef.current.imageUri;
+    !loading &&
+    (name.trim() !== (initialDataRef.current.name || '').trim() ||
+      lastName.trim() !== (initialDataRef.current.lastName || '').trim() ||
+      email.trim().toLowerCase() !== (initialDataRef.current.email || '').trim().toLowerCase());
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -314,10 +344,10 @@ const DriverProfileScreen = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FAF8FE" translucent={false} />
+      <StatusBar barStyle="dark-content" backgroundColor="#FAF8FE" translucent={true} />
 
       {/* Fixed Top Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: topPadding, height: 56 + topPadding }]}>
         <View style={{ width: 24 }} />
         <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity
@@ -363,8 +393,10 @@ const DriverProfileScreen = () => {
             <MaterialIcons name="star" size={16} color="#EAB308" style={{ marginRight: 4 }} />
             <Text style={styles.ratingText}>
               {rating !== null && rating > 0
-                ? `${rating.toFixed(1)} (${reviewCount} ${reviewCount === 1 ? 'review' : 'reviews'})`
-                : 'New (No reviews yet)'} • Driver Partner
+                ? (reviewCount > 0
+                    ? `${rating.toFixed(1)} (${reviewCount} ${reviewCount === 1 ? 'review' : 'reviews'}) • Driver Partner`
+                    : `${rating.toFixed(1)} • Driver Partner`)
+                : 'New • Driver Partner'}
             </Text>
           </View>
         </View>

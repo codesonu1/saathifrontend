@@ -299,6 +299,20 @@ class WebSocketService {
         duration: 8500,
       });
     });
+
+    socket.on('ratingReceived', (data) => {
+      console.log('WebSocket: Rating received event:', data);
+      const ratingData = data?.data || data;
+      const stars = ratingData.rating || 5;
+      notificationService.addNotification({
+        title: 'Passenger Rated You ⭐',
+        message: `You received a ${stars}-star rating from your passenger!`,
+        type: 'rating_received',
+        role: 'driver',
+        actionRoute: '/(driver)/driverSection',
+        duration: 8000,
+      });
+    });
   }
 
   private setupPassengerEvents(socket: Socket) {
@@ -352,7 +366,9 @@ class WebSocketService {
       const currentRole = await userRoleManager.getRole();
       notificationService.addNotification({
         title: 'Trip Started 🚀',
-        message: 'Your yatra has started. Drive safe!',
+        message: currentRole === 'driver'
+          ? 'Trip started. Drive safely to the destination.'
+          : 'Your ride has started. Enjoy your journey!',
         type: 'ride_started',
         role: currentRole as 'driver' | 'passenger',
         actionRoute: '/(common)/rideTracker',
@@ -368,7 +384,7 @@ class WebSocketService {
       notificationService.addNotification({
         title: 'Trip Completed! 🏁',
         message: currentRole === 'driver'
-          ? 'Ride completed successfully. Great job!'
+          ? 'Trip completed successfully. Tap to view your earnings summary.'
           : 'Thank you for choosing Saathi. Tap to rate your experience.',
         type: 'ride_completed',
         role: currentRole as 'driver' | 'passenger',
@@ -409,7 +425,7 @@ class WebSocketService {
       console.log('WebSocket: passengerComing event received:', data);
 
       notificationService.addNotification({
-        title: "Passenger is coming! 🏃‍♂️",
+        title: "Passenger is Coming! 🏃‍♂️",
         message: "Passenger is on their way to the vehicle.",
         type: 'ride_accepted',
         role: 'driver',
@@ -425,14 +441,19 @@ class WebSocketService {
       
       try {
         const currentUserId = await getCurrentUserId();
-        const currentUserRole = await userRoleManager.getRole();
+        const currentUserRole = userRoleManager.getRole();
         
-        // Skip notification if the message was sent by the logged-in user or matching role
-        if (
-          messageData.senderId === currentUserId || 
-          messageData.sender === currentUserId ||
-          messageData.senderRole === currentUserRole
-        ) {
+        // Extract sender ID whether it is a string ID, an object {_id: '...'}, or nested
+        const senderId = 
+          typeof messageData.senderId === 'object' && messageData.senderId?._id
+            ? String(messageData.senderId._id)
+            : typeof messageData.sender === 'object' && messageData.sender?._id
+            ? String(messageData.sender._id)
+            : String(messageData.senderId || messageData.sender || '');
+
+        // Skip notification if the message was sent by the logged-in user
+        if (currentUserId && senderId && String(currentUserId) === String(senderId)) {
+          console.log('WebSocket: Skipping notification because message was sent by self');
           return;
         }
 
