@@ -2,18 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DeviceEventEmitter } from 'react-native';
 
 export type NotificationType = 
-  | 'wallet_credit' 
   | 'wallet_low' 
   | 'wallet_zero'
-  | 'wallet_debit'
-  | 'ride_request' 
-  | 'ride_accepted' 
-  | 'driver_arrived' 
-  | 'ride_started' 
   | 'ride_completed' 
   | 'ride_cancelled'
-  | 'rating_received' 
-  | 'rating_prompt'
   | 'message'
   | 'info';
 
@@ -33,7 +25,7 @@ export interface NotificationItem {
 }
 
 class NotificationService {
-  private static STORAGE_KEY = '@saathi_notifications_v1';
+  private static STORAGE_KEY = '@saathi_notifications_v2';
   private static LOW_NOTIF_KEY = '@saathi_notified_low_balance';
   private static ZERO_NOTIF_KEY = '@saathi_notified_zero_balance';
 
@@ -82,20 +74,21 @@ class NotificationService {
     if (!role) return [...this.notifications];
     
     if (role === 'passenger') {
-      // Passenger ONLY sees: Trip Completed
+      // Passenger ONLY sees: Trip Completed, Trip Cancelled
       return this.notifications.filter(
-        (n) => n.role === 'passenger' && n.type === 'ride_completed'
+        (n) => n.role === 'passenger' && (n.type === 'ride_completed' || n.type === 'ride_cancelled')
       );
     }
 
     if (role === 'driver') {
-      // Driver ONLY sees: Trip Completed, Passenger Rating, and Wallet Low / Zero / Credit Alerts
+      // Driver ONLY sees: Trip Completed, Trip Cancelled, and Low/Zero Wallet Balance
       return this.notifications.filter(
         (n) =>
           n.role === 'driver' &&
           (n.type === 'ride_completed' ||
-           n.type === 'rating_received' ||
-           n.type.startsWith('wallet_'))
+           n.type === 'ride_cancelled' ||
+           n.type === 'wallet_low' ||
+           n.type === 'wallet_zero')
       );
     }
 
@@ -113,36 +106,57 @@ class NotificationService {
     actionParams?: Record<string, any>;
     showBanner?: boolean;
     duration?: number;
-  }): Promise<NotificationItem> {
+  }): Promise<NotificationItem | null> {
     await this.init();
 
     // Auto-infer target role
-    const targetRole =
+    const targetRole: 'driver' | 'passenger' =
       params.role ||
-      (params.type.startsWith('wallet_') ||
-       params.type === 'rating_received' ||
-       params.type === 'ride_request' ||
-       params.type === 'ride_accepted'
-        ? 'driver'
-        : 'passenger');
+      (params.type.startsWith('wallet_') ? 'driver' : 'passenger');
 
-    // ONLY store important notifications in persistent inbox:
-    // - Passenger: Trip Completed
-    // - Driver: Trip Completed, Rating Received, Wallet Low/Zero/Credit
+    // Strict allowed check:
+    // Driver: Trip Completed, Trip Cancelled, Low Balance, Zero Balance
+    // Passenger: Trip Completed, Trip Cancelled, Chat Messages
+    const isDriverAllowed =
+      targetRole === 'driver' &&
+      (params.type === 'ride_completed' ||
+       params.type === 'ride_cancelled' ||
+       params.type === 'wallet_low' ||
+       params.type === 'wallet_zero');
+
+    const isPassengerAllowed =
+      targetRole === 'passenger' &&
+      (params.type === 'ride_completed' ||
+       params.type === 'ride_cancelled' ||
+       params.type === 'message');
+
+    if (!isDriverAllowed && !isPassengerAllowed) {
+      return null;
+    }
+
+    // Strip any emojis from title and message
+    const cleanTitle = (params.title || '')
+      .replace(/[\u{1F300}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{2600}-\u{27BF}]/gu, '')
+      .trim();
+    const cleanMessage = (params.message || '')
+      .replace(/[\u{1F300}-\u{1FAFF}\u{1F600}-\u{1F64F}\u{2600}-\u{27BF}]/gu, '')
+      .trim();
+
     const isAllowedForStorage =
-      (targetRole === 'passenger' && params.type === 'ride_completed') ||
+      (targetRole === 'passenger' && (params.type === 'ride_completed' || params.type === 'ride_cancelled')) ||
       (targetRole === 'driver' &&
         (params.type === 'ride_completed' ||
-         params.type === 'rating_received' ||
-         params.type.startsWith('wallet_')));
+         params.type === 'ride_cancelled' ||
+         params.type === 'wallet_low' ||
+         params.type === 'wallet_zero'));
 
     const { icon, iconColor } = this.getDefaultVisuals(params.type, params.icon, params.iconColor);
 
     const newNotif: NotificationItem = {
       id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
       type: params.type,
-      title: params.title,
-      message: params.message,
+      title: cleanTitle,
+      message: cleanMessage,
       time: 'Just now',
       icon,
       iconColor,
@@ -165,10 +179,9 @@ class NotificationService {
         message: newNotif.message,
         type: newNotif.type,
         role: targetRole,
-        actionLabel: params.actionRoute ? 'View' : undefined,
         actionRoute: params.actionRoute,
         actionParams: params.actionParams,
-        duration: params.duration || 5000,
+        duration: params.duration || 4500,
       });
     }
 
@@ -222,9 +235,9 @@ class NotificationService {
   private lastBalanceAlertTime = 0;
 
   /**
-   * Checks driver balance and sends a one-time non-looping notification:
-   * - Once when balance is low (< रू 50)
-   * - Once when balance reaches 0 (रू 0)
+   * Checks driver balance and sends a one-time notification:
+   * - Once when balance is low (< Rs. 50)
+   * - Once when balance reaches 0 (Rs. 0)
    * Resets when driver balance is topped up >= 50.
    */
   async checkAndNotifyDriverBalance(balance: number): Promise<void> {
@@ -232,7 +245,6 @@ class NotificationService {
       const numBal = Number(balance) || 0;
 
       if (numBal >= 50) {
-        // Driver topped up wallet: reset notification flags
         await AsyncStorage.multiRemove([
           NotificationService.LOW_NOTIF_KEY,
           NotificationService.ZERO_NOTIF_KEY,
@@ -240,25 +252,24 @@ class NotificationService {
         return;
       }
 
-      // Enforce a 30-minute in-memory cooldown to completely prevent looping/spamming
+      // Enforce a 30-minute in-memory cooldown to prevent looping
       const now = Date.now();
       if (now - this.lastBalanceAlertTime < 30 * 60 * 1000) {
         return;
       }
 
       if (numBal <= 0) {
-        // Zero balance: check if already notified
         const alreadyNotifiedZero = await AsyncStorage.getItem(NotificationService.ZERO_NOTIF_KEY);
         if (!alreadyNotifiedZero) {
           this.lastBalanceAlertTime = now;
           await this.addNotification({
             type: 'wallet_zero',
             title: 'Zero Wallet Balance Alert',
-            message: 'Your deposit balance is रू 0. You cannot accept or receive passenger ride offers until recharged.',
+            message: 'Your deposit balance is Rs. 0. Recharge wallet to accept passenger rides.',
             role: 'driver',
             actionRoute: '/(driver)/earnings',
             showBanner: true,
-            duration: 6500,
+            duration: 5000,
           });
           await AsyncStorage.setItem(NotificationService.ZERO_NOTIF_KEY, 'true');
         }
@@ -266,18 +277,17 @@ class NotificationService {
       }
 
       if (numBal > 0 && numBal < 50) {
-        // Low balance (< 50): check if already notified
         const alreadyNotifiedLow = await AsyncStorage.getItem(NotificationService.LOW_NOTIF_KEY);
         if (!alreadyNotifiedLow) {
           this.lastBalanceAlertTime = now;
           await this.addNotification({
             type: 'wallet_low',
             title: 'Low Wallet Balance',
-            message: `Your balance is रू ${numBal.toFixed(0)}. Minimum रू 50 required to accept rides. Please recharge your wallet.`,
+            message: `Your balance is Rs. ${numBal.toFixed(0)}. Minimum Rs. 50 required to accept rides.`,
             role: 'driver',
             actionRoute: '/(driver)/earnings',
             showBanner: true,
-            duration: 6000,
+            duration: 5000,
           });
           await AsyncStorage.setItem(NotificationService.LOW_NOTIF_KEY, 'true');
         }
@@ -297,29 +307,14 @@ class NotificationService {
     }
 
     switch (type) {
-      case 'wallet_credit':
-        return { icon: 'account-balance-wallet', iconColor: '#2E7D32' };
       case 'wallet_low':
         return { icon: 'warning', iconColor: '#D97706' };
       case 'wallet_zero':
         return { icon: 'error', iconColor: '#DC2626' };
-      case 'wallet_debit':
-        return { icon: 'receipt-long', iconColor: '#475569' };
-      case 'ride_request':
-        return { icon: 'directions-car', iconColor: '#BC001F' };
-      case 'ride_accepted':
-        return { icon: 'check-circle', iconColor: '#2563EB' };
-      case 'driver_arrived':
-        return { icon: 'location-on', iconColor: '#059669' };
-      case 'ride_started':
-        return { icon: 'navigation', iconColor: '#2563EB' };
       case 'ride_completed':
         return { icon: 'done-all', iconColor: '#16A34A' };
       case 'ride_cancelled':
         return { icon: 'cancel', iconColor: '#DC2626' };
-      case 'rating_received':
-      case 'rating_prompt':
-        return { icon: 'star', iconColor: '#EAB308' };
       case 'message':
         return { icon: 'chat', iconColor: '#6366F1' };
       default:

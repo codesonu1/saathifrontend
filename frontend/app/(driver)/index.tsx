@@ -14,7 +14,6 @@ import {
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Clock, BrushCleaning, Star, CarFront } from 'lucide-react-native';
-import SidePanel from '../(common)/sidepanel';
 import Toast from '../../components/ui/Toast';
 import apiClient from '@/services/apiClient';
 import { userRoleManager } from '@/services/userRoleManager';
@@ -99,7 +98,6 @@ const { width, height } = Dimensions.get('window');
 const DriverHomeScreen = () => {
   const router = useRouter();
   const { isAccountRestored: initialRestored, registrationComplete } = useLocalSearchParams();
-  const [sidePanelVisible, setSidePanelVisible] = useState(false);
   const [role, setRole] = useState<'driver' | 'passenger'>('driver');
   const [rideInProgress, setRideInProgress] = useState(false);
   const [isAccountRestored, setIsAccountRestored] = useState(false);
@@ -165,8 +163,6 @@ const DriverHomeScreen = () => {
 
 
 
-  const openSidePanel = () => setSidePanelVisible(true);
-  const closeSidePanel = () => setSidePanelVisible(false);
   const handleChangeRole = async (newRole: 'driver' | 'passenger') => {
     await userRoleManager.setRole(newRole);
     webSocketService.disconnect('driver');
@@ -177,7 +173,6 @@ const DriverHomeScreen = () => {
     } else {
       router.push('/(driver)');
     }
-    closeSidePanel();
   };
 
   const handleDriverPress = () => router.push('/(driver)/registerVehicle');

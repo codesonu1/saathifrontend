@@ -18,7 +18,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import Constants from 'expo-constants';
 import apiClient, { initializeApiClient } from '@/services/apiClient';
-import SidePanel from '../(common)/sidepanel';
 import DriverBottomNav from '@/components/DriverBottomNav';
 import AppModal from '@/components/ui/AppModal';
 
@@ -36,7 +35,6 @@ const DriverProfileScreen = () => {
   const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0);
   const bottomPadding = 90 + (insets.bottom > 0 ? insets.bottom : 10);
 
-  const [sidePanelVisible, setSidePanelVisible] = useState(false);
   const [name, setName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');

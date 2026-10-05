@@ -15,7 +15,6 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import apiClient, { initializeApiClient } from '@/services/apiClient';
-import SidePanel from '../(common)/sidepanel';
 import DriverBottomNav from '@/components/DriverBottomNav';
 import AppModal from '@/components/ui/AppModal';
 import notificationService from '@/services/notificationService';
@@ -42,7 +41,6 @@ const DriverEarningsScreen = () => {
   const topPadding = insets.top > 0 ? insets.top : (Platform.OS === 'android' ? (StatusBar.currentHeight || 0) : 0);
   const bottomPadding = 90 + (insets.bottom > 0 ? insets.bottom : 10);
 
-  const [sidePanelVisible, setSidePanelVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 

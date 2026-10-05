@@ -2646,16 +2646,15 @@ const RideTrackerScreen = () => {
     );
   }
 
-  if (isLoadingDetails && !rideDetails) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#BC001F" />
-        <Text style={{ marginTop: 16 }}>Loading ride details...</Text>
-      </View>
-    );
-  }
-
   if (!pickupLocation || !dropoffLocation) {
+    if (isLoadingDetails && !rideDetails) {
+      return (
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <ActivityIndicator size="large" color="#BC001F" />
+          <Text style={{ marginTop: 16 }}>Loading ride details...</Text>
+        </View>
+      );
+    }
     console.error('[RideTracker] Missing pickup or dropoff location');
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>

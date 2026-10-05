@@ -5,7 +5,6 @@ import { View, Text, StyleSheet, TouchableOpacity } from "react-native"
 import { useRouter } from "expo-router"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { StatusBar } from "expo-status-bar"
-import SidePanel from "./sidepanel"
 import LocationSearch from '../../components/LocationSearch';
 import { locationService } from '@/services/locationService';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -18,7 +17,6 @@ export default function HomeScreen() {
   type LocationType = { coords: { latitude: number; longitude: number } } | null
   const [location, setLocation] = useState<LocationType>(null)
   const [errorMsg, setErrorMsg] = useState(null)
-  const [sidePanelVisible, setSidePanelVisible] = useState(false)
   const [localRideInProgress, setLocalRideInProgress] = useState(false)
   const [toast, setToast] = useState<{ visible: boolean; message: string; type: 'success' | 'error' | 'info' }>({
     visible: false,
@@ -125,14 +123,6 @@ export default function HomeScreen() {
     fetchRoute();
   }, [pickupPlace, dropoffPlace]);
 
-  const openSidePanel = () => {
-    setSidePanelVisible(true)
-  }
-
-  const closeSidePanel = () => {
-    setSidePanelVisible(false)
-  }
-
   const handleRoleChange = (newRole: "driver" | "passenger") => {
     if (newRole === "driver") {
       router.push("/(driver)")
@@ -150,12 +140,6 @@ export default function HomeScreen() {
       )}
 
       <View style={styles.mapContainer}>
-        <TouchableOpacity style={styles.hamburgerButton} onPress={openSidePanel}>
-          <View style={styles.hamburgerLine} />
-          <View style={styles.hamburgerLine} />
-          <View style={styles.hamburgerLine} />
-        </TouchableOpacity>
-
         <View style={styles.searchContainer}>
           <LocationSearch
             placeholder="Pickup location"
@@ -254,14 +238,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </View>
-
-      <SidePanel
-        visible={sidePanelVisible}
-        onClose={closeSidePanel}
-        role="passenger"
-        rideInProgress={localRideInProgress}
-        onChangeRole={handleRoleChange}
-      />
     </SafeAreaView>
   )
 }

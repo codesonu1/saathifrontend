@@ -22,7 +22,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { MapPin, Navigation, Clock, User, Car, Map } from 'lucide-react-native';
 import ProfileImage from '../../components/ProfileImage';
-import SidePanel from '../(common)/sidepanel';
 import DriverBottomNav from '@/components/DriverBottomNav';
 import Toast from '../../components/ui/Toast';
 import { rideService, Ride } from '@/services/rideService';
@@ -76,7 +75,6 @@ const DriverSection = () => {
   const router = useRouter();
   const pathname = usePathname();
   const params = useLocalSearchParams(); // <-- add this
-  const [sidePanelVisible, setSidePanelVisible] = useState(false);
   const [role, setRole] = useState<'driver' | 'passenger'>('driver');
   const [rideInProgress, setRideInProgress] = useState(false);
   
@@ -128,6 +126,7 @@ const DriverSection = () => {
   const [walletBalance, setWalletBalance] = useState<number>(0);
   const [showLowBalanceModal, setShowLowBalanceModal] = useState<boolean>(false);
   const offerTimersRef = React.useRef<{ [rideId: string]: number }>({});
+  const isNavigatingToTrackerRef = React.useRef(false);
   const [nowTimestamp, setNowTimestamp] = useState<number>(Date.now());
 
   // 1-second live ticker to auto-expire driver offers after 60 seconds of no passenger response
@@ -248,6 +247,7 @@ const DriverSection = () => {
   // Refresh balance & restore online state every time driver screen gains focus (e.g. returning from earnings or other screens)
   useFocusEffect(
     useCallback(() => {
+      isNavigatingToTrackerRef.current = false;
       fetchWalletBalance();
       const currentOnline = userRoleManager.getDriverOnline();
       if (currentOnline) {
@@ -445,9 +445,13 @@ const DriverSection = () => {
       };
       webSocketService.on('newRideRequest', newRideRequestListener, 'driver');
       
-      // Listen for offer accepted (driver namespace & default namespace)
+      // Listen for offer accepted (driver namespace)
       offerAcceptedListener = async (data: any) => {
         if (!isMounted) return;
+        if (isNavigatingToTrackerRef.current) {
+          console.log('DriverSection: Navigation to rideTracker already in progress, skipping duplicate event');
+          return;
+        }
         console.log('DriverSection: Offer accepted event received:', data);
         
         let ride = data?.data?.ride || data?.ride || data?.data;
@@ -457,6 +461,7 @@ const DriverSection = () => {
 
         if (ride && (ride._id || ride.id)) {
           const targetRideId = ride._id || ride.id;
+          isNavigatingToTrackerRef.current = true;
           console.log('DriverSection: Navigating driver to rideTracker for accepted ride:', targetRideId);
 
           setAcceptedOfferId(targetRideId);
@@ -467,6 +472,11 @@ const DriverSection = () => {
 
           await userRoleManager.setRole('driver');
 
+          const pLat = ride.pickUp?.coords?.coordinates?.[1] || ride.pickUpLat || ride.pickupLat || '';
+          const pLng = ride.pickUp?.coords?.coordinates?.[0] || ride.pickUpLng || ride.pickupLng || '';
+          const dLat = ride.dropOff?.coords?.coordinates?.[1] || ride.dropOffLat || ride.dropoffLat || '';
+          const dLng = ride.dropOff?.coords?.coordinates?.[0] || ride.dropOffLng || ride.dropoffLng || '';
+
           router.push({
             pathname: '../(common)/rideTracker',
             params: {
@@ -476,15 +486,17 @@ const DriverSection = () => {
               to: ride.dropOff?.location || ride.dropOffLocation || 'Dropoff Location',
               fare: ride.offerPrice || ride.acceptedOffer?.offerAmount || ride.fare,
               vehicle: ride.vehicle?.name || ride.vehicle || 'Taxi',
+              pickupLat: pLat ? String(pLat) : undefined,
+              pickupLng: pLng ? String(pLng) : undefined,
+              dropoffLat: dLat ? String(dLat) : undefined,
+              dropoffLng: dLng ? String(dLng) : undefined,
               userRole: 'driver',
             },
           });
         }
       };
       webSocketService.on('offerAccepted', offerAcceptedListener, 'driver');
-      webSocketService.on('offerAccepted', offerAcceptedListener);
       webSocketService.on('rideAccepted', offerAcceptedListener, 'driver');
-      webSocketService.on('rideAccepted', offerAcceptedListener);
       
       // Listen for offer created (driver namespace)
       offerCreatedListener = (data: any) => {
@@ -1026,12 +1038,8 @@ const DriverSection = () => {
     }
   };
 
-  const openSidePanel = () => setSidePanelVisible(true);
-  const closeSidePanel = () => setSidePanelVisible(false);
-
   const handleLeaveDriverMode = (targetRoute: string) => {
     setPendingRoute(targetRoute);
-    setSidePanelVisible(false);
     setShowBackConfirmation(true);
   };
 
@@ -1040,7 +1048,6 @@ const DriverSection = () => {
       handleLeaveDriverMode('/(tabs)');
     } else {
       await userRoleManager.setRole('driver');
-      closeSidePanel();
     }
   };
 

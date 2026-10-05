@@ -7,7 +7,6 @@ import { Ionicons, MaterialIcons, MaterialIcons as Icon, FontAwesome5 } from '@e
 import * as Location from 'expo-location'
 import { useRouter, useLocalSearchParams } from "expo-router"
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import SidePanel from "../(common)/sidepanel"
 import Toast from "../../components/ui/Toast"
 import LocationSearch from "../../components/LocationSearch"
 import RaiseFareModal from "../../components/ui/RaiseFareModal"
@@ -209,7 +208,6 @@ const PassengerHomeScreen = () => {
     setOfferPrice(newPrice.toString());
   };
 
-  const [sidePanelVisible, setSidePanelVisible] = useState(false)
   const router = useRouter()
   const [localRideInProgress, setLocalRideInProgress] = useState(rideInProgress === "true")
   const [progress, setProgress] = useState(Number.parseInt(initialProgress as string) || 0)
@@ -1080,14 +1078,6 @@ const PassengerHomeScreen = () => {
           <Text style={styles.tabText}>Profile</Text>
         </TouchableOpacity>
       </View>
-
-      <SidePanel
-        visible={sidePanelVisible}
-        onClose={() => setSidePanelVisible(false)}
-        role="passenger"
-        rideInProgress={false}
-        onChangeRole={() => {}}
-      />
 
       <Toast
         visible={toast.visible}

@@ -137,10 +137,10 @@ const NotificationsScreen = () => {
 
   const filteredNotifications = notifications.filter((item) => {
     if (activeTab === 'rides') {
-      return item.type === 'ride_completed' || item.type === 'rating_received';
+      return item.type === 'ride_completed' || item.type === 'ride_cancelled';
     }
     if (activeTab === 'wallet') {
-      return item.type.startsWith('wallet_');
+      return item.type === 'wallet_low' || item.type === 'wallet_zero';
     }
     return true;
   });
@@ -197,10 +197,10 @@ const NotificationsScreen = () => {
       <Text style={styles.emptyTitle}>No Notifications</Text>
       <Text style={styles.emptySubtitle}>
         {currentRole === 'passenger'
-          ? "You're all caught up! Completed ride receipts and summaries will appear here."
+          ? "You're all caught up. Completed and cancelled ride summaries will appear here."
           : activeTab === 'all'
-          ? "You're all caught up! Trip completions, ratings, and wallet updates will appear here."
-          : `No ${activeTab} notifications at the moment.`}
+          ? "You're all caught up. Trip summaries and wallet balance updates will appear here."
+          : `No ${activeTab === 'rides' ? 'trip' : 'wallet'} notifications at the moment.`}
       </Text>
     </View>
   );
@@ -251,7 +251,7 @@ const NotificationsScreen = () => {
             }}
           >
             <Text style={[styles.tabText, activeTab === 'rides' && styles.activeTabText]}>
-              Rides & Ratings
+              Trips
             </Text>
           </TouchableOpacity>
 
@@ -263,7 +263,7 @@ const NotificationsScreen = () => {
             }}
           >
             <Text style={[styles.tabText, activeTab === 'wallet' && styles.activeTabText]}>
-              Wallet & Credit
+              Wallet
             </Text>
           </TouchableOpacity>
 

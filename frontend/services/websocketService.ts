@@ -271,47 +271,16 @@ class WebSocketService {
     socket.on('newRideRequest', (data) => {
       console.log('WebSocket: New ride request event received:', data);
       this.emit('newRideRequest', data, 'driver');
-      
-      const pickup = data.pickUpLocation || data.pickUp?.location || 'Near you';
-      const fare = data.offerPrice || data.price || data.fare || 'Market Rate';
-      notificationService.addNotification({
-        title: 'New Ride Request 🚗',
-        message: `Pickup: ${pickup} • Fare: रू ${fare}`,
-        type: 'ride_request',
-        role: 'driver',
-        actionRoute: '/(driver)/driverSection',
-        actionParams: { rideId: data.rideId || data._id },
-        duration: 8500,
-      });
     });
 
     socket.on('offerAccepted', (data) => {
       console.log('WebSocket: Offer accepted event received:', data);
       this.emit('offerAccepted', data, 'driver');
-
-      notificationService.addNotification({
-        title: 'Offer Accepted! 🎉',
-        message: 'Passenger accepted your offer. Tap to track and navigate.',
-        type: 'ride_accepted',
-        role: 'driver',
-        actionRoute: '/(common)/rideTracker',
-        actionParams: { rideId: data.rideId || data.ride?._id, userRole: 'driver' },
-        duration: 8500,
-      });
     });
 
     socket.on('ratingReceived', (data) => {
       console.log('WebSocket: Rating received event:', data);
-      const ratingData = data?.data || data;
-      const stars = ratingData.rating || 5;
-      notificationService.addNotification({
-        title: 'Passenger Rated You ⭐',
-        message: `You received a ${stars}-star rating from your passenger!`,
-        type: 'rating_received',
-        role: 'driver',
-        actionRoute: '/(driver)/driverSection',
-        duration: 8000,
-      });
+      this.emit('ratingReceived', data, 'driver');
     });
   }
 
@@ -320,31 +289,11 @@ class WebSocketService {
     socket.on('newOffer', (data) => {
       console.log('WebSocket: New offer event received:', data);
       this.emit('newOffer', data, 'passenger');
-
-      notificationService.addNotification({
-        title: 'New Bid Received 💰',
-        message: `${data.driver?.firstName || 'Driver'} offered रू ${data.offerAmount}`,
-        type: 'ride_request',
-        role: 'passenger',
-        actionRoute: '/(tabs)/rideOffers',
-        actionParams: { rideId: data.rideId },
-        duration: 7500,
-      });
     });
 
     socket.on('rideAccepted', (data) => {
       console.log('WebSocket: Ride accepted event received:', data);
       this.emit('rideAccepted', data, 'passenger');
-
-      notificationService.addNotification({
-        title: 'Ride Confirmed! 🚗',
-        message: `Driver ${data.driver?.firstName || ''} accepted your ride request.`,
-        type: 'ride_accepted',
-        role: 'passenger',
-        actionRoute: '/(common)/rideTracker',
-        actionParams: { rideId: data.rideId, userRole: 'passenger' },
-        duration: 8500,
-      });
     });
 
     socket.on('driverOffline', (data) => {
@@ -362,77 +311,49 @@ class WebSocketService {
 
     socket.on('rideStarted', async (data) => {
       console.log('WebSocket: Ride started event received:', data);
-
-      const currentRole = await userRoleManager.getRole();
-      notificationService.addNotification({
-        title: 'Trip Started 🚀',
-        message: currentRole === 'driver'
-          ? 'Trip started. Drive safely to the destination.'
-          : 'Your ride has started. Enjoy your journey!',
-        type: 'ride_started',
-        role: currentRole as 'driver' | 'passenger',
-        actionRoute: '/(common)/rideTracker',
-        actionParams: { rideId: data._id || data.id, userRole: currentRole },
-        duration: 6500,
-      });
+      this.emit('rideStarted', data, 'ride');
     });
 
     socket.on('rideCompleted', async (data) => {
       console.log('WebSocket: Ride completed event received:', data);
+      this.emit('rideCompleted', data, 'ride');
 
       const currentRole = await userRoleManager.getRole();
       notificationService.addNotification({
-        title: 'Trip Completed! 🏁',
+        title: 'Trip Completed',
         message: currentRole === 'driver'
-          ? 'Trip completed successfully. Tap to view your earnings summary.'
-          : 'Thank you for choosing Saathi. Tap to rate your experience.',
+          ? 'Trip completed successfully. Tap to view earnings.'
+          : 'Thank you for choosing Saathi. Tap to rate your ride.',
         type: 'ride_completed',
         role: currentRole as 'driver' | 'passenger',
         actionRoute: currentRole === 'driver' ? '/(driver)/driverSection' : '/(tabs)/rideRate',
         actionParams: { rideId: data._id || data.id, userRole: currentRole },
-        duration: 8000,
+        duration: 5000,
       });
     });
 
     socket.on('rideCancelled', async (data) => {
       console.log('WebSocket: Ride cancelled event received:', data);
+      this.emit('rideCancelled', data, 'ride');
 
       const currentRole = await userRoleManager.getRole();
       notificationService.addNotification({
-        title: 'Trip Cancelled 🛑',
+        title: 'Trip Cancelled',
         message: data?.reason || 'This ride has been cancelled.',
         type: 'ride_cancelled',
         role: currentRole as 'driver' | 'passenger',
-        duration: 6500,
+        duration: 5000,
       });
     });
 
     socket.on('driverArrived', (data) => {
       console.log('WebSocket: driverArrived event received:', data);
-
-      notificationService.addNotification({
-        title: 'Driver Arrived! 📍',
-        message: 'Your driver has arrived at the pickup point.',
-        type: 'driver_arrived',
-        role: 'passenger',
-        actionRoute: '/(common)/rideTracker',
-        actionParams: { rideId: data.rideId || data.id, userRole: 'passenger' },
-        duration: 7500,
-      });
+      this.emit('driverArrived', data, 'ride');
     });
 
     socket.on('passengerComing', (data) => {
       console.log('WebSocket: passengerComing event received:', data);
-
-      notificationService.addNotification({
-        title: "Passenger is Coming! 🏃‍♂️",
-        message: "Passenger is on their way to the vehicle.",
-        type: 'ride_accepted',
-        role: 'driver',
-        actionRoute: '/(common)/rideTracker',
-        actionParams: { rideId: data.rideId || data.id, userRole: 'driver' },
-        duration: 7000,
-      });
+      this.emit('passengerComing', data, 'ride');
     });
 
     socket.on('messageCreated', async (msg: any) => {
@@ -457,21 +378,23 @@ class WebSocketService {
           return;
         }
 
-        const isDriver = currentUserRole === 'driver';
-        notificationService.addNotification({
-          title: `Message from ${isDriver ? 'Passenger' : 'Driver'} 💬`,
-          message: messageData.content || 'Sent you a message',
-          type: 'message',
-          role: isDriver ? 'driver' : 'passenger',
-          actionRoute: '/(common)/messaging',
-          actionParams: { 
-            rideId: messageData.rideId,
-            userRole: currentUserRole
-          },
-          duration: 6500,
-        });
+        const isPassenger = currentUserRole === 'passenger';
+        if (isPassenger) {
+          notificationService.addNotification({
+            title: 'Message from Driver',
+            message: messageData.content || 'Sent you a message',
+            type: 'message',
+            role: 'passenger',
+            actionRoute: '/(common)/messaging',
+            actionParams: { 
+              rideId: messageData.rideId,
+              userRole: 'passenger'
+            },
+            duration: 4500,
+          });
+        }
       } catch (err) {
-        console.error('WebSocket: error filtering messageCreated sender:', err);
+        console.warn('WebSocket: Error processing chat notification:', err);
       }
     });
 

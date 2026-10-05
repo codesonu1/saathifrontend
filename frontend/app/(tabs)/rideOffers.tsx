@@ -363,9 +363,10 @@ const RideOffersScreen = () => {
       return;
     }
 
+    const targetFare = currentTargetFare > 0 ? currentTargetFare : Number(rideFare) || currentFareNum;
     const eligibleOffers = offersList.filter(o => {
       const statusOk = ['submitted', 'pending'].includes(String(o.status));
-      const priceMatches = typeof o.offeredPrice === 'number' && o.offeredPrice <= currentTargetFare;
+      const priceMatches = typeof o.offeredPrice === 'number' && targetFare > 0 && o.offeredPrice <= targetFare;
       return statusOk && priceMatches;
     });
 
@@ -388,7 +389,7 @@ const RideOffersScreen = () => {
       const driverObj = bestOffer.driver;
       const driverFullName = driverObj ? `${driverObj.firstName || ''} ${driverObj.lastName || ''}`.trim() : 'Nearby Driver';
       console.log('[AutoAccept] Auto-accepting best offer:', bestOffer._id, 'from driver:', driverFullName);
-      showToast(`Auto-accepting offer from ${driverFullName} (रू ${bestOffer.offeredPrice.toFixed(0)})!`, 'success');
+      showToast(`Auto-accepting offer from ${driverFullName} (Rs. ${bestOffer.offeredPrice.toFixed(0)})`, 'success');
       handleAcceptOffer(bestOffer._id, bestOffer);
     }
   };
